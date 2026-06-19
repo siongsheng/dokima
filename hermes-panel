@@ -121,47 +121,45 @@ def slugify(text):
     return re.sub(r'[^a-z0-9-]', '', text.lower().replace(" ", "-"))[:40]
 
 def extract_pr_sections(spec_text: str) -> str:
-    """Extract key sections from the strategist's spec for the PR body.
-    Returns markdown string with Position, Impact, and Tasks."""
+    """Extract Summary + Changes from the strategist's spec for a clean PR body.
+    Matches the old panel format: no internal links, no Why (title says it)."""
     sections = []
 
-    # 1. Extract Position statement (the strategist's summary of what was built and why)
+    # 1. Summary — from the Position statement
     pos_m = re.search(
         r'Position:\s*(.+?)(?=\n\s*\n\s*(?:DECISION|IMPACT|CONFIDENCE|### Task|Task \d|\Z))',
         spec_text, re.DOTALL | re.IGNORECASE
     )
     if pos_m:
         pos = pos_m.group(1).strip()
-        # Clean up: remove leading/trailing whitespace per line, collapse multi-line
         pos = re.sub(r'\s+', ' ', pos)
+        # Cap at reasonable length
+        if len(pos) > 600:
+            pos = pos[:597] + "..."
         sections.append(f"## Summary\n\n{pos}")
 
-    # 2. Extract Impact Assessment
+    # 2. Changes — from Impact Assessment, reformatted as endpoint/file bullets
     imp_m = re.search(
         r'IMPACT\s*ASSESSMENT\s*\n(.*?)(?=\n\s*\n\s*(?:CONFIDENCE|### Task|Task \d|\Z))',
         spec_text, re.DOTALL | re.IGNORECASE
     )
     if imp_m:
         imp = imp_m.group(1).strip()
-        # Parse individual impact items: "Area: ... Change: ..."
-        items = re.findall(r'(?:Area|Dimension):\s*(.+?)\n\s*(?:Change|Detail):\s*(.+?)(?=\n\s*(?:Area|Dimension|Lines|CONFIDENCE|### Task|Task \d|\Z))',
-                          imp, re.DOTALL)
-        lines_est = re.search(r'Lines Est\.:?\s*(.+)', imp)
-        if items or lines_est:
-            sections.append("## Impact")
+        items = re.findall(
+            r'(?:Area|Dimension):\s*(.+?)\n\s*(?:Change|Detail):\s*(.+?)(?=\n\s*(?:Area|Dimension|Lines|CONFIDENCE|### Task|Task \d|\Z))',
+            imp, re.DOTALL
+        )
+        if items:
+            changes = ["## Changes"]
             for area, change in items:
-                sections.append(f"- **{area.strip()}:** {change.strip()}")
-            if lines_est:
-                sections.append(f"- **Lines:** {lines_est.group(1).strip()}")
-
-    # 3. Extract task list (handles both "### Task N:" and "Task N:" formats)
-    tasks = re.findall(r'(?:###\s*)?Task\s*(\d+):\s*(.+)', spec_text, re.IGNORECASE)
-    if tasks:
-        sections.append("## Tasks")
-        for tid, desc in tasks[:15]:  # cap at 15 tasks
-            sections.append(f"- Task {tid}: {desc.strip()}")
-        if len(tasks) > 15:
-            sections.append(f"- ... and {len(tasks) - 15} more tasks")
+                # Clean: use file/endpoint name as bold prefix, change as description
+                area_clean = area.strip().rstrip(":")
+                change_clean = change.strip().replace("\n", " ")
+                # Truncate long changes
+                if len(change_clean) > 120:
+                    change_clean = change_clean[:117] + "..."
+                changes.append(f"- **{area_clean}:** {change_clean}")
+            sections.append("\n".join(changes))
 
     return "\n\n".join(sections) if sections else ""
 
@@ -1110,9 +1108,8 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
             # If depth=coder and all tasks completed, create PR directly
             if not coder_failed and depth == "coder":
                 print("\n── Creating PR (depth=coder) ──", flush=True)
-                # Construct PR body with spec sections
-                pr_body = f"## Why\n{feature}\n\n{pr_sections}\n\n## Spec\n{spec_path}\n\n## Tasks\n" + \
-                          "\n".join(f"- Task {t.id}: {t.status}" for t in dag.tasks.values())
+                # Construct PR body matching old panel format
+                pr_body = f"{pr_sections}\n\n## Test Evidence\n- Build passes\n## Risk\n{impact}\n"
                 stdout, _, rc = gh("pr", "create", "--repo", REPO,
                                    "--base", "master", "--head", branch,
                                    "--title", f"feat: {feature}",
@@ -1387,12 +1384,12 @@ Report: what was broken, what you fixed, commit hash."""
             # 4. Create PR (verification passed)
             print("  ⏳ Creating PR...", flush=True)
             pr_body = (
-                f"## Why\n{feature}\n\n"
                 f"{pr_sections}\n\n"
-                f"## Spec\n{spec_path}\n\n"
-                f"## Validation\n"
-                f"- [x] Tests pass ({tests_passed} passed)\n"
-                f"- [x] Build passes\n"
+                f"## Test Evidence\n"
+                f"- {tests_passed}/{int(tests_passed) + int(tests_failed) if tests_failed != '?' else tests_passed} tests pass\n"
+                f"- Build passes\n"
+                f"## Risk\n"
+                f"{impact}\n"
             )
             pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
                 "--base", "master", "--head", branch,
