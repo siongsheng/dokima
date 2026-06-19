@@ -120,48 +120,96 @@ def gh(*args, **kwargs):
 def slugify(text):
     return re.sub(r'[^a-z0-9-]', '', text.lower().replace(" ", "-"))[:40]
 
-def extract_pr_sections(spec_text: str) -> str:
-    """Extract Summary + Changes from the strategist's spec for a clean PR body.
-    Matches the old panel format: no internal links, no Why (title says it)."""
-    sections = []
+def extract_pr_sections(spec_text: str, feature: str) -> str:
+    """Extract Why, Impact, and What Changed from the strategist's spec.
+    Returns markdown sections: ## Why, ## Impact, ## What Changed."""
 
-    # 1. Summary — from the Position statement
+    # 1. ## Why — feature description + Position context
+    why = f"## Why\n\n{feature}"
     pos_m = re.search(
-        r'Position:\s*(.+?)(?=\n\s*\n\s*(?:DECISION|IMPACT|CONFIDENCE|### Task|Task \d|\Z))',
+        r'Position:\s*(.+?)(?=\n\s*\n\s*(?:\d\.\s*DECISION|DECISION|IMPACT|CONFIDENCE|### Task|Task \d|\Z))',
         spec_text, re.DOTALL | re.IGNORECASE
     )
     if pos_m:
         pos = pos_m.group(1).strip()
         pos = re.sub(r'\s+', ' ', pos)
-        # Cap at reasonable length
-        if len(pos) > 600:
-            pos = pos[:597] + "..."
-        sections.append(f"## Summary\n\n{pos}")
+        if len(pos) > 400:
+            pos = pos[:397] + "..."
+        why += f"\n\n{pos}"
 
-    # 2. Changes — from Impact Assessment, reformatted as endpoint/file bullets
+    # 2. ## Impact — cascading effects, breaking changes, total lines
+    impact_lines = []
     imp_m = re.search(
-        r'IMPACT\s*ASSESSMENT\s*\n(.*?)(?=\n\s*\n\s*(?:CONFIDENCE|### Task|Task \d|\Z))',
+        r'IMPACT\s*ASSESSMENT\s*\n(.*?)(?=\n\s*\n\s*(?:CONFIDENCE|\d\.\s*CONFIDENCE|### Task|Task \d|\Z))',
         spec_text, re.DOTALL | re.IGNORECASE
     )
     if imp_m:
         imp = imp_m.group(1).strip()
-        items = re.findall(
-            r'(?:Area|Dimension):\s*(.+?)\n\s*(?:Change|Detail):\s*(.+?)(?=\n\s*(?:Area|Dimension|Lines|CONFIDENCE|### Task|Task \d|\Z))',
+        # Cascading effects (skip if "None" or empty)
+        casc = re.search(r'Cascading effects?:?\s*\n(.+?)$', imp, re.DOTALL | re.IGNORECASE)
+        if casc:
+            casc_text = casc.group(1).strip()
+            if casc_text.lower() not in ("none", "none."):
+                impact_lines.append(casc_text)
+        # Breaking changes
+        breaking = re.search(r'Breaking\s*(?:change|changes?):?\s*(.+?)(?=\n\s*\n|\Z)', imp, re.DOTALL | re.IGNORECASE)
+        if breaking:
+            impact_lines.append(f"**Breaking:** {breaking.group(1).strip().replace(chr(10), ' ')}")
+        # Total lines (handles both "Est. Lines:" and "Lines Est.:")
+        total_lines = sum(int(n) for n in re.findall(r'(?:Est\.\s*Lines?|Lines\s*Est\.):?\s*[~+]?(\d+)', imp))
+        if total_lines > 0:
+            impact_lines.append(f"~{total_lines} lines changed across affected files")
+
+    impact = f"## Impact\n\n" + "\n\n".join(impact_lines) if impact_lines else ""
+
+    # 3. ## What Changed — area + file + change, formatted as clean bullets
+    changed_lines = []
+    if imp_m:
+        imp = imp_m.group(1).strip()
+        # Format A: Area: name, File(s): path, Change: desc
+        items_a = re.findall(
+            r'Area:\s*(.+?)\n\s*File\(s\):\s*(.+?)\n\s*Change:\s*(.+?)(?=\n\s*(?:Est\.|Risk|Area|──|\Z))',
             imp, re.DOTALL
         )
-        if items:
-            changes = ["## Changes"]
-            for area, change in items:
-                # Clean: use file/endpoint name as bold prefix, change as description
-                area_clean = area.strip().rstrip(":")
-                change_clean = change.strip().replace("\n", " ")
-                # Truncate long changes
+        if items_a:
+            changed_lines.append("## What Changed")
+            seen = set()
+            for area, files, change in items_a:
+                files_clean = files.strip()
+                change_clean = change.strip().replace("\n", " ").strip()
                 if len(change_clean) > 120:
                     change_clean = change_clean[:117] + "..."
-                changes.append(f"- **{area_clean}:** {change_clean}")
-            sections.append("\n".join(changes))
+                key = (area.strip(), files_clean)
+                if key not in seen:
+                    seen.add(key)
+                    changed_lines.append(f"- **{area.strip()}:** {files_clean} — {change_clean}")
+        else:
+            # Format B: Area: filepath, Change: desc (area IS the file)
+            items_b = re.findall(
+                r'Area:\s*(.+?)\n\s*Change:\s*(.+?)(?=\n\s*(?:Lines Est\.|Risk|Area|──|\Z))',
+                imp, re.DOTALL
+            )
+            if items_b:
+                changed_lines.append("## What Changed")
+                seen = set()
+                for area, change in items_b:
+                    area_clean = area.strip()
+                    change_clean = change.strip().replace("\n", " ").strip()
+                    if len(change_clean) > 120:
+                        change_clean = change_clean[:117] + "..."
+                    if area_clean not in seen:
+                        seen.add(area_clean)
+                        changed_lines.append(f"- **{area_clean}:** {change_clean}")
 
-    return "\n\n".join(sections) if sections else ""
+    what_changed = "\n".join(changed_lines) if len(changed_lines) > 1 else ""
+
+    parts = [why]
+    if impact:
+        parts.append(impact)
+    if what_changed:
+        parts.append(what_changed)
+
+    return "\n\n".join(parts)
 
 
 def extract_agent_messages(session_output: str) -> str:
@@ -975,7 +1023,7 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
     print(f"\n✓ Spec saved: {spec_path}", flush=True)
 
     # Extract PR body sections from the spec (Position + Impact + Tasks)
-    pr_sections = extract_pr_sections(spec)
+    pr_sections = extract_pr_sections(spec, feature)
     print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
 
     # Generate task-extract for coders (avoids re-reading full spec)
@@ -1109,7 +1157,7 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
             if not coder_failed and depth == "coder":
                 print("\n── Creating PR (depth=coder) ──", flush=True)
                 # Construct PR body matching old panel format
-                pr_body = f"{pr_sections}\n\n## Test Evidence\n- Build passes\n## Risk\n{impact}\n"
+                pr_body = f"{pr_sections}\n\n## Validation\n- Build passes\n"
                 stdout, _, rc = gh("pr", "create", "--repo", REPO,
                                    "--base", "master", "--head", branch,
                                    "--title", f"feat: {feature}",
@@ -1385,11 +1433,9 @@ Report: what was broken, what you fixed, commit hash."""
             print("  ⏳ Creating PR...", flush=True)
             pr_body = (
                 f"{pr_sections}\n\n"
-                f"## Test Evidence\n"
+                f"## Validation\n"
                 f"- {tests_passed}/{int(tests_passed) + int(tests_failed) if tests_failed != '?' else tests_passed} tests pass\n"
                 f"- Build passes\n"
-                f"## Risk\n"
-                f"{impact}\n"
             )
             pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
                 "--base", "master", "--head", branch,
