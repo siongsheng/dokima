@@ -8,16 +8,16 @@
 │ Spec + DAG  │     │ TDD impl │     │ test+build+PR│     │ review     │
 └─────────────┘     └──────────┘     └──────────────┘     └────────────┘
     5 min              10 min             2 min              10 min
-    ~$0.007            ~$0.002            $0.00              ~$0.004
+     58%                 8%                0%                 33%
 
-                    Full pipeline: ~$0.014 | Sequential: ~3 min | Full: ~7 min
+                    Full pipeline: 4 phases | Fast path: ~3 min | Full: ~7 min
 ```
 
 ## Why
 
 Writing specs, implementing TDD, running tests, creating PRs, and reviewing code — for every feature — is mechanical work. AI agents can do this, but one agent alone drifts. The panel chains specialist agents with enforced gates: the strategist designs, the coder implements (RED→GREEN commits), verification checks the build, and the tech lead reviews against the spec.
 
-**Result:** end-to-end features with two-commit TDD discipline, passing tests, passing builds, PR created, and adversarial review completed — for ~1.4 cents.
+**Result:** end-to-end features with two-commit TDD discipline, passing tests, passing builds, PR created, and adversarial review completed — for pocket change per feature.
 
 ## Quick Start
 
@@ -67,20 +67,22 @@ Only HIGH confidence gets the fast path. Everything else gets adversarial review
 - **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
 - **Interview pause-and-resume** — non-interactive for Telegram/cron. Strategist exits code 2 with questions; re-run with `--answers` to resume.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
-- **Token optimized** — 46% below baseline. Shell verification (zero AI), flash model for coder (3.1× cheaper), lite skills, spec noise extraction.
+- **Token optimized** — 54% below unoptimized baseline. Shell verification (zero AI), flash model for coder (3.1× cheaper), lite skills, spec noise extraction.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
 
 ## Cost
 
-Full pipeline per run (deepseek pricing):
+Token consumption per phase (full pipeline):
 
-| Phase | Model | Input | Output | Cost |
-|-------|-------|-------|--------|------|
-| Strategist | v4-pro | ~8,000 | ~3,750 | $0.007 |
-| Coder | v4-flash | ~5,000 | ~2,500 | $0.002 |
-| Verification | shell | — | — | $0.000 |
-| Tech Lead | v4-pro | ~6,000 | ~1,500 | $0.004 |
-| **Total** | | **~19,000** | **~7,750** | **~$0.014** |
+| Phase | Model | Input | Output | % of total |
+|-------|-------|-------|--------|------------|
+| Strategist | v4-pro | ~8,000 | ~3,750 | 58% |
+| Coder | v4-flash | ~5,000 | ~2,500 | 8% |
+| Verification | shell | — | — | 0% |
+| Tech Lead | v4-pro | ~6,000 | ~1,500 | 33% |
+| **Total** | | **~19,000** | **~7,750** | **100%** |
+
+Absolute cost depends on your model provider and pricing. With DeepSeek direct pricing, a full pipeline run costs ~$0.012 — roughly a cent per feature.
 
 ## Requirements
 

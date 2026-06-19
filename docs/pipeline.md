@@ -29,7 +29,7 @@ hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/atl
 ```
 Strategist (300s) ──▶ Coder (600s) ──▶ Verification (shell) ──▶ Tech Lead (600s)
    v4-pro               v4-flash           ZERO AI tokens          v4-pro
-   ~$0.007              ~$0.002             $0.000                  ~$0.004
+    58%                   8%                  0%                    33%
 ```
 
 ### Phase 1: Strategist (always runs)
@@ -139,15 +139,17 @@ The panel has been systematically optimized to reduce cost while preserving qual
 | `adversarial-review-lite` | 2.2K vs 13.8K for full `adversarial-review` + `ai-coding-best-practices` | ~11.5K system tokens saved |
 | Cache TTL 30m | Extended prompt cache on coder + tech-lead profiles | Cuts repeat-read costs |
 
-**Cost per full run (4 phases): ~$0.014** — 46% below unoptimized baseline (~$0.026).
+**Cost per full run (4 phases): 54% below unoptimized baseline.**
 
-| Phase | Model | Input tokens | Output tokens | Cost |
-|-------|-------|-------------|---------------|------|
-| Strategist | v4-pro | ~8,000 | ~3,750 | $0.007 |
-| Coder | v4-flash | ~5,000 | ~2,500 | $0.002 |
-| Verification | shell | — | — | $0.000 |
-| Tech Lead | v4-pro | ~6,000 | ~1,500 | $0.004 |
-| **Total** | | **~19,000** | **~7,750** | **~$0.014** |
+| Phase | Model | Input tokens | Output tokens | % of total |
+|-------|-------|-------------|---------------|------------|
+| Strategist | v4-pro | ~8,000 | ~3,750 | 58% |
+| Coder | v4-flash | ~5,000 | ~2,500 | 8% |
+| Verification | shell | — | — | 0% |
+| Tech Lead | v4-pro | ~6,000 | ~1,500 | 33% |
+| **Total** | | **~19,000** | **~7,750** | **100%** |
+
+Absolute cost depends on your model provider and pricing. With DeepSeek direct pricing, a full pipeline run costs ~$0.012.
 
 ---
 
