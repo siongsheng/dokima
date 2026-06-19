@@ -130,26 +130,25 @@ The interview JSON captures full context (assumption, impact if wrong) for each 
 
 The panel has been systematically optimized to reduce cost while preserving quality:
 
-| Optimization | Mechanism | Savings |
+| Optimization | Mechanism | Saving |
 |-------------|-----------|---------|
 | Spec noise extraction | Strip session transcript (prompt echo, tool calls) from strategist output | 45-58% smaller |
 | Task-extract for coder | Generate `specs/<feature>-tasks.md` — coder reads ~800 chars, not ~12K | ~93% smaller read |
-| Coder flash model | `deepseek-v4-flash` at $0.28/M input vs $0.89/M (v4-pro) | 3.1× cheaper |
-| Phase 3 pure shell | No AI agent — `git checkout`, `npm test`, `npm run build`, `gh pr create` | ~3K tokens saved |
+| Coder flash model | `deepseek-v4-flash` instead of v4-pro for implementation | 3.1× cheaper |
+| Phase 3 pure shell | No AI agent — `git checkout`, `npm test`, `npm run build`, `gh pr create` | Zero AI tokens |
 | `adversarial-review-lite` | 2.2K vs 13.8K for full `adversarial-review` + `ai-coding-best-practices` | ~11.5K system tokens saved |
 | Cache TTL 30m | Extended prompt cache on coder + tech-lead profiles | Cuts repeat-read costs |
 
-**Cost per full run (4 phases): 54% below unoptimized baseline.**
+**54% cheaper than an unoptimized pipeline.**
 
-| Phase | Model | Input tokens | Output tokens | % of total |
-|-------|-------|-------------|---------------|------------|
-| Strategist | v4-pro | ~8,000 | ~3,750 | 58% |
-| Coder | v4-flash | ~5,000 | ~2,500 | 8% |
-| Verification | shell | — | — | 0% |
-| Tech Lead | v4-pro | ~6,000 | ~1,500 | 33% |
-| **Total** | | **~19,000** | **~7,750** | **100%** |
+Cost distribution by phase:
 
-Absolute cost depends on your model provider and pricing. With DeepSeek direct pricing, a full pipeline run costs ~$0.012.
+| Phase | % of total |
+|---|---|
+| Strategist | 58% |
+| Coder | 8% |
+| Verification | 0% |
+| Tech Lead | 33% |
 
 ---
 
