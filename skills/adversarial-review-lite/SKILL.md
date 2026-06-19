@@ -1,7 +1,7 @@
 ---
 name: adversarial-review-lite
 description: "Adversarial review + TDD verification for Tech Lead — review dimensions, severity levels, 2-commit check, output format. Stripped constitution/sprint content."
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Adversarial Review (Lite — Tech Lead Edition)
@@ -71,7 +71,15 @@ Pre-existing issues matching surrounding codebase pattern → SHOULD FIX (don't 
 ### Verdict
 VERDICT: APPROVED / CHANGES REQUESTED / BLOCKED
 RISK: LOW / MEDIUM / HIGH
-RELEASE: YES (patch/minor/major) / NO
-- YES if: new functionality, API changes, or breaking changes visible to users
-- level: patch=bugfix, minor=new feature, major=breaking change
+RELEASE: YES (patch) — <one-line evidence> / RELEASE: NO — <one-line evidence>
+
+Evidence sources: spec "Impact" section, diff files/paths, commit prefixes, PR body.
+Decision tree (top-down, first match wins):
+
+MAJOR: signature/endpoint/env-var changed | "BREAKING CHANGE:" in commits | spec says "backward incompatible"
+MINOR (no MAJOR): new public function/route/export | feat: prefix | spec says "new functionality"
+PATCH (no MAJOR/MINOR): internal files only | bug fixes | fix:/chore:/refactor: prefix | test additions
+NO RELEASE: CI/config/docs only | no source files touched | spec says "no release needed"
+
+Tiebreak: MAJOR > MINOR > PATCH > NO. Zero signals → default PATCH.
 ```

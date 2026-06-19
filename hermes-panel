@@ -1503,7 +1503,52 @@ FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {R
 Do NOT --approve (self-approval blocked). User merges manually.
 
 End with: VERDICT (APPROVED/CHANGES REQUESTED/BLOCKED) + RISK (LOW/MEDIUM/HIGH) + RELEASE (YES/NO + level if yes).
-RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed.
+
+RELEASE DETERMINATION — use evidence, not vibes. Check in order:
+
+1. EVIDENCE SOURCES (read at least 2):
+   - Spec: "DOCUMENTATION IMPACT" and "Impact" sections — does it say breaking/internal/new?
+   - Diff: files changed, function signatures, exports, dependency changes
+   - Commits on branch: any "BREAKING CHANGE:" footer? "feat:" vs "fix:" prefix?
+   - PR body: ## Impact section — what does it say about cascading effects?
+
+2. DECISION TREE (stop at first match, top-down):
+
+   MAJOR — ANY of:
+   · Function/class signature changed (params removed, return type changed)
+   · Public API endpoint removed or renamed
+   · Environment variable renamed or behaviour changed (not just new var added)
+   · Commit contains "BREAKING CHANGE:"
+   · Spec/diff says "migration required" or "backward incompatible"
+
+   MINOR — ANY of (and no MAJOR signal above):
+   · New public function/endpoint/export/route added
+   · New feature flag or capability gated behind config
+   · README updated with new usage section (not just typo fixes)
+   · Spec says "new functionality" or "adds feature"
+   · Commit prefix is "feat:"
+
+   PATCH — ANY of (and no MAJOR or MINOR signal):
+   · Only internal files changed (lib/, src/, internal/ — no public API touched)
+   · Bug fixes, error handling improvements, edge case guards
+   · Test additions, refactoring (no behaviour change visible to user)
+   · Dependency bumps, config tweaks, logging changes
+   · Commit prefix is "fix:" or "chore:" or "refactor:" or "docs:"
+
+   NO RELEASE — ALL of:
+   · Only CI/config/docs files changed
+   · No source code files touched
+   · README not meaningfully changed
+   · Spec itself says "no release needed" or feature is purely internal
+
+3. TIEBREAK: If signals conflict across levels, escalate — MAJOR > MINOR > PATCH > NO.
+   If genuinely uncertain with zero signals from any source, default to PATCH (safer to release than to miss one).
+
+4. OUTPUT FORMAT:
+   RELEASE: YES (patch) — <one-line evidence>
+   RELEASE: YES (minor) — <one-line evidence>
+   RELEASE: YES (major) — <one-line evidence>
+   RELEASE: NO — <one-line evidence>
             tl_output = spawn_agent("tech-lead", ["adversarial-review-lite"],
                                     tl_prompt, timeout=600, cwd=PROJECT_DIR)
             print(f"\n✓ Tech Lead finished ({len(tl_output)} chars)", flush=True)
