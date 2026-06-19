@@ -1548,6 +1548,71 @@ RELEASE determination: Check if this feature introduces new functionality, API c
                         print(f"  Created: {stdout}", flush=True)
                     else:
                         print(f"  Failed: {stderr}", flush=True)
+
+            # ── RELEASE CREATION (orchestrator shell, after Tech Lead) ──
+            release_url = None
+            if verdict in ("APPROVED", "CHANGES REQUESTED"):
+                release_m = re.search(r'RELEASE:\s*YES\s*(?:\((\w+)\))?', tl_output, re.IGNORECASE)
+                if release_m:
+                    level = release_m.group(1) or "patch"
+                    print(f"\n── Creating Release ({level}) ──", flush=True)
+                    version = None
+                    version_file = None
+                    for vf in ["package.json", "Cargo.toml", "pyproject.toml", "version.txt"]:
+                        vpath = os.path.join(PROJECT_DIR, vf)
+                        if os.path.exists(vpath):
+                            if vf == "package.json":
+                                import json as _json
+                                with open(vpath) as vf_f: version = _json.load(vf_f).get("version")
+                            elif vf == "Cargo.toml":
+                                with open(vpath) as vf_f:
+                                    cm = re.search(r'version\s*=\s*"([^"]+)"', vf_f.read())
+                                    if cm: version = cm.group(1)
+                            elif vf == "pyproject.toml":
+                                with open(vpath) as vf_f:
+                                    pm = re.search(r'version\s*=\s*"([^"]+)"', vf_f.read())
+                                    if pm: version = pm.group(1)
+                            elif vf == "version.txt":
+                                with open(vpath) as vf_f: version = vf_f.read().strip()
+                            if version: version_file = vpath; break
+                    if not version:
+                        tag_out, _, tag_rc = git("tag", "--sort=-v:refname")
+                        version = tag_out.split("\n")[0].lstrip("v") if tag_rc == 0 and tag_out else "0.0.0"
+                    parts = [int(x) for x in (version.split(".") + ["0","0"])[:3]]
+                    if level == "major":   parts = [parts[0]+1, 0, 0]
+                    elif level == "minor": parts = [parts[0], parts[1]+1, 0]
+                    else:                  parts = [parts[0], parts[1], parts[2]+1]
+                    new_version = f"{parts[0]}.{parts[1]}.{parts[2]}"
+                    tag_name = f"v{new_version}"
+                    print(f"  {version} → {new_version}", flush=True)
+                    if version_file:
+                        if version_file.endswith(".json"):
+                            import json as _json2
+                            with open(version_file) as vf_f: pkg = _json2.load(vf_f)
+                            pkg["version"] = new_version
+                            with open(version_file, "w") as vf_f: _json2.dump(pkg, vf_f, indent=2); vf_f.write("\n")
+                        elif version_file.endswith(".toml"):
+                            with open(version_file) as vf_f: txt = vf_f.read()
+                            with open(version_file, "w") as vf_f: vf_f.write(re.sub(r'(version\s*=\s*)"[^"]+"', f'\\1"{new_version}"', txt))
+                        elif version_file.endswith(".txt"):
+                            with open(version_file, "w") as vf_f: vf_f.write(new_version + "\n")
+                        git("add", version_file)
+                        git("commit", "-m", f"chore: bump version to {new_version}")
+                        git("push", "origin", branch)
+                    release_notes = pr_body or f"## {feature}"
+                    _, tag_err, tag_rc = git("tag", "-a", tag_name, "-m", f"Release {tag_name}")
+                    if tag_rc == 0:
+                        git("push", "origin", tag_name)
+                        gh_out, _, gh_rc = gh("release", "create", tag_name, "--repo", REPO,
+                                              "--title", f"{tag_name}: {feature}",
+                                              "--notes", release_notes)
+                        if gh_rc == 0:
+                            release_url = gh_out.strip()
+                            print(f"  ✅ Release: {release_url}", flush=True)
+                        else:
+                            print(f"  ⚠ Tag pushed but GitHub release failed", flush=True)
+                    else:
+                        print(f"  ⚠ Tag failed: {tag_err}", flush=True)
         else:
             print(f"\n── Phase 4: Tech Lead — SKIPPED (depth={depth}) ──", flush=True)
     else:
@@ -1566,6 +1631,8 @@ RELEASE determination: Check if this feature introduces new functionality, API c
     print(f"Strategist: {len(strat_output)} chars output")
     print(f"Mode:       {mode.upper()}")
     print(f"Verdict:    {verdict}")
+    if release_url:
+        print(f"Release:    {release_url}")
     print(f"Full log:   {OUTPUT_LOG}")
     print("✓ Pipeline complete.")
 
