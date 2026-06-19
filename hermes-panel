@@ -1115,7 +1115,7 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
                           "\n".join(f"- Task {t.id}: {t.status}" for t in dag.tasks.values())
                 stdout, _, rc = gh("pr", "create", "--repo", REPO,
                                    "--base", "master", "--head", branch,
-                                   "--title", feature,
+                                   "--title", f"feat: {feature}",
                                    "--body", pr_body)
                 if rc == 0:
                     pr_url = stdout.strip().split()[-1]
