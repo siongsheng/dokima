@@ -1503,52 +1503,7 @@ FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {R
 Do NOT --approve (self-approval blocked). User merges manually.
 
 End with: VERDICT (APPROVED/CHANGES REQUESTED/BLOCKED) + RISK (LOW/MEDIUM/HIGH) + RELEASE (YES/NO + level if yes).
-
-RELEASE DETERMINATION — use evidence, not vibes. Check in order:
-
-1. EVIDENCE SOURCES (read at least 2):
-   - Spec: "DOCUMENTATION IMPACT" and "Impact" sections — does it say breaking/internal/new?
-   - Diff: files changed, function signatures, exports, dependency changes
-   - Commits on branch: any "BREAKING CHANGE:" footer? "feat:" vs "fix:" prefix?
-   - PR body: ## Impact section — what does it say about cascading effects?
-
-2. DECISION TREE (stop at first match, top-down):
-
-   MAJOR — ANY of:
-   · Function/class signature changed (params removed, return type changed)
-   · Public API endpoint removed or renamed
-   · Environment variable renamed or behaviour changed (not just new var added)
-   · Commit contains "BREAKING CHANGE:"
-   · Spec/diff says "migration required" or "backward incompatible"
-
-   MINOR — ANY of (and no MAJOR signal above):
-   · New public function/endpoint/export/route added
-   · New feature flag or capability gated behind config
-   · README updated with new usage section (not just typo fixes)
-   · Spec says "new functionality" or "adds feature"
-   · Commit prefix is "feat:"
-
-   PATCH — ANY of (and no MAJOR or MINOR signal):
-   · Only internal files changed (lib/, src/, internal/ — no public API touched)
-   · Bug fixes, error handling improvements, edge case guards
-   · Test additions, refactoring (no behaviour change visible to user)
-   · Dependency bumps, config tweaks, logging changes
-   · Commit prefix is "fix:" or "chore:" or "refactor:" or "docs:"
-
-   NO RELEASE — ALL of:
-   · Only CI/config/docs files changed
-   · No source code files touched
-   · README not meaningfully changed
-   · Spec itself says "no release needed" or feature is purely internal
-
-3. TIEBREAK: If signals conflict across levels, escalate — MAJOR > MINOR > PATCH > NO.
-   If genuinely uncertain with zero signals from any source, default to PATCH (safer to release than to miss one).
-
-4. OUTPUT FORMAT:
-   RELEASE: YES (patch) — <one-line evidence>
-   RELEASE: YES (minor) — <one-line evidence>
-   RELEASE: YES (major) — <one-line evidence>
-   RELEASE: NO — <one-line evidence>
+RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed."""
             tl_output = spawn_agent("tech-lead", ["adversarial-review-lite"],
                                     tl_prompt, timeout=600, cwd=PROJECT_DIR)
             print(f"\n✓ Tech Lead finished ({len(tl_output)} chars)", flush=True)
@@ -1593,71 +1548,6 @@ RELEASE DETERMINATION — use evidence, not vibes. Check in order:
                         print(f"  Created: {stdout}", flush=True)
                     else:
                         print(f"  Failed: {stderr}", flush=True)
-
-            # ── RELEASE CREATION (orchestrator shell, after Tech Lead) ──
-            release_url = None
-            if verdict in ("APPROVED", "CHANGES REQUESTED"):
-                release_m = re.search(r'RELEASE:\s*YES\s*(?:\((\w+)\))?', tl_output, re.IGNORECASE)
-                if release_m:
-                    level = release_m.group(1) or "patch"
-                    print(f"\n── Creating Release ({level}) ──", flush=True)
-                    version = None
-                    version_file = None
-                    for vf in ["package.json", "Cargo.toml", "pyproject.toml", "version.txt"]:
-                        vpath = os.path.join(PROJECT_DIR, vf)
-                        if os.path.exists(vpath):
-                            if vf == "package.json":
-                                import json as _json
-                                with open(vpath) as vf_f: version = _json.load(vf_f).get("version")
-                            elif vf == "Cargo.toml":
-                                with open(vpath) as vf_f:
-                                    cm = re.search(r'version\s*=\s*"([^"]+)"', vf_f.read())
-                                    if cm: version = cm.group(1)
-                            elif vf == "pyproject.toml":
-                                with open(vpath) as vf_f:
-                                    pm = re.search(r'version\s*=\s*"([^"]+)"', vf_f.read())
-                                    if pm: version = pm.group(1)
-                            elif vf == "version.txt":
-                                with open(vpath) as vf_f: version = vf_f.read().strip()
-                            if version: version_file = vpath; break
-                    if not version:
-                        tag_out, _, tag_rc = git("tag", "--sort=-v:refname")
-                        version = tag_out.split("\n")[0].lstrip("v") if tag_rc == 0 and tag_out else "0.0.0"
-                    parts = [int(x) for x in (version.split(".") + ["0","0"])[:3]]
-                    if level == "major":   parts = [parts[0]+1, 0, 0]
-                    elif level == "minor": parts = [parts[0], parts[1]+1, 0]
-                    else:                  parts = [parts[0], parts[1], parts[2]+1]
-                    new_version = f"{parts[0]}.{parts[1]}.{parts[2]}"
-                    tag_name = f"v{new_version}"
-                    print(f"  {version} → {new_version}", flush=True)
-                    if version_file:
-                        if version_file.endswith(".json"):
-                            import json as _json2
-                            with open(version_file) as vf_f: pkg = _json2.load(vf_f)
-                            pkg["version"] = new_version
-                            with open(version_file, "w") as vf_f: _json2.dump(pkg, vf_f, indent=2); vf_f.write("\n")
-                        elif version_file.endswith(".toml"):
-                            with open(version_file) as vf_f: txt = vf_f.read()
-                            with open(version_file, "w") as vf_f: vf_f.write(re.sub(r'(version\s*=\s*)"[^"]+"', f'\\1"{new_version}"', txt))
-                        elif version_file.endswith(".txt"):
-                            with open(version_file, "w") as vf_f: vf_f.write(new_version + "\n")
-                        git("add", version_file)
-                        git("commit", "-m", f"chore: bump version to {new_version}")
-                        git("push", "origin", branch)
-                    release_notes = pr_body or f"## {feature}"
-                    _, tag_err, tag_rc = git("tag", "-a", tag_name, "-m", f"Release {tag_name}")
-                    if tag_rc == 0:
-                        git("push", "origin", tag_name)
-                        gh_out, _, gh_rc = gh("release", "create", tag_name, "--repo", REPO,
-                                              "--title", f"{tag_name}: {feature}",
-                                              "--notes", release_notes)
-                        if gh_rc == 0:
-                            release_url = gh_out.strip()
-                            print(f"  ✅ Release: {release_url}", flush=True)
-                        else:
-                            print(f"  ⚠ Tag pushed but GitHub release failed", flush=True)
-                    else:
-                        print(f"  ⚠ Tag failed: {tag_err}", flush=True)
         else:
             print(f"\n── Phase 4: Tech Lead — SKIPPED (depth={depth}) ──", flush=True)
     else:
@@ -1676,8 +1566,6 @@ RELEASE DETERMINATION — use evidence, not vibes. Check in order:
     print(f"Strategist: {len(strat_output)} chars output")
     print(f"Mode:       {mode.upper()}")
     print(f"Verdict:    {verdict}")
-    if release_url:
-        print(f"Release:    {release_url}")
     print(f"Full log:   {OUTPUT_LOG}")
     print("✓ Pipeline complete.")
 
