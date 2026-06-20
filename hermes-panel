@@ -614,7 +614,7 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
     locks = TaskLock(panel_dir)
     running = {}  # task_id → Popen
 
-    max_parallel = int(os.environ.get("PANEL_MAX_PARALLEL", "3"))
+    max_parallel = int(os.environ.get("PANEL_MAX_PARALLEL", "5"))
     print(f"  Max parallel agents: {max_parallel}", flush=True)
 
     all_completed = True
@@ -879,6 +879,14 @@ SECOND — interview the user when confidence is NOT High:
 **Description:** What this task accomplishes, which module, expected behaviour.
 
 RULES: Every task MUST start with "### Task N:" and have ALL five fields. Parallelizable:yes only if touching DIFFERENT files from all other tasks. Non-DAG formats (bullet points, numbered lists, bold headers, plain paragraphs) are DISCARDED → feature runs SEQUENTIALLY (3× slower). BEFORE SUBMITTING: search output for "### Task" — every task must match.
+
+CODER CONSTRAINTS (2026-06-20 — the coder uses deepseek-v4-flash, not v4-pro):
+- Output token limit: ~8K tokens. Each task must produce ≤200 lines of new code. If a task would produce more, split it.
+- Max iterations: 50 tool turns. The coder WILL fail if a task exceeds this. Scope tasks for completion within 50 turns.
+- Prefer MORE granular tasks (10-15 small) over FEWER large tasks (3-5 big). The panel auto-parallelizes up to 5 coders per wave.
+- File collision rule: tasks touching the SAME file must be sequential (different waves). Design files so tasks touch different files.
+- If the feature would need >20 tasks, add a "## Panel Split Recommendation" section suggesting how to split across multiple panel passes.
+- Each task = one 5-15min RED→GREEN TDD cycle. One function/component per task. No monolithic prompts.
 
 CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who may copy-paste. Write NO implementation code (function bodies, SQL, HTML, CSS, shell commands). Allowed: pseudo-code, Mermaid diagrams, function SIGNATURES only, route definitions, data structure definitions (field names + types, no impl). Describe WHAT and WHY — the coder decides HOW."""
 
