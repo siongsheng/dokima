@@ -1621,6 +1621,37 @@ RELEASE determination: Check if this feature introduces new functionality, API c
                 elif "VERDICT: CHANGES REQUESTED" in tl_upper:
                     verdict = "CHANGES REQUESTED"
 
+            # ── Inject TL review into PR body ──
+            if pr_url and verdict not in ("SKIPPED", "UNKNOWN", "TIMED_OUT"):
+                pr_num = pr_url.split("/")[-1]
+                # Extract blocker lines
+                blocker_lines = [
+                    l.strip() for l in tl_output.split("\n")
+                    if any(kw in l.upper() for kw in ("BLOCKER", "MUST FIX"))
+                    and l.strip()
+                ][:10]
+                # Extract risk from TL output or use strategist's impact
+                risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', tl_output, re.IGNORECASE)
+                tl_risk = risk_match.group(1).upper() if risk_match else impact
+                # Fetch existing PR body
+                existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
+                                         "--json", "body", "--jq", ".body")
+                review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
+                if blocker_lines:
+                    review_section += "\n### Blockers\n"
+                    for bl in blocker_lines:
+                        review_section += f"- {bl}\n"
+                new_body = (existing_body or pr_body) + review_section
+                print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
+                _, edit_err, edit_rc = gh("api",
+                    f"repos/{REPO}/pulls/{pr_num}",
+                    "--method", "PATCH",
+                    "-f", f"body={new_body}")
+                if edit_rc == 0:
+                    print(f"  ✅ PR updated with Review section", flush=True)
+                else:
+                    print(f"  ⚠ Could not update PR body (gh api rc={edit_rc}): {edit_err[:200]}", flush=True)
+
             # Create GitHub Issues for SHOULD FIX items
             should_fix_lines = [l for l in tl_output.split("\n") if "SHOULD FIX" in l.upper() and "—" in l]
             if should_fix_lines:
