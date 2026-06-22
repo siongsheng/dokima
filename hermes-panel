@@ -890,7 +890,7 @@ CODER CONSTRAINTS (2026-06-20 — the coder uses deepseek-v4-flash, not v4-pro):
 
 CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who may copy-paste. Write NO implementation code (function bodies, SQL, HTML, CSS, shell commands). Allowed: pseudo-code, Mermaid diagrams, function SIGNATURES only, route definitions, data structure definitions (field names + types, no impl). Describe WHAT and WHY — the coder decides HOW."""
 
-    strat_output = spawn_agent("strategist", [], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
     print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
     # Restore original reasoning_effort if overridden
     if _orig_reasoning and os.path.exists(_strat_config):
@@ -1003,7 +1003,7 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
                 "THEN — design the feature by producing:",
                 f"USER CLARIFICATIONS (from the user, treat as authoritative):\n{clarif_context}\n\nTHEN — design the feature by producing:"
             )
-            strat_output = spawn_agent("strategist", [], strat_prompt_refine, timeout=300, cwd=PROJECT_DIR)
+            strat_output = spawn_agent("strategist", ["spec-strategist-lite"], strat_prompt_refine, timeout=300, cwd=PROJECT_DIR)
             print(f"\n✓ Refined spec finished ({len(strat_output)} chars)", flush=True)
         else:
             print("\n  ✓ No answers provided — proceeding with assumptions as-is.", flush=True)
@@ -1012,7 +1012,7 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
                 print("  The spec below is based on UNVERIFIED ASSUMPTIONS. Review carefully before proceeding.", flush=True)
                 print("  To answer later: re-run the panel with the same feature description.", flush=True)
                 print("\n  ⚡ Running strategist with defaults (no user answers)...", flush=True)
-                strat_output = spawn_agent("strategist", [], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+                strat_output = spawn_agent("strategist", ["spec-strategist-lite"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
                 print(f"\n✓ Default spec finished ({len(strat_output)} chars)", flush=True)
 
     # Strategist contingency: if timed out with no useful spec, abort
@@ -1093,7 +1093,7 @@ GAP 2: How should the system handle the case where the cached net_liq is f64::NA
 GAP 3: Is the Mutex held during await points, and could that deadlock?
 
 Output NOTHING ELSE — just the numbered gaps or the "No gaps found" message."""
-        review_output = spawn_agent("strategist", [], review_prompt, timeout=120, cwd=PROJECT_DIR)
+        review_output = spawn_agent("strategist", ["spec-strategist-lite"], review_prompt, timeout=120, cwd=PROJECT_DIR)
         review_text = extract_agent_messages(review_output)
         if len(review_text) < 20 and len(review_output) > 100:
             review_text = review_output
@@ -1134,7 +1134,7 @@ If a gap is valid, add the missing detail to the spec.
 
 Write the COMPLETE updated spec below. Do NOT summarize or skip sections.
 Keep ALL existing content — only add what's needed to close the gaps."""
-            strat_output = spawn_agent("strategist", [], refine_prompt, timeout=300, cwd=PROJECT_DIR)
+            strat_output = spawn_agent("strategist", ["spec-strategist-lite"], refine_prompt, timeout=300, cwd=PROJECT_DIR)
             print(f"  ✓ Refined spec finished ({len(strat_output)} chars)", flush=True)
 
             # Extract and re-save updated spec
