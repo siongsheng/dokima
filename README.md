@@ -43,7 +43,7 @@ hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/pro
 | # | Stage | Who | Model | What it does |
 |---|-------|-----|-------|-------------|
 | 1 | **Strategist** | `strategist` profile | deepseek-v4-pro | Explores codebase, designs spec, produces task list or DAG. Interview mode if confidence < High. |
-| 2 | **Coder** | `coder` profile | deepseek-v4-flash | TDD implementation: RED commit → GREEN commit. Parallel worktrees for DAG, sequential for linear specs. |
+| 2 | **Coder** | `coder` profile | deepseek-v4-flash | TDD implementation: RED commit → GREEN commit. The panel schedules coders in waves based on the dependency DAG — independent tasks run in parallel (up to 5 worktrees), dependent tasks queue behind. Each coder gets 1-2 small tasks per wave. v4-flash handles this comfortably. |
 | 3 | **vet** | Shell (zero AI) | — | Runs test + build commands from `AGENTS.md`. Fail → spawn coder to fix → re-verify (2 retries). Mechanical gate — no AI tokens. |
 | 4 | **nm** | Fresh Hermes session | Different model family | Adversarial review from clean context. Creates PR with risk assessment (LOW/MEDIUM/HIGH) using hermes-panel PR body format. No memory of coding process — catches bias-blind spots. |
 | 5 | **Tech Lead** | `tech-lead` profile | deepseek-v4-pro | Reviews the PR: spec compliance, architecture, code quality. Appends verdict + release type via `gh api PATCH`. Final sign-off. |

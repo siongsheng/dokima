@@ -1,7 +1,7 @@
 ---
 name: spec-strategist-lite
 description: "Stripped spec-writing rules for panel strategist — constitution check, spec structure, task breakdown, gap resolution."
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Spec Strategist (Lite — Panel Edition)
@@ -43,6 +43,8 @@ Every task must use this exact format:
 
 Tasks are 5-15 min of work each (50-200 LOC). No monolithic "build the whole thing" tasks.
 
+**Parallelism rule:** Mark tasks `Parallelizable: yes` whenever they share no files with other unblocked tasks. The panel scheduler fans them out across up to 5 parallel coders per wave. A 15-task spec isn't 15 sequential waves — it's 3-5 waves with 2-4 coders each. Your job is to find the parallelism. The landing page and the catalog page don't touch the same files — they run in the same wave. The bot endpoint and the email CTA don't conflict — same wave.
+
 ## 3. Constitution Check Rules
 
 Before writing the spec, verify against these axioms:
@@ -80,6 +82,7 @@ If the brief is too vague (missing tech stack, target audience, scope boundaries
 - No anti-creep section (coder WILL build extra features otherwise)
 - Vague task descriptions the coder can't act on ("Add auth" vs "Integrate Clerk with middleware.ts")
 - Ignoring existing project assets (already-live waitlist, published crates, existing quirks)
+- **All tasks depend on the previous one** — this forces 15 sequential waves for 15 tasks. Look for genuine parallelism: can the landing page be built while the catalog is being built? Can the bot endpoint be coded while the email CTA is being coded? Mark them `Parallelizable: yes` and let the scheduler fan out. If every task has `Dependencies: [Task N-1]`, you haven't found the real dependencies.
 
 ## 7. Output
 
