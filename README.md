@@ -6,11 +6,9 @@
 ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
 │Strategist│──▶│  Coder   │──▶│   vet    │──▶│    nm    │──▶│Tech Lead │
 │  spec    │   │TDD impl  │   │build+test│   │adversarial│  │  review  │
-└──────────┘   └──────────┘   └──────────┘   │ +PR+risk │   │  sign-off │
-                                              └──────────┘   └──────────┘
-                                                     ↓
-                                              fresh session,
-                                              different model
+└──────────┘   └──────────┘   └──────────┘   │ + PR+risk│   │  sign-off │
+                                              │ (fresh)  │   └──────────┘
+                                              └──────────┘
 ```
 
 ## Why
@@ -44,17 +42,17 @@ hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/pro
 
 | # | Stage | Who | Model | What it does |
 |---|-------|-----|-------|-------------|
-| 1 | **Strategist** | `strategist` profile | deepseek-v4-pro | Explores codebase, designs spec, produces task DAG. Interview mode if confidence < High. |
-| 2 | **Coder** | `coder` profile | deepseek-v4-flash | TDD implementation: RED commit → GREEN commit. Parallel worktrees. Lint before push. |
-| 3 | **vet** | Shell (zero AI) | — | `npm test` + `npm run build`. Fail → spawn coder to fix → re-verify (2 retries). Mechanical gate — no AI tokens. |
-| 4 | **nm** | Fresh Hermes session | Different model family | Adversarial review from clean context. Creates PR with risk assessment (LOW/MEDIUM/HIGH). No memory of coding process — catches bias-blind spots. |
-| 5 | **Tech Lead** | `tech-lead` profile | deepseek-v4-pro | Reviews the PR: spec compliance, architecture, code quality. Appends verdict + release type. Final sign-off. |
+| 1 | **Strategist** | `strategist` profile | deepseek-v4-pro | Explores codebase, designs spec, produces task list or DAG. Interview mode if confidence < High. |
+| 2 | **Coder** | `coder` profile | deepseek-v4-flash | TDD implementation: RED commit → GREEN commit. Parallel worktrees for DAG, sequential for linear specs. |
+| 3 | **vet** | Shell (zero AI) | — | Runs test + build commands from `AGENTS.md`. Fail → spawn coder to fix → re-verify (2 retries). Mechanical gate — no AI tokens. |
+| 4 | **nm** | Fresh Hermes session | Different model family | Adversarial review from clean context. Creates PR with risk assessment (LOW/MEDIUM/HIGH) using hermes-panel PR body format. No memory of coding process — catches bias-blind spots. |
+| 5 | **Tech Lead** | `tech-lead` profile | deepseek-v4-pro | Reviews the PR: spec compliance, architecture, code quality. Appends verdict + release type via `gh api PATCH`. Final sign-off. |
 
 **vet is the minimum.** Every change gets build + tests. No skipping.
 
 ### Depth Gating
 
-Depth matrix: confidence × impact → how many stages run.
+Depth matrix: confidence × impact → how many stages run. The panel creates the PR at vet depth; nm creates it for vet+nm and full.
 
 | Impact ↓ / Confidence → | HIGH | MEDIUM | LOW |
 |---|---|---|---|
@@ -66,9 +64,9 @@ Depth matrix: confidence × impact → how many stages run.
 
 | Depth | Stages | Meaning |
 |-------|--------|---------|
-| **vet** | 1+2+3 | Strategist + Coder + vet. PR created by panel. No adversarial review. For trivial changes. |
-| **vet+nm** | 1+2+3+4 | + nm adversarial review from fresh session. PR + risk assessment. Skip TL only. |
-| **full** | 1+2+3+4+5 | All stages. TL reviews the PR and signs off. For anything impactful or uncertain. |
+| **vet** | 1+2+3 | Strategist + Coder + vet. Panel creates PR directly (no adversarial review). For trivial changes. |
+| **vet+nm** | 1+2+3+4 | + nm adversarial review from fresh session. nm creates PR with risk assessment. Skip TL. |
+| **full** | 1+2+3+4+5 | All stages. nm creates PR, TL reviews and signs off. For anything impactful or uncertain. |
 
 Only HIGH confidence + LOW impact changes skip adversarial review entirely. Everything else gets at least nm's fresh-model review.
 
@@ -80,13 +78,13 @@ Only HIGH confidence + LOW impact changes skip adversarial review entirely. Ever
 - **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
 - **Interview pause-and-resume** — non-interactive for Telegram/cron. Strategist exits code 2 with questions; re-run with `--answers` to resume.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
-- **Three independent reviews** — vet (mechanical), nm (fresh model, clean context), TL (spec compliance). Two different model families catch different classes of bugs.
+- **Two adversarial reviews** — nm (fresh model, clean context) and TL (spec compliance), plus mechanical verification via vet. Two different model families catch different classes of bugs.
 - **Token optimized** — 54% below unoptimized baseline. Shell verification (zero AI), flash model for coder, lite skills, spec noise extraction.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
 
 ## Cost
 
-**54% cheaper than an unoptimized pipeline.** Here's how:
+**54% cheaper than an unoptimized pipeline** (approximate, measured against DeepSeek baseline). Here's how:
 
 | Optimization | Saving |
 |---|---|
