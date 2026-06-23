@@ -118,13 +118,16 @@ hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/pro
 
 ## Pipeline
 
-| # | Stage | Who | Model | What it does |
-|---|-------|-----|-------|-------------|
-| 1 | **Strategist** | `strategist` profile | deepseek-v4-pro | Explores codebase, designs spec, produces task list or DAG. Interview mode if confidence < High. |
-| 2 | **Coder** | `coder` profile | deepseek-v4-flash | TDD implementation: RED commit → GREEN commit. The panel schedules coders in waves based on the dependency DAG — independent tasks run in parallel (up to 5 worktrees), dependent tasks queue behind. Each coder gets 1-2 small tasks per wave. v4-flash handles this comfortably. |
-| 3 | **vet** | Shell (zero AI) | — | Runs test + build commands from `AGENTS.md`. Fail → spawn coder to fix → re-verify (2 retries). Mechanical gate — no AI tokens. |
-| 4 | **nm** | Fresh Hermes session | Different model family | Adversarial review from clean context. Creates PR with risk assessment (LOW/MEDIUM/HIGH) using hermes-panel PR body format. No memory of coding process — catches bias-blind spots. |
-| 5 | **Tech Lead** | `tech-lead` profile | deepseek-v4-pro | Reviews the PR: spec compliance, architecture, code quality. Appends verdict + release type via `gh api PATCH`. Final sign-off. |
+| # | Stage | Who | What it does |
+|---|-------|-----|-------------|
+| 0 | **Human Gate** | You | Review the spec before code gets written. Pauses after Strategist finishes — the #1 failure mode defense |
+| 1 | **Strategist** | `strategist` profile | Explores codebase, designs spec, produces task list or DAG. Interview mode if confidence < High. |
+| 2 | **Coder** | `coder` profile | TDD implementation: RED commit → GREEN commit. Parallel waves based on task DAG. |
+| 3 | **vet** | Shell (zero AI) | Runs test + build commands from `AGENTS.md`. Fail → spawn coder to fix → re-verify (2 retries). |
+| 4 | **nm** | Fresh session, different model | Adversarial review from clean context. Creates PR with risk assessment. |
+| 5 | **Tech Lead** | `tech-lead` profile | Reviews the PR: spec compliance, architecture, code quality. Final sign-off. |
+
+**Human Gate is the default in interactive mode.** Non-interactive (Telegram/cron) auto-skips. Set `PANEL_SKIP_HUMAN_GATE=1` to bypass.
 
 **vet is the minimum.** Every change gets build + tests. No skipping.
 
@@ -193,7 +196,7 @@ Only HIGH confidence + LOW impact changes skip adversarial review entirely. Ever
 
 - **Project-agnostic** — takes any repo path. Reads test/build/lint commands from `AGENTS.md`.
 - **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
-- **Interview pause-and-resume** — non-interactive for Telegram/cron. Strategist exits code 2 with questions; re-run with `--answers` to resume.
+- **Human gate** — pauses after strategist so you can review the spec before code gets written. Catches misinterpretations before the coder spends tokens. `[y]` review in less, `[e]` edit in vim, `[Enter]` approve, `[q]` abort. Auto-skipped in non-interactive mode. `PANEL_SKIP_HUMAN_GATE=1` to disable.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
 - **Two adversarial reviews** — nm (fresh model, clean context) and TL (spec compliance), plus mechanical verification via vet. Two different model families catch different classes of bugs.
 - **Token optimized** — 54% below unoptimized baseline. Shell verification (zero AI), flash model for coder, lite skills, spec noise extraction.
@@ -227,6 +230,7 @@ Only HIGH confidence + LOW impact changes skip adversarial review entirely. Ever
 | `PANEL_REASONING=high` | Bump strategist reasoning effort |
 | `PANEL_PARALLEL=0` | Force sequential coder mode |
 | `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix |
+| `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode |
 | `GH_TOKEN` | GitHub auth (auto-loaded from profile `.env`) |
 
 ## Documentation
