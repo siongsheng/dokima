@@ -50,6 +50,45 @@ hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/pro
 
 **vet is the minimum.** Every change gets build + tests. No skipping.
 
+## Standing on Shoulders
+
+Every stage in the pipeline draws from battle-tested open-source ideas — not invented here, integrated here.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        HERMES-PANEL PIPELINE                                 │
+├──────────┬──────────┬──────────┬──────────┬──────────┬──────────────────────┤
+│Strategist│  Coder   │   vet    │    nm    │Tech Lead │                      │
+│  spec    │TDD impl  │build+test│adversarial│  review  │                      │
+├──────────┼──────────┼──────────┼──────────┼──────────┼──────────────────────┤
+│          │          │          │          │          │                      │
+│ Spec Kit │Kent Beck │  Unix    │no-mistakes│GitHub PR │   Open-Source Core   │
+│ ponytail │ TDD best │philosophy│Adversarial│ review   │                      │
+│          │practices │          │ ML paper  │ ponytail │                      │
+│          │          │          │           │          │                      │
+├──────────┼──────────┼──────────┼───────────┼──────────┼──────────────────────┤
+│          │          │          │           │          │                      │
+│ "Does it │ "Tests   │ No AI.   │ "Fresh    │ "Is there│   What We Learned    │
+│  already │  first,  │ Just     │  eyes,    │  a simpler│                      │
+│  exist?" │  always" │ build +  │  different│  way?"    │                      │
+│          │          │ test"    │  model"   │           │                      │
+└──────────┴──────────┴──────────┴───────────┴──────────┴──────────────────────┘
+```
+
+| Stage | Draws From | What We Took | Why |
+|-------|-----------|-------------|-----|
+| **Strategist** | [GitHub Spec Kit](https://github.com/github/spec-kit) | Constitution-first development, spec format, feature specs | Spec-kit proved that agents produce better code when they design first. We adapted its constitution/spec structure for multi-agent pipelines. |
+| | [ponytail](https://github.com/DietrichGebert/ponytail) (51K ★) | YAGNI laziness ladder — "Does this already exist?" before writing a spec | 54% less code in benchmarks. Prevents the #1 waste in agentic coding: building things that don't need to exist. |
+| **Coder** | [Kent Beck's TDD](https://en.wikipedia.org/wiki/Test-driven_development) | RED → GREEN → REFACTOR cycle, enforced by the coder skill | 25 years of evidence: tests written first produce fewer defects. The coder commits RED then GREEN — git history becomes the proof. |
+| | AI Coding Best Practices | Task granularity (one function per prompt), no scope creep, pipeline phases | Agents drift without guardrails. Breaking work into 5-15 minute tasks keeps agents focused. |
+| **vet** | Unix philosophy | Mechanical verification — shell script, zero AI tokens | Not every problem needs intelligence. Build + test is deterministic. Zero tokens, zero hallucination risk. |
+| **nm** | [no-mistakes](https://github.com/siongsheng/hermes-panel) | Fresh session, different model family, PR with risk assessment | Research shows adversarial review from independent models catches bias. The coding model can't review its own work — too close to it. |
+| | Adversarial ML research | Clean context, no memory of the build process | The reviewer must see the code cold, like a human PR reviewer who wasn't in the pairing session. |
+| **Tech Lead** | GitHub PR review best practices | Spec compliance, architecture review, severity classification | The TL is the final gate — does this code match the spec? Is the architecture sound? Would we ship this? |
+| | [ponytail](https://github.com/DietrichGebert/ponytail) | Post-build laziness review — "Is there a simpler way?" | Catches overbuilding that passed correctness review. A 47-line wrapper that should be a one-line stdlib call. |
+
+**The panel doesn't invent methodology.** It integrates proven ideas into a pipeline where each stage reinforces the next. The strategist's spec gates the coder. The coder's tests gate the vet. The vet gates the review. Two independent models must agree before the TL signs off.
+
 ### Depth Gating
 
 Depth matrix: confidence × impact → how many stages run. The panel creates the PR at vet depth; nm creates it for vet+nm and full.
