@@ -91,7 +91,7 @@ Every stage has a contract:
 |-------|-------------------|-------------------------------|-----------------|
 | **Human Gate** | The spec | Misaligned intent — spec describes wrong thing | Code quality, edge cases |
 | **Strategist** | Codebase + AGENTS.md + brief | Unbounded ambition — overbuilding without design | Whether the spec is implementable |
-| **Coder** | Spec + task list | Implementation gaps — spec says X, code does Y | Whether the spec is correct |
+| **Coder** | Spec (incl. test plan) + task list | Implementation gaps — spec says X, code does Y | Whether the spec is correct |
 | **vet** | Build + test output | Broken builds, failing tests — ground truth | Design issues, architecture drift |
 | **nm** | Git diff (different model family) | Model-family blind spots — same inductive bias would miss these | Spec compliance (doesn't see the spec) |
 | **Tech Lead** | PR + spec + full context | Spec non-compliance, architecture drift, system-wide inconsistency | Blind spots from the coder's model family |

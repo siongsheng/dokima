@@ -83,7 +83,7 @@ Findings are shown at the Human Gate — the user decides whether to revise the 
 
 ### Phase 2: Coder
 **Why:** A coder without a spec overbuilds. A coder without TDD writes untestable code. The panel's coder is constrained — spec-bound, TDD-enforced, task-granular.
-**Sees:** Spec + task list. **Detects:** Implementation gaps — spec says X, code does Y. **Does NOT detect:** Whether the spec is correct.
+**Sees:** Spec (incl. test plan) + task list. **Detects:** Implementation gaps — spec says X, code does Y. **Does NOT detect:** Whether the spec is correct.
 
 Implements the spec on a `feat/<slug>` branch with TDD (RED→GREEN two-commit discipline):
 
