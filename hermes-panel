@@ -2465,6 +2465,572 @@ Report: what you fixed, commit hash."""
     return {"verdict": verdict, "tl_output": tl_output}
 
 
+def run_phase1_strategist(feature, user_answers_prefill):
+    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
+    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
+    global PROJECT_DIR, PROFILES, REAL_HOME
+    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+    _strat_reasoning = os.environ.get("PANEL_REASONING", "")
+    _strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
+    _orig_reasoning = None
+    if _strat_reasoning and os.path.exists(_strat_config):
+        with open(_strat_config) as f:
+            _orig_yaml = f.read()
+        _orig_m = re.search(r'^(\s+reasoning_effort:\s*)(\S+)', _orig_yaml, re.MULTILINE)
+        if _orig_m:
+            _orig_reasoning = _orig_m.group(2)
+            _new_yaml = _orig_yaml.replace(
+                f"{_orig_m.group(1)}{_orig_m.group(2)}",
+                f"{_orig_m.group(1)}{_strat_reasoning}")
+            with open(_strat_config, "w") as f:
+                f.write(_new_yaml)
+            print(f"  PANEL_REASONING={_strat_reasoning} (override, was {_orig_reasoning})", flush=True)
+
+    # Existing spec refinement (for --next mode)
+    _existing_spec = os.environ.get("PANEL_EXISTING_SPEC", "")
+    _refine_note = ""
+    if _existing_spec and os.path.exists(_existing_spec):
+        _refine_note = f"""NOTE: A spec already exists at {_existing_spec}. This feature was previously designed.
+        Read the existing spec FIRST. REFINE — do not start from scratch. Identify gaps vs the current
+        codebase state, address them, improve the design. Keep what's good. The existing spec is
+        authoritative context — you are enhancing it, not replacing it.
+
+        """
+    strat_prompt = f"""You are the Strategist for a software project at {PROJECT_DIR}.
+
+    {_refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
+    1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
+    2. Read AGENTS.md at {PROJECT_DIR}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
+    3. If .specify/ exists, read .specify/memory/constitution.md and .specify/specs/baseline/spec.md. Otherwise skip.
+    3b. If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
+    4. Run `git log --oneline -20` and `git log origin/master..HEAD --oneline` — recent work and unmerged changes.
+    5. Search for relevant code: rg on patterns related to "{feature}" — find existing abstractions and conventions.
+    6. Read the key files — understand the architecture before designing.
+
+    SECOND — interview the user when confidence is NOT High:
+    - Inventory assumptions. If \u22653 unverified OR confidence is Low → INTERVIEW MODE: output ONLY clarification questions (no spec).
+    - Output exactly: DECISION: INTERVIEW MODE, then CLARIFICATION: <question>, Assumption: <...>, Impact if wrong: <...>
+    - Medium confidence with \u22642 assumptions: include CLARIFICATION: markers inline. High confidence: skip.
+    - Max 3-4 critical clarifications. Skip trivial ones.
+
+    """
+
+    if user_answers_prefill:
+        strat_prompt += f"""USER CLARIFICATIONS (from the user, treat as authoritative):
+    {user_answers_prefill}
+
+    """
+
+    strat_prompt += """THEN — design the feature:
+
+    1. DECISION TABLE: Compare \u22652 approaches (approach, isolation, faithfulness to patterns, simplicity, verdict). Pick one.
+
+    2. IMPACT ASSESSMENT: Files/tables/routes changed, cascading effects, estimated lines, risk.
+
+    3. CONFIDENCE + IMPACT markers (REQUIRED — exact format):
+       Confidence: (High)/(Medium)/(Low)
+       High=clear scope, Low=novel/unclear pattern
+       Impact: (LOW)/(MEDIUM)/(HIGH)
+       LOW=tests/docs, MEDIUM=DB/API/UI, HIGH=auth/payments/migrations/security
+
+    4. API/INTERFACE PROPOSAL: Function signatures, routes, request/response shapes, data structures. No implementation code.
+
+    5. SECURITY CONSIDERATIONS: Auth, injection, rate limiting, data exposure.
+
+    6. DOCUMENTATION IMPACT (REQUIRED): State whether README.md needs updating.
+       - If YES: what section and what should be added/changed.
+       - If NO: write "README: No change needed."
+       The README lives at {{project_dir}}/README.md. Read it to determine impact.
+
+    7. TASK BREAKDOWN — DAG FORMAT MANDATORY. Each task = one 5-15min RED\u2192GREEN TDD cycle. Use EXACTLY:
+
+    ### Task N: Brief description
+    **Files:** path/to/file1, path/to/file2
+    **Dependencies:** [none] or [Task N]
+    **Parallelizable:** yes or no
+    **Description:** What this task accomplishes, which module, expected behaviour.
+
+    RULES: Every task MUST start with "### Task N:" and have ALL five fields. Parallelizable:yes only if touching DIFFERENT files from all other tasks. Non-DAG formats (bullet points, numbered lists, bold headers, plain paragraphs) are DISCARDED \u2192 feature runs SEQUENTIALLY (3\u00d7 slower). BEFORE SUBMITTING: search output for "### Task" \u2014 every task must match.
+
+    CODER CONSTRAINTS (2026-06-20 \u2014 the coder uses deepseek-v4-flash, not v4-pro):
+    - Output token limit: ~8K tokens. Each task must produce \u2264200 lines of new code. If a task would produce more, split it.
+    - Max iterations: 50 tool turns. The coder WILL fail if a task exceeds this. Scope tasks for completion within 50 turns.
+    - Prefer MORE granular tasks (10-15 small) over FEWER large tasks (3-5 big). The panel auto-parallelizes up to 5 coders per wave.
+    - File collision rule: tasks touching the SAME file must be sequential (different waves). Design files so tasks touch different files.
+    - If the feature would need >20 tasks, add a "## Panel Split Recommendation" section suggesting how to split across multiple panel passes.
+    - Each task = one 5-15min RED\u2192GREEN TDD cycle. One function/component per task. No monolithic prompts.
+
+    CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who may copy-paste. Write NO implementation code (function bodies, SQL, HTML, CSS, shell commands). Allowed: pseudo-code, Mermaid diagrams, function SIGNATURES only, route definitions, data structure definitions (field names + types, no impl). Describe WHAT and WHY \u2014 the coder decides HOW."""
+
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+    print(f"\n\u2713 Strategist finished ({len(strat_output)} chars)", flush=True)
+    if _orig_reasoning and os.path.exists(_strat_config):
+        with open(_strat_config, "w") as f:
+            f.write(_orig_yaml)
+        print(f"  Restored strategist reasoning_effort \u2192 {_orig_reasoning}", flush=True)
+
+    # ── Interview gate ──
+    agent_text_pre = extract_agent_messages(strat_output)
+    interview_mode = "DECISION: INTERVIEW MODE" in agent_text_pre
+    has_clarifications = bool(re.search(r'CLARIFICATION\s+\d+:', agent_text_pre))
+    if (interview_mode or has_clarifications) and not user_answers_prefill:
+        if not sys.stdin.isatty():
+            clarification_blocks = []
+            pattern = r'(CLARIFICATION\s+\d+:.*?)(?=\n\s*CLARIFICATION\s+\d+|\n\s*\n\s*(?:DECISION|IMPACT|CONFIDENCE|### Task|SPEC COMPLETE|Ready for)|\Z)'
+            for match in re.finditer(pattern, agent_text_pre, re.DOTALL):
+                block = match.group(1).strip()
+                if len(block) > 10:
+                    clarification_blocks.append(block)
+            if not clarification_blocks:
+                for line in agent_text_pre.split("\n"):
+                    stripped = line.strip()
+                    if stripped.startswith("CLARIFICATION"):
+                        clarification_blocks.append(stripped)
+            interview_state = {
+                "feature": feature,
+                "project_dir": PROJECT_DIR,
+                "interview_mode": interview_mode,
+                "questions": clarification_blocks,
+                "prompt": strat_prompt
+            }
+            interview_path = "/tmp/hermes-panel-interview.json"
+            with open(interview_path, "w") as f:
+                json.dump(interview_state, f)
+            print(f"\n{'═' * 55}", flush=True)
+            print(f"  STRATEGIST NEEDS CLARIFICATION", flush=True)
+            print(f"{'═' * 55}", flush=True)
+            if interview_mode:
+                print(f"\n  ⚠  Interview mode \u2014 spec cannot be written without answers.", flush=True)
+            print(f"\n  Questions ({len(clarification_blocks)}):", flush=True)
+            for i, q in enumerate(clarification_blocks, 1):
+                lines = q.split("\n")
+                header = lines[0].replace("CLARIFICATION", "").lstrip(" 0123456789: ").strip()
+                print(f"\n  \u250c\u2500 Q{i}: {header}", flush=True)
+                for ctx in lines[1:]:
+                    if ctx.strip():
+                        print(f"  \u2502  {ctx.strip()}", flush=True)
+                print(f"  \u2514{'─' * 40}", flush=True)
+            print(f"\n  State saved: {interview_path}", flush=True)
+            print(f"  Re-run with: hermes-panel --answers {interview_path}", flush=True)
+            print(f"{'═' * 55}", flush=True)
+            sys.exit(2)
+
+        # Interactive mode
+        print("\n" + "=" * 60, flush=True)
+        print("  STRATEGIST INTERVIEW \u2014 Clarifications Needed", flush=True)
+        print("=" * 60, flush=True)
+        if interview_mode:
+            print("\n\u26a0\ufe0f  The strategist flagged this as INTERVIEW MODE \u2014 your requirements need refining before a spec can be written.", flush=True)
+        else:
+            print("\nThe strategist identified ambiguities in your feature request.", flush=True)
+        print("Answer these questions to refine the spec. Blank line = accept assumptions.\n", flush=True)
+        clarification_lines = []
+        for line in strat_output.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("CLARIFICATION"):
+                clarification_lines.append(stripped)
+        for i, c in enumerate(clarification_lines, 1):
+            print(f"\n  Q{i}: {c}", flush=True)
+        print("\n" + "-" * 60, flush=True)
+        print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
+        print("-" * 60, flush=True)
+        user_answers = []
+        try:
+            import select
+            for i in range(len(clarification_lines)):
+                print(f"\n  A{i+1}: ", end="", flush=True)
+                ready, _, _ = select.select([sys.stdin], [], [], 60.0)
+                if not ready:
+                    print("(timed out \u2014 accepting assumptions)", flush=True)
+                    break
+                answer = sys.stdin.readline().strip()
+                if not answer:
+                    break
+                user_answers.append(answer)
+        except (EOFError, KeyboardInterrupt):
+            print("\n  \u26a0 No input available \u2014 proceeding with assumptions", flush=True)
+        if user_answers:
+            print(f"\n  \u2713 Got {len(user_answers)} answer(s). Re-running strategist with your clarifications...", flush=True)
+            clarif_context = "\n".join(
+                f"Clarification: {c}\nUser's answer: {a}"
+                for c, a in zip(clarification_lines, user_answers)
+            )
+            strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
+                                       strat_prompt + f"\n\nUSER CLARIFICATIONS:\n{clarif_context}\n\nTHEN \u2014 design the feature:",
+                                       timeout=300, cwd=PROJECT_DIR)
+            print(f"\n\u2713 Refined spec finished ({len(strat_output)} chars)", flush=True)
+        else:
+            print("\n  \u2713 No answers provided \u2014 proceeding with assumptions as-is.", flush=True)
+            if interview_mode:
+                print("\n  \u26a0\ufe0f  WARNING: Strategist entered INTERVIEW MODE but no clarifications were provided.", flush=True)
+                print("  The spec below is based on UNVERIFIED ASSUMPTIONS. Review carefully before proceeding.", flush=True)
+                print("  To answer later: re-run the panel with the same feature description.", flush=True)
+                print("\n  \u26a1 Running strategist with defaults (no user answers)...", flush=True)
+                strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+                print(f"\n\u2713 Default spec finished ({len(strat_output)} chars)", flush=True)
+
+    # Strategist contingency
+    if "[TIMEOUT:" in strat_output and len(strat_output) < 500:
+        print("ERROR: Strategist timed out with insufficient output \u2014 aborting pipeline")
+        sys.exit(1)
+
+    spec = extract_agent_messages(strat_output)
+    if len(spec) < 100 and len(strat_output) > 500:
+        spec = strat_output
+    print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
+
+    spec_dir = os.path.join(PROJECT_DIR, "specs")
+    os.makedirs(spec_dir, exist_ok=True)
+    spec_name = slugify(feature)[:50]
+    spec_path = os.path.join(spec_dir, f"{spec_name}-spec.md")
+    with open(spec_path, "w") as f:
+        f.write(f"# {feature}\n\n{spec}")
+    print(f"\n\u2713 Spec saved: {spec_path}", flush=True)
+
+    pr_sections = extract_pr_sections(spec, feature)
+    print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
+
+    tasks_extract_path = os.path.join(spec_dir, f"{spec_name}-tasks.md")
+    try:
+        dag_pre = TaskDAG()
+        feature_slug = slugify(feature)
+        dag_pre.parse(spec, feature_slug)
+        if dag_pre.tasks:
+            tasks_extract = []
+            for t in sorted(dag_pre.tasks.values(), key=lambda x: int(x.id)):
+                tasks_extract.append(f"### Task {t.id}: {t.description}\n"
+                    f"**Files:** {', '.join(t.files) if t.files else 'from spec'}\n"
+                    f"**Dependencies:** {', '.join(t.deps) if t.deps else '[none]'}\n"
+                    f"**Description:** {t.description}\n")
+            with open(tasks_extract_path, "w") as tf:
+                tf.write(f"# Task Breakdown: {feature}\n\n" + "\n".join(tasks_extract))
+            print(f"  Task extract: {tasks_extract_path} ({len(dag_pre.tasks)} tasks)", flush=True)
+        else:
+            tasks_extract_path = ""
+            print("  \u26a0 No tasks parsed from spec", flush=True)
+    except Exception as e:
+        tasks_extract_path = ""
+        print(f"  \u26a0 Task extraction failed: {e} \u2014 coder will read full spec", flush=True)
+
+    # Tech Lead spec pre-review
+    if not os.environ.get("PANEL_SKIP_ORCHESTRATOR_REVIEW"):
+        print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2500\u2500", flush=True)
+        review_prompt = f"""You are the Tech Lead reviewing a spec BEFORE implementation. Read the spec at {spec_path}.
+
+Your job is NOT to find general gaps \u2014 the Human Gate and nm will catch those. Focus on what ONLY you can assess:
+
+## 1. Architectural Impact
+- Does this design introduce coupling where it shouldn't?
+- Are there implicit assumptions about service boundaries, data ownership, or API contracts?
+- Will this change break existing consumers or require migrations?
+- Is the design consistent with the codebase's existing patterns?
+- **ADR check:** If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and check: does this spec violate any existing architectural decision? If yes, flag it as CONCERN with the ADR reference.
+
+## 2. Test Plan Verification
+- Does the spec's Test Plan section exist and is it complete?
+- Are edge cases concrete (not generic "test edge cases")?
+- Are failure modes specified (what breaks, how it breaks, what happens)?
+- Are contract invariants defined (what must remain true)?
+- If the Test Plan is missing or vague, that's a BLOCKER.
+
+Output format:
+TEST PLAN: PASS / BLOCKER \u2014 <reason>
+ARCHITECTURE: PASS / CONCERN \u2014 <reason>
+
+If BLOCKER: name the missing test plan sections.
+If CONCERN: name the specific architectural risk (not generic "consider coupling").
+If both PASS: say "Spec pre-review approved \u2014 no architectural concerns, test plan complete."
+
+Output NOTHING ELSE."""
+        review_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"], review_prompt, timeout=120, cwd=PROJECT_DIR)
+        review_text = extract_agent_messages(review_output)
+        if len(review_text) < 20 and len(review_output) > 100:
+            review_text = review_output
+        print(f"  Pre-review: {review_text.strip()[:200]}", flush=True)
+    else:
+        print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2014 SKIPPED (PANEL_SKIP_ORCHESTRATOR_REVIEW=1) \u2500\u2500", flush=True)
+
+    # Orchestra gate
+    print("\n\u2500\u2500 Orchestrator Gate \u2500\u2500", flush=True)
+    confidence = "Medium"
+    for marker in ["High", "Medium", "Low"]:
+        if f"({marker}" in spec or f"confidence: {marker}" in spec.lower() or f"Confidence: {marker}" in spec:
+            confidence = marker
+            break
+    impact = "HIGH"
+    for marker in ["HIGH", "MEDIUM", "LOW"]:
+        if f"impact: {marker}" in spec.lower() or f"Impact: {marker}" in spec:
+            impact = marker
+            break
+    depth_matrix = {
+        ("High", "LOW"):    "coder",
+        ("High", "MEDIUM"): "vet+nm",
+        ("High", "HIGH"):   "full",
+        ("Medium", "LOW"):  "full",
+        ("Medium", "MEDIUM"): "full",
+        ("Medium", "HIGH"): "full",
+        ("Low", "LOW"):     "full",
+        ("Low", "MEDIUM"):  "full",
+        ("Low", "HIGH"):    "full",
+    }
+    depth = depth_matrix.get((confidence, impact), "full")
+    if os.environ.get("PANEL_FORCE_FULL") == "1":
+        depth = "full"
+        print("  \u26a0 PANEL_FORCE_FULL=1 \u2014 forcing full pipeline (all 5 phases)", flush=True)
+    mode = "passive" if confidence == "High" else "active"
+    print(f"  Confidence: {confidence}, Impact: {impact} \u2192 Depth: {depth.upper()}", flush=True)
+    if mode == "passive":
+        print("  Auto-pilot \u2014 no gates between phases", flush=True)
+    else:
+        print("  Review-gate \u2014 orchestrator checks each phase, may loop back", flush=True)
+    branch = f"feat/{slugify(feature)}"
+    print(f"  Branch: {branch}", flush=True)
+
+    # Human gate
+    if sys.stdin.isatty() and not os.environ.get("PANEL_SKIP_HUMAN_GATE"):
+        print(f"\n{'─' * 55}", flush=True)
+        print(f"  HUMAN GATE \u2014 Spec ready for review", flush=True)
+        print(f"{'─' * 55}", flush=True)
+        print(f"  Feature:  {feature}", flush=True)
+        print(f"  Depth:    {depth.upper()} ({confidence} confidence, {impact} impact)", flush=True)
+        print(f"  Branch:   {branch}", flush=True)
+        print(f"  Spec:     {spec_path}", flush=True)
+        print(f"  Tasks:    {tasks_extract_path if tasks_extract_path else 'N/A'}", flush=True)
+        print(f"\n  Options:", flush=True)
+        print(f"    [y] Review the spec now (opens in less)", flush=True)
+        print(f"    [e] Edit the spec (opens in vim)", flush=True)
+        print(f"    [Enter] Proceed \u2014 spec looks good", flush=True)
+        print(f"    [q] Quit \u2014 spec needs major changes", flush=True)
+        print(f"{'─' * 55}", flush=True)
+        try:
+            choice = input("  > ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            choice = "q"
+        if choice == "y":
+            subprocess.run(["less", spec_path], timeout=300)
+            try:
+                confirm = input("\n  Proceed with this spec? [Enter=yes / q=quit]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "q"
+            if confirm == "q":
+                print("\n  \u270b Pipeline halted by human. Spec saved \u2014 revise and re-run.", flush=True)
+                sys.exit(0)
+        elif choice == "e":
+            subprocess.run(["vim", spec_path], timeout=600)
+            try:
+                with open(spec_path) as f:
+                    spec = f.read()
+                pr_sections = extract_pr_sections(spec, feature)
+                dag_pre = TaskDAG()
+                dag_pre.parse(spec, slugify(feature))
+                if dag_pre.tasks:
+                    tasks_extract = []
+                    for t in sorted(dag_pre.tasks.values(), key=lambda x: int(x.id)):
+                        tasks_extract.append(f"### Task {t.id}: {t.description}\n"
+                            f"**Files:** {', '.join(t.files) if t.files else 'from spec'}\n"
+                            f"**Dependencies:** {', '.join(t.deps) if t.deps else '[none]'}\n"
+                            f"**Description:** {t.description}\n")
+                    with open(tasks_extract_path, "w") as tf:
+                        tf.write(f"# Task Breakdown: {feature}\n\n" + "\n".join(tasks_extract))
+                    print(f"  Task extract regenerated: {tasks_extract_path} ({len(dag_pre.tasks)} tasks)", flush=True)
+                print("  \u2713 Spec edited \u2014 proceeding with updated spec.", flush=True)
+            except Exception as e:
+                print(f"  \u26a0 Failed to re-read spec: {e} \u2014 proceeding with original.", flush=True)
+        elif choice == "q":
+            print("\n  \u270b Pipeline halted by human. Spec saved \u2014 revise and re-run.", flush=True)
+            sys.exit(0)
+        print("  \u2713 Human gate passed \u2014 proceeding to implementation.\n", flush=True)
+    elif os.environ.get("PANEL_SKIP_HUMAN_GATE"):
+        print("\n  \u26a0 Human gate skipped (PANEL_SKIP_HUMAN_GATE=1)", flush=True)
+    else:
+        print("\n  \u26a0 Human gate skipped (non-interactive \u2014 Telegram/cron mode)", flush=True)
+
+    # ADR creation
+    adr_dir = os.path.join(PROJECT_DIR, "docs", "adr")
+    adr_bin = os.path.join(REAL_HOME, "adr-tools", "src")
+    adr_binary = os.path.join(adr_bin, "adr")
+    if os.path.isdir(adr_dir) and os.path.exists(adr_binary):
+        try:
+            with open(spec_path) as f:
+                spec_for_adr = f.read()
+        except Exception:
+            spec_for_adr = spec
+        decision_m = re.search(
+            r'(?:DECISION TABLE|Decision Table).*?(?:\n\n(?:IMPACT|CONFIDENCE|###|\Z))',
+            spec_for_adr, re.DOTALL | re.IGNORECASE)
+        if decision_m:
+            title = feature[:80]
+            result = subprocess.run(
+                [os.path.join(adr_bin, "adr"), "new", f"ADR for: {title}"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True, timeout=30, cwd=PROJECT_DIR,
+                env={**os.environ, "PATH": f"{adr_bin}:{os.environ.get('PATH', '')}"})
+            if result.returncode == 0:
+                adr_output = result.stdout.strip()
+                print(f"  ADR created: {adr_output}", flush=True)
+                adr_file_match = re.search(r'(docs/adr/\d+-.+\.md)', adr_output)
+                if adr_file_match:
+                    adr_rel_path = adr_file_match.group(1)
+                    adr_full_path = os.path.join(PROJECT_DIR, adr_rel_path)
+                    try:
+                        with open(adr_full_path, "a") as af:
+                            af.write(f"\n## Source\n\nSpec: {spec_path}\n")
+                    except Exception:
+                        pass
+                    try:
+                        with open(spec_path, "a") as sf:
+                            sf.write(f"\n\n## ADR\n\nSee: {adr_rel_path}\n")
+                    except Exception:
+                        pass
+            else:
+                print(f"  \u26a0 ADR creation skipped: {result.stderr.strip()[:100]}", flush=True)
+    else:
+        print(f"  \u2139 ADR dir not found ({adr_dir}) \u2014 skipping ADR creation. Run `adr init docs/adr` to enable.", flush=True)
+
+    # Parallel execution gate
+    parallel_enabled = os.environ.get("PANEL_PARALLEL", "1") == "1"
+    return {
+        "spec": spec,
+        "spec_path": spec_path,
+        "pr_sections": pr_sections,
+        "tasks_extract_path": tasks_extract_path,
+        "depth": depth,
+        "branch": branch,
+        "confidence": confidence,
+        "impact": impact,
+        "mode": mode,
+        "strat_output": strat_output,
+        "parallel_enabled": parallel_enabled,
+    }
+
+
+def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
+    """Run one full pipeline iteration for a single feature. Returns exit code."""
+    global PROJECT_DIR, REPO, _stdout, logf
+
+    strat_result = run_phase1_strategist(feature, user_answers_prefill)
+    spec = strat_result["spec"]
+    spec_path = strat_result["spec_path"]
+    pr_sections = strat_result["pr_sections"]
+    tasks_extract_path = strat_result["tasks_extract_path"]
+    depth = strat_result["depth"]
+    branch = strat_result["branch"]
+    confidence = strat_result["confidence"]
+    impact = strat_result["impact"]
+    mode = strat_result["mode"]
+    strat_output = strat_result["strat_output"]
+    parallel_enabled = strat_result["parallel_enabled"]
+
+    coder_failed = False
+    pr_url = None
+    verdict = None
+    nm_output = ""
+    tl_output = ""
+
+    # Parallel coders
+    if parallel_enabled and depth in ("coder", "vet+nm", "full"):
+        print("\n── Parallel Coders (PANEL_PARALLEL=1) ──", flush=True)
+        dag = TaskDAG()
+        feature_slug = slugify(feature)
+        dag.parse(spec, feature_slug)
+        if not dag.tasks:
+            print("  ⚠ No tasks found in strategist output — falling back to sequential coder", flush=True)
+            parallel_enabled = False
+        else:
+            print(f"  Parsed {len(dag.tasks)} tasks from spec", flush=True)
+            waves = dag.compute_waves()
+            print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
+            all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
+            if not all_ok:
+                print("\n  ⚠ Some tasks failed — checking if feature is still viable", flush=True)
+                completed = [t for t in dag.tasks.values() if t.status == "completed"]
+                if not completed:
+                    halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch)
+                    coder_failed = True
+                    pr_url = None
+                    verdict = "CODER_FAILED"
+                else:
+                    print(f"  {len(completed)}/{len(dag.tasks)} tasks completed — proceeding with partial results", flush=True)
+                    if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
+                        halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                        coder_failed = True
+                        verdict = "CODER_FAILED"
+            else:
+                if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
+                    halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                    coder_failed = True
+                    verdict = "CODER_FAILED"
+
+            if not coder_failed and depth == "vet":
+                print("\n── Creating PR (depth=coder) ──", flush=True)
+                pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+                pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
+                stdout, _, rc = gh("pr", "create", "--repo", REPO,
+                                   "--base", DEFAULT_BRANCH, "--head", branch,
+                                   "--title", f"feat: {feature}",
+                                   "--body", pr_body)
+                if rc == 0:
+                    pr_url = stdout.strip().split()[-1]
+                    print(f"  PR created: {pr_url}", flush=True)
+                else:
+                    print(f"  ⚠ PR creation failed: unknown", flush=True)
+
+            if depth == "vet" and not coder_failed:
+                print("\n── Phase 3: vet — SKIPPED (depth=vet, parallel) ──", flush=True)
+                print("── Phase 4+5: nm+TL — SKIPPED (depth=vet) ──", flush=True)
+                verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
+                continue_loop, should_stop = run_post_pipeline(feature, is_next, is_continuous, True, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
+                if should_stop:
+                    return 0
+                return 0
+
+    # Sequential coder path
+    if not coder_failed and not (parallel_enabled and depth in ("coder", "vet+nm", "full")):
+        coder_result = run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next)
+        coder_failed = coder_result["coder_failed"]
+        pr_url = coder_result["pr_url"]
+        verdict = coder_result["verdict"]
+
+    # Phase 3: vet
+    if not coder_failed and depth in ("vet+nm", "full"):
+        vet_result = run_phase3_vet(feature, branch, pr_sections, impact, spec_path)
+        nm_output = vet_result["nm_output"]
+        pr_url = vet_result["pr_url"] or pr_url
+        if vet_result["coder_failed"]:
+            coder_failed = True
+            verdict = "VET_FAILED"
+    else:
+        print(f"\n── Phase 3: vet — SKIPPED (depth={depth}) ──", flush=True)
+        if coder_failed:
+            print("── Phase 3: vet — SKIPPED (coder failed) ──", flush=True)
+
+    # Phase 4: nm
+    if not coder_failed and depth in ("vet+nm", "full"):
+        nm_result = run_phase4_nm(feature, branch, impact, pr_url)
+        pr_url = nm_result["pr_url"]
+    else:
+        print(f"\n── Phase 4: nm — SKIPPED (depth={depth}) ──", flush=True)
+        if coder_failed:
+            print("\n── Phase 4: nm — SKIPPED (coder failed) ──", flush=True)
+
+    # Phase 5: Tech Lead
+    if not coder_failed and depth == "full":
+        tl_result = run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact)
+        verdict = tl_result["verdict"]
+        tl_output = tl_result["tl_output"]
+    else:
+        print(f"\n── Phase 5: Tech Lead — SKIPPED (depth={depth}) ──", flush=True)
+        if coder_failed:
+            print("\n── Phase 5: Tech Lead — SKIPPED (coder failed) ──", flush=True)
+        if verdict is None:
+            verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
+
+    # Post pipeline
+    continue_loop = True
+    continue_loop, should_stop = run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
+    return 0
+
+
 # ── main ──
 
 def main():
