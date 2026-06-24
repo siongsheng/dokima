@@ -1,6 +1,6 @@
 # Hermes Panel
 
-**Multi-agent orchestration engine for Hermes Agent.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review.
+**Multi-agent orchestration engine.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review. Works with Hermes Agent, Claude Code, or any agent that can follow instructions.
 
 ## Why
 
@@ -79,6 +79,23 @@ stateDiagram-v2
 
 **vet is the minimum** — every change gets build + tests. Depth gating, loopback rules, and full phase details: [docs/pipeline.md](docs/pipeline.md).
 
+## Design
+
+Why five agents, not one? Because one agent writing code and reviewing its own work is how you ship bugs. Each phase exists to catch what the previous one missed:
+
+| Phase | What it catches | Remove it, and... |
+|-------|---------------|-------------------|
+| **Human Gate** | Bad specs before code gets written | The pipeline faithfully builds the wrong thing. No human sees the spec until the final PR. |
+| **Strategist** | Unbounded ambition | "Just code it" → 47 files for a button. No spec means no task breakdown, no trade-off analysis, no bounds. |
+| **Coder** | — (builds the thing) | Nothing gets built. But an unconstrained coder overbuilds. The spec + TDD keep it focused. |
+| **vet** | Broken builds, failing tests | AI agents claim "tests pass" without running them. Shell scripts don't hallucinate. Deterministic, zero AI tokens. |
+| **nm** | Blind spots from the coder's model family | Same model reviewing its own work misses edge cases. Different model family = genuinely independent review. |
+| **Tech Lead** | Spec non-compliance, architecture drift | nm reviews the code; TL reviews against the spec. Catches "this doesn't do what was asked for." |
+
+**Why not 3 phases?** Strategist → Coder → vet would ship code that passes tests but might not match the spec (no adversarial review, no spec-compliance check). vet+nm is our default for medium-risk changes — adversarial review but no spec check. Full depth adds TL for anything impactful.
+
+**Why not 7 phases?** More phases = more tokens, more latency, diminishing returns. The jump from 5 to 7 would add another review pass (redundant with nm+TL) or a separate security audit (TL's code quality dimension already covers security). Five is the set that each catches a distinct failure class.
+
 ## Features
 
 - **Human gate** — pauses after strategist so you can review the spec before code gets written. `[y]` review in less, `[e]` edit in vim, `[Enter]` approve, `[q]` abort. Auto-skipped in non-interactive mode.
@@ -90,10 +107,24 @@ stateDiagram-v2
 - **Two adversarial reviews** — nm (fresh model, different family) + TL (spec compliance). Two independent models catch different classes of bugs.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
 
+## When NOT to Use
+
+The panel is not the right tool for every change:
+
+| Scenario | Use instead |
+|----------|------------|
+| **Trivial fixes** (typos, comments, formatting) | Direct commit. 6 stages for a typo is comedy. |
+| **You already know the codebase deeply** | Direct TDD + `~/bin/nm`. The Strategist adds no value when you know the design. |
+| **The change is purely mechanical** (rename, extract, reformat) | IDE refactor or sed. No design work needed. |
+| **You need a quick experiment / spike** | One agent, no pipeline. The panel is for shipping, not exploring. |
+| **No test suite exists** | Write tests first. The panel's TDD enforcement requires a test runner. |
+
+The panel shines for **greenfield features with ambiguous requirements** where a fresh strategic perspective matters, and for **high-impact changes** where two independent reviews prevent costly mistakes.
+
 ## Requirements
 
-- [Hermes Agent](https://hermes-agent.nousresearch.com) installed
-- 3 Hermes profiles: `strategist`, `coder`, `tech-lead` (see [setup guide](docs/setup.md))
+- An AI agent runtime — [Hermes Agent](https://hermes-agent.nousresearch.com), [Claude Code](https://claude.ai), or [Codex](https://github.com/openai/codex)
+- 3 agent profiles/workspaces: `strategist`, `coder`, `tech-lead` (see [setup guide](docs/setup.md))
 - DeepSeek API access (strategist/coder/TL) + one additional model family (nm adversarial review)
 - `gh` CLI (GitHub) installed and authenticated
 - `AGENTS.md` at project root with test and build commands
@@ -109,6 +140,7 @@ stateDiagram-v2
 | `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode |
 | `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks |
 | `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback |
+| `PANEL_AGENT` | Agent runtime: `hermes` (default), `claude`, `codex` |
 | `GH_TOKEN` | GitHub auth (auto-loaded from profile `.env`) |
 
 ## Standing on Shoulders
