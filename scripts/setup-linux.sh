@@ -314,6 +314,8 @@ deploy_skill "ai-coding-best-practices-lite" "$COD_DIR"
 deploy_skill "adversarial-review-lite"        "$TL_DIR"
 deploy_skill "ponytail-guard"                "$TL_DIR"
 deploy_skill "no-mistakes"                   "$GLOB_DIR"
+deploy_skill "spec-kit"                      "$GLOB_DIR"
+deploy_skill "saas-ideation"                 "$GLOB_DIR"
 
 # ── 6. GitHub Token ────────────────────────────────────────────────
 section "GitHub token"

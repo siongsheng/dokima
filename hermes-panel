@@ -830,6 +830,12 @@ Create {PROJECT_DIR}/specs/conventions.md:
 - Derived from codebase audit (not templated)
 - "Never do X" rules
 
+Create {PROJECT_DIR}/AGENTS.md:
+- Project title and one-line description
+- Exact test, build, and lint commands matching the tech stack you chose
+- Non-obvious conventions agents need to know
+- Keep it minimal — only what agents cannot infer from reading code
+
 PHASE 4 — VALIDATION LOOP:
 - Review ALL four documents. Find gaps.
 - Are there features missing from roadmap? Unjustified tech choices?
@@ -847,9 +853,29 @@ CRITICAL RULES:
     print("── Phase: Strategist (init) ──", flush=True)
     os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
 
+    init_skills = ["spec-kit", "saas-ideation"]
+    missing_skills = []
+    for skill in init_skills:
+        # Check if skill exists in profile or global skills dirs
+        skill_found = False
+        for base in [os.path.join(PROFILES, "strategist", "skills"),
+                     os.path.join(HERMES, "skills")]:
+            for root, dirs, files in os.walk(base):
+                if os.path.basename(root) == skill:
+                    skill_found = True
+                    break
+            if skill_found:
+                break
+        if not skill_found:
+            missing_skills.append(skill)
+    if missing_skills:
+        print(f"  WARNING: Skills not found: {', '.join(missing_skills)}")
+        print(f"  Run the setup script first: scripts/setup-linux.sh (or setup-windows.ps1)")
+        print(f"  Or deploy manually to ~/.hermes/skills/software-development/")
+
     strat_output = spawn_agent(
         "strategist",
-        ["spec-kit", "saas-ideation"],
+        init_skills,
         strat_prompt,
         timeout=1200,  # 20 min for deep discovery
         cwd=PROJECT_DIR
@@ -871,9 +897,9 @@ CRITICAL RULES:
                 f.write(f"# {description.split('for ')[-1] if 'for ' in description else description}\n\n")
                 f.write(f"{description}\n\n")
                 f.write("## Commands\n")
-                f.write("Unit tests: `npm test`\n")
-                f.write("Full build: `npm run build`\n")
-                f.write("Lint: `npm run lint`\n")
+                f.write("Unit tests: `<your test command>`\n")
+                f.write("Full build: `<your build command>`\n")
+                f.write("Lint: `<your lint command>`\n")
             print(f"  Created AGENTS.md (default — customize as needed)", flush=True)
 
         # Prompt for GitHub remote if not set

@@ -275,6 +275,8 @@ Deploy-Skill "ai-coding-best-practices-lite" $coderDir
 Deploy-Skill "adversarial-review-lite"        $tlDir
 Deploy-Skill "ponytail-guard"                $tlDir
 Deploy-Skill "no-mistakes"                   $globDir
+Deploy-Skill "spec-kit"                      $globDir
+Deploy-Skill "saas-ideation"                 $globDir
 
 # ── 6. GitHub Token ────────────────────────────────────────────────
 Write-Step "GitHub token"
