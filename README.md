@@ -71,7 +71,7 @@ stateDiagram-v2
 | # | Stage | Who | What |
 |---|-------|-----|------|
 | 0 | **Human Gate** | You | Review the spec before code gets written |
-| 1 | **Strategist** | `strategist` profile | Explores codebase, designs spec, produces task list |
+| 1 | **Strategist** | `strategist` profile | Explores codebase, designs spec with test plan (edge cases + failure modes), produces task list |
 | 2 | **Coder** | `coder` profile | TDD: RED → GREEN commits, parallel waves |
 | 3 | **vet** | Shell (zero AI) | Build + test. Fail → coder fix → re-verify |
 | 4 | **nm** | Fresh session, different model | Adversarial review, PR with risk assessment |
