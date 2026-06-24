@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/opc/.hermes/hermes-agent/venv/bin/python3
 """Hermes Panel — Multi-agent orchestration engine.
 Usage: hermes-panel "Feature description" [project_dir]
        If project_dir is omitted, uses current working directory.
