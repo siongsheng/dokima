@@ -4,9 +4,11 @@
 
 ## Why
 
-Writing specs, implementing TDD, running tests, creating PRs, and reviewing code — for every feature — is mechanical work. AI agents can do this, but one agent alone drifts. The panel chains specialist agents with enforced gates: the strategist designs, the coder implements (RED→GREEN commits), vet checks the build mechanically (zero AI), nm runs adversarial review from a fresh session with a different model family, and the tech lead signs off against the spec.
+You ask an AI to add a feature. It writes code. It works. You merge. Three weeks later, prod is down because there were no tests, the build was never run, nobody reviewed the architecture, and the AI hallucinated an entire auth system you didn't ask for.
 
-**Result:** end-to-end features with two-commit TDD discipline, passing tests, passing builds, PR created, adversarial review from two independent models, and TL sign-off — all automated.
+Hermes Panel is five agents in a trenchcoat, each checking the last one's work so you don't have to. The strategist writes the spec (because "just code it" is how you get 47 files for a button). The coder does TDD — RED commit, then GREEN commit, or it doesn't ship. vet runs the actual build and tests with zero AI tokens (shell scripts don't hallucinate). nm reviews the code from a fresh session with a different model — no model should grade its own homework. The Tech Lead signs off against the spec.
+
+**What comes out:** passing tests, passing build, a PR with risk assessment, two independent reviews, all automated. **What doesn't:** an auth system you didn't ask for.
 
 ## Quick Start
 
