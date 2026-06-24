@@ -112,6 +112,7 @@ Every stage has a contract:
 - **Cost-optimized** — 54% below unoptimized baseline. Shell verification (zero AI tokens), flash model for coder, lite skills (2.2K vs 13.8K system tokens), spec noise extraction (45-58% smaller), task-extract (coder reads ~800 chars, not full 12K spec).
 - **Two adversarial reviews** — nm (fresh model, different family) + TL (spec compliance). Two independent models catch different classes of bugs.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
+- **ADR lifecycle** — strategist reads past architectural decisions before designing. Panel creates new ADRs from decision tables. TL checks spec against existing ADRs. Powered by [adr-tools](https://github.com/npryce/adr-tools).
 
 ## When NOT to Use
 
@@ -133,6 +134,7 @@ The panel shines for **greenfield features with ambiguous requirements** where a
 - 3 agent profiles/workspaces: `strategist`, `coder`, `tech-lead` (see [setup guide](docs/setup.md))
 - DeepSeek API access (strategist/coder/TL) + one additional model family (nm adversarial review)
 - `gh` CLI (GitHub) installed and authenticated
+- [adr-tools](https://github.com/npryce/adr-tools) installed (for ADR lifecycle support)
 - `AGENTS.md` at project root with test and build commands
 - GitHub remote configured on target project
 

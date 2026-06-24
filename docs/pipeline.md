@@ -258,21 +258,30 @@ Gaps are sent back to the Strategist for ONE refinement pass. Skip with `PANEL_S
 
 ## Organizational Memory
 
-For long-lived projects, every Strategist run shouldn't rediscover the same decisions. The panel does NOT capture organizational memory — and that's intentional.
+For long-lived projects, every Strategist run shouldn't rediscover the same decisions. The panel integrates with [adr-tools](https://github.com/npryce/adr-tools) to capture and recall architectural decisions.
 
-### Static Memory → repo (not pipeline)
+### ADR Lifecycle
 
-ADRs, conventions, and known constraints belong in the repo: `AGENTS.md`, `docs/adr/`, `specs/conventions.md`. The Strategist reads AGENTS.md and explores the codebase before writing any spec — stronger repo docs directly improve spec quality. The panel doesn't create these docs; you do, once. Every run benefits.
+**Before spec — Strategist reads existing ADRs.**
+If `docs/adr/` exists, the Strategist runs `adr list` during codebase exploration and reads recent ADRs. Past decisions become context for the current design — no re-litigating whether to use Redis vs in-memory.
 
-**Recommendation:** If you use the panel on a long-lived project, maintain ADRs (`docs/adr/`). Each ADR captures a decision, the alternatives considered, and why the choice was made. The Strategist reads them during codebase exploration (no more "should this use Redis?" every run). TL checks PRs against them (no more silent architecture drift). A 5-line ADR pays back every panel run that follows.
+**After spec — Panel creates a new ADR.**
+The panel extracts the Strategist's decision table from the spec and runs `adr new` to persist it as a numbered ADR in `docs/adr/`. Status: Proposed. The user promotes it to Accepted at the Human Gate (or rejects it).
 
-### Dynamic Memory → git + issues (not pipeline)
+**TL pre-review — checks spec against existing ADRs.**
+TL runs `adr list` and checks whether the spec violates any existing architectural decision. Violations are flagged as CONCERN with the ADR reference — e.g. "ADR-0003 chose in-memory cache; this spec introduces Redis."
 
-Recent bugs, changed APIs, and recurring patterns are already in `git log` and the issue tracker. The panel reads git history during codebase exploration. It doesn't need a separate memory layer — the signals exist. The agents need to *read them*, not store them.
+### Setup
+
+```bash
+cd <project> && adr init docs/adr
+```
+
+One-time setup per project. The panel uses `adr-tools` as a CLI — no new agents, no new stages.
 
 ### What the panel won't do
 
-The panel won't maintain an ADR index, track false-BLOCKER history across runs, or remember which modules are fragile. Those are knowledge management problems, not pipeline problems. Each panel run is self-contained by design — no accumulated state, no drift between runs.
+The panel won't maintain an ADR index, track false-BLOCKER history across runs, or remember which modules are fragile. Each run is self-contained — ADRs persist in the repo as markdown files, not as pipeline state.
 
 ---
 

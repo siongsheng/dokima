@@ -844,6 +844,7 @@ FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
 1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
 2. Read AGENTS.md at {PROJECT_DIR}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
 3. If .specify/ exists, read .specify/memory/constitution.md and .specify/specs/baseline/spec.md. Otherwise skip.
+3b. If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
 4. Run `git log --oneline -20` and `git log origin/master..HEAD --oneline` — recent work and unmerged changes.
 5. Search for relevant code: rg on patterns related to "{feature}" — find existing abstractions and conventions.
 6. Read the key files — understand the architecture before designing.
@@ -1049,6 +1050,32 @@ CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who m
         f.write(f"# {feature}\n\n{spec}")
     print(f"\n✓ Spec saved: {spec_path}", flush=True)
 
+    # ── ADR: extract decision table into Architecture Decision Record ──
+    adr_dir = os.path.join(PROJECT_DIR, "docs", "adr")
+    adr_bin = os.path.join(REAL_HOME, "adr-tools", "src")
+    if os.path.isdir(adr_dir):
+        decision_m = re.search(
+            r'(?:DECISION TABLE|Decision Table).*?(?:\n\n(?:IMPACT|CONFIDENCE|###|\Z))',
+            spec, re.DOTALL | re.IGNORECASE)
+        if decision_m:
+            decision_text = decision_m.group(0).strip()
+            title = feature[:80]
+            # Use adr new to create the record
+            adr_title = f"ADR for: {title}"
+            adr_body = f"## Context\n\nFeature spec: {spec_path}\n\n## Decision\n\n{decision_text}\n\n## Status\n\nProposed"
+            result = subprocess.run(
+                ["bash", "-c", f"cd {shlex.quote(PROJECT_DIR)} && " +
+                 f"PATH={shlex.quote(adr_bin)}:$PATH adr new {shlex.quote(adr_title)}"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True, timeout=30, cwd=PROJECT_DIR,
+                env={**os.environ, "PATH": f"{adr_bin}:{os.environ.get('PATH', '')}"})
+            if result.returncode == 0:
+                print(f"  ADR created: {result.stdout.strip()}", flush=True)
+            else:
+                print(f"  ⚠ ADR creation skipped: {result.stderr.strip()[:100]}", flush=True)
+    else:
+        print(f"  ℹ ADR dir not found ({adr_dir}) — skipping ADR creation. Run `adr init docs/adr` to enable.", flush=True)
+
     # Extract PR body sections from the spec (Position + Impact + Tasks)
     pr_sections = extract_pr_sections(spec, feature)
     print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
@@ -1092,6 +1119,7 @@ Your job is NOT to find general gaps — the Human Gate and nm will catch those.
 - Are there implicit assumptions about service boundaries, data ownership, or API contracts?
 - Will this change break existing consumers or require migrations?
 - Is the design consistent with the codebase's existing patterns?
+- **ADR check:** If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and check: does this spec violate any existing architectural decision? If yes, flag it as CONCERN with the ADR reference.
 
 ## 2. Test Plan Verification
 - Does the spec's Test Plan section exist and is it complete?
