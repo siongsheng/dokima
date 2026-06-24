@@ -2,6 +2,35 @@
 
 **Multi-agent orchestration engine for Hermes Agent.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review.
 
+## Why
+
+Writing specs, implementing TDD, running tests, creating PRs, and reviewing code — for every feature — is mechanical work. AI agents can do this, but one agent alone drifts. The panel chains specialist agents with enforced gates: the strategist designs, the coder implements (RED→GREEN commits), vet checks the build mechanically (zero AI), nm runs adversarial review from a fresh session with a different model family, and the tech lead signs off against the spec.
+
+**Result:** end-to-end features with two-commit TDD discipline, passing tests, passing builds, PR created, adversarial review from two independent models, and TL sign-off — all automated.
+
+## Quick Start
+
+```bash
+# Clone
+git clone https://github.com/siongsheng/hermes-panel.git ~/hermes-panel
+
+# Install (symlink to PATH)
+ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
+
+# Run on any project with AGENTS.md + git remote
+hermes-panel "Add rate limiting middleware" ~/project
+
+# Force all 5 phases (even for low-risk changes)
+PANEL_FORCE_FULL=1 hermes-panel "Add payment webhook" ~/project
+
+# Resume after strategist interview
+hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/project
+```
+
+> **Full setup guide:** [docs/setup.md](docs/setup.md) — one-time machine setup, per-project config, troubleshooting.
+
+## Pipeline
+
 ```mermaid
 stateDiagram-v2
     direction TB
@@ -32,34 +61,6 @@ stateDiagram-v2
     Review --> Implement : auto‑fixable: test · guard · TDD · exception (1x)
     Review --> [*] : final verdict ✓
 ```
-## Why
-
-Writing specs, implementing TDD, running tests, creating PRs, and reviewing code — for every feature — is mechanical work. AI agents can do this, but one agent alone drifts. The panel chains specialist agents with enforced gates: the strategist designs, the coder implements (RED→GREEN commits), vet checks the build mechanically (zero AI), nm runs adversarial review from a fresh session with a different model family, and the tech lead signs off against the spec.
-
-**Result:** end-to-end features with two-commit TDD discipline, passing tests, passing builds, PR created, adversarial review from two independent models, and TL sign-off — all automated.
-
-## Quick Start
-
-```bash
-# Clone
-git clone https://github.com/siongsheng/hermes-panel.git ~/hermes-panel
-
-# Install (symlink to PATH)
-ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
-
-# Run on any project with AGENTS.md + git remote
-hermes-panel "Add rate limiting middleware" ~/project
-
-# Force all 5 phases (even for low-risk changes)
-PANEL_FORCE_FULL=1 hermes-panel "Add payment webhook" ~/project
-
-# Resume after strategist interview
-hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/project
-```
-
-> **Full setup guide:** [docs/setup.md](docs/setup.md) — one-time machine setup, per-project config, troubleshooting.
-
-## Pipeline
 
 | # | Stage | Who | What it does |
 |---|-------|-----|-------------|
