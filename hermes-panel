@@ -1673,6 +1673,72 @@ Report: what was broken, what you fixed, commit hash."""
             risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', nm_stdout, re.IGNORECASE)
             risk = risk_match.group(1).upper() if risk_match else impact
             print(f"  Risk: {risk}", flush=True)
+
+            # ── nm AUTO-FIX LOOPBACK ──
+            # Auto-fix objective nm findings (missing tests, uncaught exceptions, TDD violations).
+            # Skips subjective findings (architecture, spec compliance) — human judges those.
+            nm_auto_fix_patterns = [
+                (r'(?i)missing\s+test', "missing test"),
+                (r'(?i)uncaught\s+(panic|exception)', "uncaught exception"),
+                (r'(?i)\bunwrap\b.*\b(result|option)\b', "unwrap on Result/Option"),
+                (r'(?i)bundled\s+commit', "TDD violation: bundled commit"),
+                (r'(?i)TDD\s+violation', "TDD violation"),
+                (r'(?i)unhandled\s+error', "unhandled error"),
+            ]
+            nm_auto_fixable = []
+            for pattern, label in nm_auto_fix_patterns:
+                if re.search(pattern, nm_stdout):
+                    nm_auto_fixable.append(label)
+
+            if nm_auto_fixable and not os.environ.get("PANEL_SKIP_AUTOFIX"):
+                issues_text = "\n".join(f"  - {i}" for i in nm_auto_fixable)
+                print(f"\n  ↻ nm found {len(nm_auto_fixable)} auto-fixable issue(s):", flush=True)
+                print(issues_text, flush=True)
+                print("  Spawning coder to fix...", flush=True)
+
+                fix_prompt = f"""nm adversarial review found these issues. Fix them and push to branch '{branch}'.
+
+ISSUES TO FIX:
+{chr(10).join(f'- {i}' for i in nm_auto_fixable)}
+
+RULES:
+- Add missing tests (do NOT change existing tests unless they are wrong).
+- Fix uncaught exceptions/panics — use proper error handling (Result, ?).
+- Fix TDD violations — split bundled commits into separate RED + GREEN.
+- Do NOT change architecture, spec design, or anything not listed above.
+- After fixing: git add <files> && git commit -m "fix: address nm review findings" && git push origin {branch}
+- Run {TEST_CMD} before pushing. Fix if it fails.
+Report: what you fixed, commit hash."""
+                coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
+                                           fix_prompt, timeout=600, cwd=PROJECT_DIR)
+                print(f"  ✓ Coder fix finished ({len(coder_output)} chars)", flush=True)
+
+                # Re-vet after fix
+                print("  ⏳ Re-verifying after auto-fix...", flush=True)
+                test_result = subprocess.run(
+                    ["bash", "-c", f"cd {shlex.quote(PROJECT_DIR)} && {TEST_CMD}"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    universal_newlines=True, timeout=300, cwd=PROJECT_DIR)
+                build_result = subprocess.run(
+                    ["bash", "-c", f"cd {shlex.quote(PROJECT_DIR)} && {BUILD_CMD}"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    universal_newlines=True, timeout=300, cwd=PROJECT_DIR)
+                if test_result.returncode == 0 and build_result.returncode == 0:
+                    # Re-run nm to refresh PR with fixes
+                    print("  ✓ Re-verify passed — re-running nm with fixes...", flush=True)
+                    nm_result = subprocess.run(
+                        ["bash", "-c", nm_cmd],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        universal_newlines=True, timeout=600, cwd=PROJECT_DIR)
+                    nm_stdout = nm_result.stdout or ""
+                    pr_match = re.search(r'(https://github\\.com/[^/]+/[^/]+/pull/\\d+)', nm_stdout)
+                    if pr_match:
+                        pr_url = pr_match.group(1)
+                    print(f"  ✓ nm re-run finished ({len(nm_stdout)} chars)", flush=True)
+                else:
+                    print("  ⚠ Re-verify failed after auto-fix — proceeding with original nm output", flush=True)
+            elif nm_auto_fixable:
+                print("  ⚠ Auto-fix skipped (PANEL_SKIP_AUTOFIX=1)", flush=True)
         else:
             print(f"\n── Phase 4: nm — SKIPPED (depth={depth}) ──", flush=True)
     else:
@@ -1710,6 +1776,75 @@ RELEASE determination: Check if this feature introduces new functionality, API c
             tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
                                     tl_prompt, timeout=600, cwd=PROJECT_DIR)
             print(f"\n✓ Tech Lead finished ({len(tl_output)} chars)", flush=True)
+
+            # ── TL AUTO-FIX LOOPBACK ──
+            # Auto-fix objective TL BLOCKERs (missing tests, TDD violations, uncaught exceptions).
+            # Skips subjective BLOCKERs (spec violation, architecture, security) — human judges.
+            if not os.environ.get("PANEL_SKIP_AUTOFIX"):
+                tl_auto_fix_keywords = {
+                    "tdd violation": "TDD violation",
+                    "missing test": "missing test",
+                    "uncaught exception": "uncaught exception",
+                    "uncaught panic": "uncaught panic",
+                    "missing guard": "missing guard (null/error check)",
+                    "missing readme": "missing README update",
+                }
+                tl_auto_fixable = []
+                for line in tl_output.split("\n"):
+                    upper = line.upper()
+                    if "BLOCKER" not in upper:
+                        continue
+                    # Skip subjective blockers
+                    if any(kw in upper for kw in ("SPEC VIOLATION", "ARCHITECTURE VIOLATION", "SECURITY", "ARCHITECTURAL")):
+                        continue
+                    for kw, label in tl_auto_fix_keywords.items():
+                        if kw in line.lower():
+                            tl_auto_fixable.append(label)
+                            break
+
+                if tl_auto_fixable:
+                    issues_text = "\n".join(f"  - {i}" for i in tl_auto_fixable)
+                    print(f"\n  ↻ TL found {len(tl_auto_fixable)} auto-fixable BLOCKER(s):", flush=True)
+                    print(issues_text, flush=True)
+                    print("  Spawning coder to fix...", flush=True)
+
+                    fix_prompt = f"""Tech Lead review found these BLOCKER issues. Fix them and push to branch '{branch}'.
+
+ISSUES TO FIX:
+{chr(10).join(f'- {i}' for i in tl_auto_fixable)}
+
+RULES:
+- Add missing tests (do NOT change existing tests unless they are wrong).
+- Fix uncaught exceptions/panics — use proper error handling (Result, ?).
+- Fix TDD violations — split bundled commits into separate RED + GREEN.
+- Add missing guard clauses for null/error conditions.
+- Do NOT change architecture, spec design, security posture, or anything not in the list above.
+- After fixing: git add <files> && git commit -m "fix: address TL review blockers" && git push origin {branch}
+- Run {TEST_CMD} + {BUILD_CMD} before pushing. Fix if either fails.
+Report: what you fixed, commit hash."""
+                    coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
+                                               fix_prompt, timeout=600, cwd=PROJECT_DIR)
+                    print(f"  ✓ Coder fix finished ({len(coder_output)} chars)", flush=True)
+
+                    # Re-vet + re-TL
+                    print("  ⏳ Re-verifying after auto-fix...", flush=True)
+                    test_result = subprocess.run(
+                        ["bash", "-c", f"cd {shlex.quote(PROJECT_DIR)} && {TEST_CMD}"],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        universal_newlines=True, timeout=300, cwd=PROJECT_DIR)
+                    build_result = subprocess.run(
+                        ["bash", "-c", f"cd {shlex.quote(PROJECT_DIR)} && {BUILD_CMD}"],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        universal_newlines=True, timeout=300, cwd=PROJECT_DIR)
+                    if test_result.returncode == 0 and build_result.returncode == 0:
+                        print("  ✓ Re-verify passed — re-running Tech Lead with fixes...", flush=True)
+                        tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
+                                                tl_prompt, timeout=600, cwd=PROJECT_DIR)
+                        print(f"  ✓ Tech Lead re-run finished ({len(tl_output)} chars)", flush=True)
+                    else:
+                        print("  ⚠ Re-verify failed after auto-fix — proceeding with original TL output", flush=True)
+            elif any("BLOCKER" in l.upper() for l in tl_output.split("\n")):
+                print("  ⚠ Auto-fix skipped (PANEL_SKIP_AUTOFIX=1) — TL blockers will remain in review", flush=True)
 
             # Tech Lead contingency: use partial output for verdict if timed out
             if "[TIMEOUT:" in tl_output:

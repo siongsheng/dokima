@@ -1,6 +1,40 @@
 # Hermes Panel
 
-**Multi-agent orchestration engine for Hermes Agent.** Routes feature development through a pipeline of specialist AI agents: **Strategist → Coder → vet → nm → Tech Lead** — with automated depth-gating, TDD enforcement, and adversarial review.
+**Multi-agent orchestration engine for Hermes Agent.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review.
+
+```mermaid
+graph TD
+    A[Feature Request] --> B[👤 Human Gate: Review Spec]
+    B -->|approved| C[🧠 Strategist: Design Spec]
+    C -->|low confidence| D[❓ Interview Mode]
+    D -->|user answers| C
+    C -->|spec ready| E[👷 Coder: TDD Implementation]
+    E -->|code pushed| F[🔧 vet: Build + Test]
+    F -->|fail| G[👷 Coder: Fix]
+    G -->|re-push| F
+    F -->|pass| H{Depth Gate}
+    H -->|vet| I[📦 Create PR — Done ✓]
+    H -->|vet+nm / full| J[🔍 nm: Adversarial Review]
+    J -->|auto-fixable| K[👷 Coder: Objective Fix]
+    K -->|re-vet| F
+    J -->|clean| L{Depth Gate}
+    L -->|vet+nm| M[📦 PR + Risk — Done ✓]
+    L -->|full| N[👔 Tech Lead: Review]
+    N -->|auto-fixable| O[👷 Coder: Objective Fix]
+    O -->|re-vet| F
+    N -->|clean| P[📦 Final Verdict — Done ✓]
+
+    style A fill:#4a9,stroke:#333
+    style B fill:#f96,stroke:#333
+    style I fill:#6c6,stroke:#333
+    style M fill:#6c6,stroke:#333
+    style P fill:#6c6,stroke:#333
+    style F fill:#fc6,stroke:#333
+    style J fill:#c9f,stroke:#333
+    style N fill:#9cf,stroke:#333
+```
+
+**Loopback rules:** vet always retries (2x). nm and TL only auto-fix objective issues — missing tests, uncaught exceptions, TDD violations. Architecture, spec compliance, and security findings go to the human. All three loopbacks vet after fix. `PANEL_SKIP_AUTOFIX=1` disables nm+TL auto-fix.
 
 ## Why
 
@@ -66,6 +100,7 @@ Only HIGH confidence + LOW impact skips adversarial review. Everything else gets
 - **Project-agnostic** — takes any repo path. Reads test/build/lint commands from `AGENTS.md`.
 - **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
+- **Filtered auto-fix** — nm and TL loop back to Coder for objective issues (missing tests, uncaught exceptions, TDD violations). Architecture and spec findings stay human-only. Re-verified after fix. `PANEL_SKIP_AUTOFIX=1` to disable.
 - **Cost-optimized** — 54% below unoptimized baseline. Shell verification (zero AI tokens), flash model for coder, lite skills (2.2K vs 13.8K system tokens), spec noise extraction (45-58% smaller), task-extract (coder reads ~800 chars, not full 12K spec).
 - **Two adversarial reviews** — nm (fresh model, different family) + TL (spec compliance). Two independent models catch different classes of bugs.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
@@ -87,6 +122,7 @@ Only HIGH confidence + LOW impact skips adversarial review. Everything else gets
 | `PANEL_PARALLEL=0` | Force sequential coder mode |
 | `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix |
 | `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode |
+| `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks |
 | `GH_TOKEN` | GitHub auth (auto-loaded from profile `.env`) |
 
 ## Standing on Shoulders
