@@ -481,29 +481,48 @@ class TaskDAG:
 
 # ── roadmap parsing (for --next) ──────────────────
 
-LOCK_FILE = "/tmp/hermes-panel.lock"
-STOP_FILE = "/tmp/hermes-panel.stop"
+def _lock_path(project_dir=None):
+    """Project-scoped lock file path."""
+    if project_dir:
+        slug = os.path.basename(os.path.abspath(project_dir))
+    else:
+        try:
+            slug = os.path.basename(os.path.abspath(PROJECT_DIR))
+        except NameError:
+            slug = "unknown"
+    return f"/tmp/hermes-panel-{slug or 'unknown'}.lock"
+
+def _stop_path(project_dir=None):
+    """Project-scoped stop signal file path."""
+    if project_dir:
+        slug = os.path.basename(os.path.abspath(project_dir))
+    else:
+        try:
+            slug = os.path.basename(os.path.abspath(PROJECT_DIR))
+        except NameError:
+            slug = "unknown"
+    return f"/tmp/hermes-panel-{slug or 'unknown'}.stop"
 MAX_CONTINUOUS = 20
 
 def acquire_lock():
     """Try to acquire an advisory lock. Returns (held, fd)."""
-    fd = open(LOCK_FILE, "w")
+    fd = open(_lock_path(), "w")
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fd.write(f"{os.getpid()}\n")
         fd.flush()
         return True, fd
     except (IOError, OSError):
-        with open(LOCK_FILE) as lf:
+        with open(_lock_path()) as lf:
             stale_pid = lf.read().strip()
         if stale_pid:
             try:
                 os.kill(int(stale_pid), 0)
-                print(f"ERROR: Panel already running (PID {stale_pid}). If stuck, remove {LOCK_FILE}.")
+                print(f"ERROR: Panel already running (PID {stale_pid}). If stuck, remove {_lock_path()}.")
                 sys.exit(1)
             except (OSError, ValueError):
                 print(f"  Stale lock (PID {stale_pid} is dead) — removing and retrying...")
-                os.remove(LOCK_FILE)
+                os.remove(_lock_path())
                 return acquire_lock()
         sys.exit(1)
 
@@ -534,6 +553,37 @@ def try_auto_merge(pr_url: str) -> str:
         return "failed"
     print(f"  PR #{pr_num} merge failed: {(stderr or 'unknown')[:200]}")
     return "failed"
+
+
+
+HELP_TEXT = """Hermes Panel — Multi-Agent Orchestration Engine
+
+COMMANDS:
+  hermes-panel "Feature description" [dir]     Run full pipeline for a feature
+  hermes-panel init "description" [dir]        Project discovery & constitution
+  hermes-panel --next [dir]                    Build next feature from roadmap
+  hermes-panel --continuous [dir]              Full sprint: build + auto-merge + loop
+
+CONTROL:
+  hermes-panel --status [dir]                  Show pipeline state
+  hermes-panel --stop [dir]                    Graceful stop after current feature
+  hermes-panel --kill [dir]                    Emergency kill (SIGTERM then SIGKILL)
+  hermes-panel --list-crons                    List all scheduled pipelines
+
+FLAGS:
+  --interactive      Show human gate (with --next/--continuous)
+  --answers <file>   Resume from saved interview state
+
+EXAMPLES:
+  hermes-panel init "trading dashboard" ~/huat
+  hermes-panel --next ~/huat
+  hermes-panel --continuous ~/huat
+  hermes-panel --status ~/huat"""
+
+
+def show_help():
+    print(HELP_TEXT)
+    sys.exit(0)
 
 
 def parse_roadmap(roadmap_path: str) -> list:
@@ -1082,6 +1132,202 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
 
 # ── next ─────────────────────────────────────────
 
+
+def _check_pid(pid_str):
+    """Check if PID is alive. Returns True/False."""
+    try:
+        os.kill(int(pid_str), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _get_lock_state(project_dir):
+    """Read lock file for a project. Returns (running, pid, info_dict)."""
+    lp = _lock_path(project_dir)
+    if not os.path.exists(lp):
+        return False, "", {}
+    try:
+        with open(lp) as f:
+            pid = f.read().strip()
+    except Exception:
+        return False, "", {}
+    if not pid or not _check_pid(pid):
+        try:
+            os.remove(lp)
+        except OSError:
+            pass
+        return False, "", {}
+    # Read roadmap for current feature
+    info = {}
+    roadmap_path = os.path.join(project_dir, "specs", "roadmap.md")
+    if os.path.exists(roadmap_path):
+        try:
+            features = parse_roadmap(roadmap_path)
+            current = [f for f in features if f.status == "in_progress"]
+            if current:
+                info["feature"] = f"{current[0].id}: {current[0].title}"
+            info["done"] = sum(1 for f in features if f.status == "done")
+            info["total"] = len(features)
+        except Exception:
+            pass
+    # Read log tail for phase
+    if os.path.exists(OUTPUT_LOG):
+        try:
+            with open(OUTPUT_LOG) as lf:
+                for line in reversed(lf.readlines()):
+                    for marker in ["── Phase", "── Next Feature", "── Continuous"]:
+                        if marker in line:
+                            info["activity"] = line.strip()
+                            break
+                    if "activity" in info:
+                        break
+        except Exception:
+            pass
+    return True, pid, info
+
+
+def handle_status(project_dir):
+    """--status handler."""
+    running, pid, info = _get_lock_state(project_dir)
+    print(f"── Panel Status: {os.path.basename(os.path.abspath(project_dir))} ──")
+    if running:
+        # Compute elapsed
+        elapsed = ""
+        try:
+            import time as _t
+            st = os.stat(f"/proc/{pid}").st_ctime
+            mins = int((_t.time() - st) // 60)
+            elapsed = f"{mins}min" if mins < 120 else f"{mins//60}h{min%60}m"
+        except Exception:
+            elapsed = "?"
+        print(f"State:       RUNNING (PID {pid}, {elapsed} elapsed)")
+        if info.get("feature"):
+            print(f"Feature:     {info['feature']}")
+        if info.get("activity"):
+            print(f"Activity:    {info['activity']}")
+        if "done" in info:
+            print(f"Roadmap:     {info['done']}/{info['total']} done")
+        print(f"Log:         {OUTPUT_LOG}")
+    else:
+        print("State:       IDLE")
+        if "done" in info:
+            print(f"Roadmap:     {info['done']}/{info['total']} done")
+    sys.exit(0)
+
+
+def handle_stop(project_dir):
+    """--stop handler."""
+    running, pid, _ = _get_lock_state(project_dir)
+    sp = _stop_path(project_dir)
+    if not running:
+        print(f"No pipeline running for {os.path.basename(os.path.abspath(project_dir))}.")
+        sys.exit(0)
+    if os.path.exists(sp):
+        print(f"Stop signal already sent to PID {pid}.")
+    else:
+        with open(sp, "w") as f:
+            f.write(f"stop at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        print(f"Stop signal sent to PID {pid}. Pipeline will stop after current feature.")
+    sys.exit(0)
+
+
+def handle_kill(project_dir):
+    """--kill handler."""
+    running, pid, _ = _get_lock_state(project_dir)
+    if not running:
+        print(f"No pipeline running for {os.path.basename(os.path.abspath(project_dir))}.")
+        sys.exit(0)
+    print(f"Sending SIGTERM to PID {pid}...")
+    try:
+        os.kill(int(pid), signal.SIGTERM)
+    except OSError:
+        pass
+    time.sleep(2)
+    if _check_pid(pid):
+        print(f"Process still alive — sending SIGKILL to PID {pid}")
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+        except OSError:
+            pass
+        time.sleep(1)
+    # Clean up
+    try:
+        os.remove(_lock_path(project_dir))
+    except OSError:
+        pass
+    try:
+        os.remove(_stop_path(project_dir))
+    except OSError:
+        pass
+    print(f"Pipeline killed (was PID {pid})")
+    sys.exit(0)
+
+
+def handle_list_crons():
+    """--list-crons handler."""
+    # Parse crontab
+    import subprocess as sp
+    result = sp.run(["crontab", "-l"], stdout=sp.PIPE, stderr=sp.PIPE,
+                    universal_newlines=True, timeout=10)
+    cron_entries = []
+    if result.returncode == 0:
+        for line in result.stdout.split("\n"):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "hermes-panel" in line:
+                parts = line.split(None, 5)
+                if len(parts) >= 6:
+                    schedule = " ".join(parts[:5])
+                    cmd = parts[5]
+                    proj_match = re.search(r'(?:--continuous|--next)\s+(\S+)', cmd)
+                    proj = os.path.expanduser(proj_match.group(1)) if proj_match else "cwd"
+                    mode = "--continuous" if "--continuous" in cmd else "--next"
+                    cron_entries.append((proj, schedule, mode))
+
+    # Scan lock files for running state
+    import glob as _glob
+    lock_files = _glob.glob("/tmp/hermes-panel-*.lock")
+    running_projects = {}
+    for lf in lock_files:
+        try:
+            slug = os.path.basename(lf).replace("hermes-panel-", "").replace(".lock", "")
+            with open(lf) as f:
+                pid_str = f.read().strip()
+            if pid_str and _check_pid(pid_str):
+                running_projects[slug] = pid_str
+            else:
+                try:
+                    os.remove(lf)
+                except OSError:
+                    pass
+        except Exception:
+            pass
+
+    print("── Continuous Pipelines ──")
+    if not cron_entries and not running_projects:
+        print("No hermes-panel pipelines found.")
+        sys.exit(0)
+
+    print(f"{'PROJECT':<30} {'SCHEDULE':<18} {'STATE'}")
+    print("-" * 70)
+    shown = set()
+    for proj, schedule, mode in sorted(cron_entries):
+        shown.add(os.path.basename(proj))
+        slug = os.path.basename(os.path.abspath(proj))
+        if slug in running_projects:
+            state = f"RUNNING (PID {running_projects[slug]})"
+        else:
+            state = "IDLE"
+        print(f"{proj:<30} {schedule:<18} {state}")
+    # Show running projects not in crontab
+    for slug, pid in running_projects.items():
+        if slug not in shown:
+            print(f"{slug:<30} {'manual':<18} RUNNING (PID {pid})")
+    sys.exit(0)
+
+
 def run_next_setup(interactive: bool = False) -> str | None:
     """Parse roadmap, pick next feature, mark in-progress, return feature string.
        Returns None if nothing to do. Caller falls through to pipeline after this."""
@@ -1410,16 +1656,24 @@ def main():
         print("  hermes-panel init 'description' [project_dir]")
         sys.exit(1)
 
-    # ── FLAG SCANNING: --next, --continuous, --interactive, --answers ──
+    # ── FLAG SCANNING ──
     is_next = False
     is_continuous = False
     is_interactive = False
+    is_help = False
+    is_stop = False
+    is_kill = False
+    is_status = False
+    is_list_crons = False
     user_answers_prefill = None
     filtered_argv = []
     skip_next = False
     for arg in sys.argv[1:]:
         if skip_next:
             skip_next = False
+            continue
+        if arg in ("--help", "-h"):
+            is_help = True
             continue
         if arg == "--next":
             is_next = True
@@ -1430,6 +1684,18 @@ def main():
             continue
         if arg == "--interactive":
             is_interactive = True
+            continue
+        if arg == "--stop":
+            is_stop = True
+            continue
+        if arg == "--kill":
+            is_kill = True
+            continue
+        if arg == "--status":
+            is_status = True
+            continue
+        if arg == "--list-crons":
+            is_list_crons = True
             continue
         if arg == "--answers":
             skip_next = True
@@ -1454,19 +1720,30 @@ def main():
             break
 
     # ── Determine PROJECT_DIR and feature ──
-    if is_next:
-        # --next: project_dir is optional positional, no feature string needed
+    if is_next or is_stop or is_kill or is_status:
         if len(filtered_argv) >= 1:
             PROJECT_DIR = os.path.abspath(filtered_argv[0])
         else:
             PROJECT_DIR = os.getcwd()
     else:
-        if len(filtered_argv) < 1:
+        if len(filtered_argv) < 1 and not is_help and not is_list_crons:
             print("ERROR: Feature description required")
             sys.exit(1)
-        feature = filtered_argv[0]
+        feature = filtered_argv[0] if filtered_argv else ""
         PANEL_FEATURE = feature
         PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
+
+    # ── CONTROL FLAGS: early exit (priority order) ──
+    if is_help:
+        show_help()
+    if is_kill:
+        handle_kill(PROJECT_DIR)
+    if is_stop:
+        handle_stop(PROJECT_DIR)
+    if is_status:
+        handle_status(PROJECT_DIR)
+    if is_list_crons:
+        handle_list_crons()
 
     # ── INIT MODE: discovery & constitution, no pipeline ──
     if not is_next and feature == "init":
@@ -1524,7 +1801,7 @@ def main():
         if feature is None:
             print("Nothing to do.")
             lock_fd.close()
-            os.remove(LOCK_FILE)
+            os.remove(_lock_path())
             return
         PANEL_FEATURE = feature
 
@@ -1646,9 +1923,9 @@ def main():
     continue_loop = True
     while True:
         iteration += 1
-        if os.path.exists(STOP_FILE):
+        if os.path.exists(_stop_path()):
             print("\n── Stop signal received — exiting loop")
-            os.remove(STOP_FILE)
+            os.remove(_stop_path())
             break
         if iteration > 1:
             print(f"\n{'═' * 55}")
@@ -2911,7 +3188,7 @@ def main():
         # Loop continues to Phase 1
     lock_fd.close()
     try:
-        os.remove(LOCK_FILE)
+        os.remove(_lock_path())
     except OSError:
         pass
 
