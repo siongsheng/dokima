@@ -68,46 +68,16 @@ stateDiagram-v2
     Review --> [*] : final verdict ✓
 ```
 
-| # | Stage | Who | What it does |
-|---|-------|-----|-------------|
-| 0 | **Human Gate** | You | Review the spec before code gets written. Pauses after Strategist finishes — the #1 failure mode defense. |
-| 1 | **Strategist** | `strategist` profile | Explores codebase, designs spec, produces task list or DAG. Interview mode if confidence < High. |
-| 2 | **Coder** | `coder` profile | TDD implementation: RED commit → GREEN commit. Parallel waves based on task DAG. |
-| 3 | **vet** | Shell (zero AI) | Runs test + build commands from `AGENTS.md`. Fail → spawn coder to fix → re-verify (2 retries). |
-| 4 | **nm** | Fresh session, different model | Adversarial review from clean context. Creates PR with risk assessment. |
-| 5 | **Tech Lead** | `tech-lead` profile | Reviews the PR: spec compliance, architecture, code quality. Final sign-off. |
+| # | Stage | Who | What |
+|---|-------|-----|------|
+| 0 | **Human Gate** | You | Review the spec before code gets written |
+| 1 | **Strategist** | `strategist` profile | Explores codebase, designs spec, produces task list |
+| 2 | **Coder** | `coder` profile | TDD: RED → GREEN commits, parallel waves |
+| 3 | **vet** | Shell (zero AI) | Build + test. Fail → coder fix → re-verify |
+| 4 | **nm** | Fresh session, different model | Adversarial review, PR with risk assessment |
+| 5 | **Tech Lead** | `tech-lead` profile | Spec compliance, architecture, code quality review |
 
-**Human Gate** is the default in interactive mode. Non-interactive (Telegram/cron) auto-skips. Set `PANEL_SKIP_HUMAN_GATE=1` to bypass. **vet is the minimum** — every change gets build + tests. No skipping.
-
-### Depth Gating
-
-Not every change needs all 5 stages. Confidence × impact → how many stages run:
-
-| Impact ↓ / Confidence → | HIGH | MEDIUM | LOW |
-|---|---|---|---|
-| **LOW** (tests/docs/typos) | vet | vet+nm | full |
-| **MEDIUM** (API/DB/UI) | vet+nm | full | full |
-| **HIGH** (auth/payments) | full | full | full |
-
-| Depth | Stages | When |
-|-------|--------|------|
-| **vet** | Human Gate + Strategist + Coder + vet | Trivial changes. Panel creates PR directly. |
-| **vet+nm** | + nm adversarial review | Medium-risk. nm creates PR with risk assessment. |
-| **full** | + Tech Lead sign-off | Anything impactful or uncertain. Two independent reviews. |
-
-Only HIGH confidence + LOW impact skips adversarial review. Everything else gets at least nm's fresh-model review. `PANEL_FORCE_FULL=1` overrides → all stages.
-
-### Loopback Rules
-
-Three loopback tiers, all re-vet after fix:
-
-| Condition (diagram arrow) | Retries | Auto-fixes | Never auto-fixes |
-|---------------------------|---------|-----------|-----------------|
-| **build / test fail** (Validate → Implement) | 2 | Build failures, test failures | — (all mechanical) |
-| **auto‑fixable: test · TDD · exception** (Verify → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
-| **auto‑fixable: test · guard · TDD · exception** (Review → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
-
-Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
+**vet is the minimum** — every change gets build + tests. Depth gating, loopback rules, and full phase details: [docs/pipeline.md](docs/pipeline.md).
 
 ## Features
 
@@ -138,6 +108,7 @@ Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` 
 | `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix |
 | `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode |
 | `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks |
+| `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback |
 | `GH_TOKEN` | GitHub auth (auto-loaded from profile `.env`) |
 
 ## Standing on Shoulders

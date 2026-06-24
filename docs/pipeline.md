@@ -1,42 +1,58 @@
-# Hermes Panel — Multi-Agent Orchestration Engine v1.5
+# Hermes Panel — Pipeline Reference
 
-`hermes-panel` routes feature development through a specialist panel of AI agents: **Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, interview pause-and-resume, and parallel execution.
+`hermes-panel` routes feature development through a pipeline of specialist AI agents: **Human Gate → Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, filtered auto-fix loopbacks, and parallel execution.
 
-> **New here?** Start with [panel-setup.md](panel-setup.md) for deployment instructions.
-
----
-
-## Quick Start
-
-```bash
-# Basic: run on any project with AGENTS.md + git remote
-hermes-panel "Add rate limiting middleware" ~/atlas
-
-# Force all 5 phases (even for low-risk changes)
-PANEL_FORCE_FULL=1 hermes-panel "Add payment webhook handler" ~/atlas
-
-# High-quality spec for complex features
-PANEL_REASONING=high hermes-panel "Design OAuth2 integration" ~/atlas
-
-# Resume after strategist interview
-hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/atlas
-```
+> **New here?** Start with [setup.md](setup.md) for deployment. Overview at [README.md](../README.md).
 
 ---
 
-## Pipeline Phases
+## Pipeline Diagram
 
-```
-Strategist ──▶ Coder ──▶ vet ──▶ nm ──▶ Tech Lead
-  v4-pro      v4-flash   shell   fresh    v4-pro
-   58%          8%        0%      15%      19%
-                          │       │
-                          │       └─ different model family
-                          └─ zero AI tokens
+```mermaid
+stateDiagram-v2
+    direction TB
+
+    Plan : 🧠 Strategist + spec‑kit
+    Plan : Specs, architecture, tasks
+    Implement : 👷 Coder (TDD)
+    Implement : RED → GREEN commits
+    Validate : 🔧 vet (shell)
+    Validate : Build + test
+    Verify : 🔍 nm (adversarial)
+    Verify : Fresh model, clean context
+    Review : 👔 Tech Lead
+    Review : Spec compliance, code quality
+
+    [*] --> Plan : feature request
+    Plan --> Implement : spec approved (Human Gate)
+
+    Implement --> Validate : code pushed
+    Validate --> Implement : build / test fail (2x)
+    Validate --> [*] : vet‑only → PR ✓
+    Validate --> Verify : vet+nm / full
+
+    Verify --> Implement : auto‑fixable: test · TDD · exception (1x)
+    Verify --> [*] : vet+nm → PR + Risk ✓
+    Verify --> Review : full
+
+    Review --> Implement : auto‑fixable: test · guard · TDD · exception (1x)
+    Review --> [*] : final verdict ✓
 ```
 
-### Phase 1: Strategist (always runs)
-Full Hermes session exploring the codebase. Reads `AGENTS.md`, searches for relevant code, understands existing patterns. Produces:
+---
+
+## Phases
+
+### Stage 0: Human Gate
+Pauses after the strategist finishes, before any code gets written. The #1 pipeline failure mode defense.
+
+- **Interactive (TTY):** Shows spec path, branch name, depth decision. Options: `[y]` review in less, `[e]` edit in vim, `[Enter]` approve, `[q]` abort.
+- **Non-interactive (Telegram/cron):** Auto-skips with a message.
+- **Skip:** `PANEL_SKIP_HUMAN_GATE=1`
+
+### Phase 1: Strategist
+Full Hermes session exploring the codebase. Reads `AGENTS.md`, searches for relevant code, understands existing patterns. Produces a 13-section spec:
+
 - Decision table comparing ≥2 approaches
 - Impact assessment (files/tables/routes affected)
 - Confidence + Impact markers (for depth gating)
@@ -44,40 +60,22 @@ Full Hermes session exploring the codebase. Reads `AGENTS.md`, searches for rele
 - Security considerations
 - Numbered task list with `Parallelizable: yes/no` flags (5-15 min each, TDD-ready)
 
-**Output:** Cleaned spec saved to `specs/<feature>-spec.md`. Session noise (prompt echo, tool calls, init markers) stripped — spec is 45-58% smaller than raw session.
+**Model:** `deepseek-v4-pro` with `spec-strategist-lite` + `ponytail-guard` skills.
 
-### Orchestrator Gate
-Reads confidence × impact from the strategist's spec and decides pipeline depth:
-
-| Impact ↓ / Confidence → | HIGH | MEDIUM | LOW |
-|---|---|---|---|
-| **LOW** (tests/docs) | **vet (1+2+3)** | vet+nm (1-4) | full (1-5) |
-| **MEDIUM** (API/DB/UI) | vet+nm (1-4) | full (1-5) | full (1-5) |
-| **HIGH** (auth/payments) | full (1-5) | full (1-5) | full (1-5) |
-
-**vet is the minimum.** No change ships without build + tests. Only HIGH confidence + LOW impact skips adversarial review.
-
-| Depth | Stages | Meaning |
-|-------|--------|---------|
-| **vet** | 1+2+3 | Strategist + Coder + vet. Panel creates basic PR. No adversarial review. |
-| **vet+nm** | 1+2+3+4 | + nm fresh-session adversarial review from different model family. nm creates PR. |
-| **full** | 1-5 | All stages. nm creates PR, TL reviews and signs off. |
-
-**Mode:** High confidence = PASSIVE (auto-pilot). Medium/Low = ACTIVE (orchestrator reviews each phase, may loop back).
-
-`PANEL_FORCE_FULL=1` overrides → all 5 phases.
+**Interview mode:** When confidence < High, the strategist saves clarification questions to `/tmp/hermes-panel-interview.json` and exits code 2. Re-run with `--answers` to continue.
 
 ### Phase 2: Coder
 Implements the spec on a `feat/<slug>` branch with TDD (RED→GREEN two-commit discipline):
+
 - Panel schedules coders in waves based on the dependency DAG — independent tasks run in parallel (up to 5 worktrees), dependent tasks queue behind.
-- Each coder gets 1-2 small tasks per wave. v4-flash handles this comfortably.
+- Each coder gets 1-2 small tasks per wave.
 - Uses `deepseek-v4-flash` (3.1× cheaper than v4-pro) with `ai-coding-best-practices-lite` skill.
 - Before push: runs lint + full test suite. Fixes failures in-session.
 - At `depth=vet`: creates PR directly. Otherwise pushes branch for downstream phases.
 
-**Parallel mode** (default, `PANEL_PARALLEL=1`): Tasks with no file collisions run in parallel worktrees. Waves computed from task DAG. `PANEL_PARALLEL=0` forces sequential.
+**Parallel mode** (default): Tasks with no file collisions run in parallel worktrees. `PANEL_PARALLEL=0` forces sequential.
 
-### Phase 3: vet (shell — zero AI tokens)
+### Phase 3: vet (Shell — Zero AI Tokens)
 Pure shell script. No AI agent. No tokens. No model.
 
 1. Checkout feature branch
@@ -87,12 +85,12 @@ Pure shell script. No AI agent. No tokens. No model.
 
 **Verification retry loop:** On test/build failure → spawn coder with failure output → fix → re-verify (up to 2 retries). BLOCKED if still failing after max retries.
 
-**Note:** vet does NOT create a PR. At `depth=vet`, the panel creates a basic PR after vet passes. For deeper depths, nm handles PR creation.
+At `depth=vet`: panel creates a basic PR after vet passes. For deeper depths, nm handles PR creation.
 
-### Phase 4: nm (adversarial review — fresh session, different model family)
-The panel invokes `~/bin/nm --skip-tests` (tests already passed in vet):
+### Phase 4: nm (Adversarial Review)
+Fresh session, different model family. The panel invokes `~/bin/nm --skip-tests` (tests already passed in vet):
 
-1. Captures git diff from `HEAD~1`
+1. Captures git diff from `HEAD~1` (or working tree)
 2. Spawns a fresh Hermes session loading `no-mistakes` + `ai-coding-best-practices` skills
 3. The spawned session runs the 7-stage nm pipeline:
    - Intent analysis (what was built and why)
@@ -105,10 +103,10 @@ The panel invokes `~/bin/nm --skip-tests` (tests already passed in vet):
 
 **Why a different model family?** If the coder used DeepSeek, nm uses Anthropic or OpenAI. A model that didn't see the code being written catches bias-blind spots — the same model reviewing its own work misses edge cases.
 
-The panel extracts the PR URL and risk level from nm's output for the Tech Lead phase.
+**nm gets only the diff** — no spec, no feature description. This is adversarial by design: fresh eyes on the code, no bias from knowing intent. See [no-mistakes](https://github.com/kunchenguid/no-mistakes) for the original design.
 
 ### Phase 5: Tech Lead (depth=full only)
-Three-part adversarial review against the spec using `deepseek-v4-pro` + `adversarial-review-lite` skill:
+Three-part adversarial review against the spec using `deepseek-v4-pro` + `adversarial-review-lite` + `ponytail-guard` skills:
 
 1. **Spec Compliance** — Approach matches decision table? API/interface matches? ALL tasks done? Scope creep?
 2. **Architectural Impact** — New deps/coupling? Breaking changes? Deployment impact?
@@ -122,26 +120,72 @@ The TL reviews the PR created by nm. Verdict + risk + release type are appended 
 
 ---
 
+## Depth Gating
+
+Not every change needs all 5 stages. Confidence × impact → how many stages run:
+
+| Impact ↓ / Confidence → | HIGH | MEDIUM | LOW |
+|---|---|---|---|
+| **LOW** (tests/docs/typos) | vet | vet+nm | full |
+| **MEDIUM** (API/DB/UI) | vet+nm | full | full |
+| **HIGH** (auth/payments) | full | full | full |
+
+| Depth | Stages | When |
+|-------|--------|------|
+| **vet** | 0+1+2+3 | Trivial changes. Panel creates PR directly. |
+| **vet+nm** | 0+1+2+3+4 | Medium-risk. nm creates PR with risk assessment. |
+| **full** | 0+1+2+3+4+5 | Anything impactful or uncertain. Two independent reviews. |
+
+Only HIGH confidence + LOW impact skips adversarial review. Everything else gets at least nm's fresh-model review. `PANEL_FORCE_FULL=1` overrides → all stages.
+
+---
+
+## Loopback Rules
+
+Three loopback tiers, all re-vet after fix:
+
+| Condition (diagram arrow) | Retries | Auto-fixes | Never auto-fixes |
+|---------------------------|---------|-----------|-----------------|
+| **build / test fail** (Validate → Implement) | 2 | Build failures, test failures | — (all mechanical) |
+| **auto‑fixable: test · TDD · exception** (Verify → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
+| **auto‑fixable: test · guard · TDD · exception** (Review → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
+
+Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
+
+### Why filtered auto-fix?
+
+- **nm is adversarial by design.** If it becomes a fix-it loop, it stops being adversarial and becomes a slow QA step. The human checks out — "nm will catch it."
+- **No convergence guarantee.** nm finds X → coder fixes X → fix introduces Y → nm finds Y → coder fixes Y → reintroduces X. Two models playing whack-a-mole with no arbiter.
+- **Some findings are trade-offs, not bugs.** nm flags "should use Redis." The spec chose in-memory for zero-dependency. Auto-fixing makes the coder "fix" a deliberate decision. Only the human knows which findings to honor.
+
+---
+
 ## Interview Flow (Pause-and-Resume)
 
 When the strategist cannot proceed with high confidence, it enters interview mode:
 
-```
 1. Panel exits with code 2
-2. Saves questions + context to /tmp/hermes-panel-interview.json
+2. Saves questions + context to `/tmp/hermes-panel-interview.json`
 3. Orchestrator reads JSON, presents questions to user
 4. User answers → orchestrator writes answers back to JSON
-5. Re-run: hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project
-```
+5. Re-run: `hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project`
 
 The interview JSON captures full context (assumption, impact if wrong) for each question. This keeps the panel stateless and replayable — perfect for Telegram/cron workflows.
 
-```
-┌─ Q1: Should API keys be per-user or per-project?
-│  Assumption: Per-project keys (simpler implementation)
-│  Impact: If wrong, multi-user projects share keys → security issue
-└────────────────────────────────────────
-```
+---
+
+## Orchestrator Spec Review Loopback
+
+After the Strategist produces a spec and the user interview gate resolves, the Orchestrator reviews the spec critically before handing off to the Coder. One round only.
+
+**What the Orchestrator reviews:**
+- Missing edge cases
+- Unaddressed design decisions
+- Assumptions not validated against code
+- Integration points
+- Test coverage gaps
+
+Gaps are sent back to the Strategist for ONE refinement pass. Skip with `PANEL_SKIP_ORCHESTRATOR_REVIEW=1`.
 
 ---
 
@@ -149,16 +193,17 @@ The interview JSON captures full context (assumption, impact if wrong) for each 
 
 | Variable | Effect | Default |
 |----------|--------|---------|
-| `PANEL_REASONING` | Override strategist reasoning effort (`high`/`medium`) | `medium` (config) |
-| `PANEL_PARALLEL` | Force sequential (`0`) or parallel (`1`) coders | `1` |
-| `PANEL_FORCE_FULL` | Run all 5 phases regardless of depth matrix | off |
+| `PANEL_REASONING=high` | Bump strategist reasoning effort | `medium` |
+| `PANEL_PARALLEL=0` | Force sequential coder mode | `1` |
+| `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix | off |
+| `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode | off |
+| `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks | off |
+| `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback | off |
 | `GH_TOKEN` | GitHub auth for PR/issue creation | from `.env` |
 
 ---
 
 ## Token Optimizations
-
-The panel has been systematically optimized to reduce cost while preserving quality:
 
 | Optimization | Mechanism | Saving |
 |-------------|-----------|---------|
@@ -166,32 +211,18 @@ The panel has been systematically optimized to reduce cost while preserving qual
 | Task-extract for coder | Generate `specs/<feature>-tasks.md` — coder reads ~800 chars, not ~12K | ~93% smaller read |
 | Coder flash model | `deepseek-v4-flash` instead of v4-pro for implementation | 3.1× cheaper |
 | Phase 3 pure shell (vet) | No AI agent — `git checkout`, test, build | Zero AI tokens |
-| Phase 4 fresh nm session | Different model family catches bias-blind spots — costs tokens but prevents bugs | ~15% of pipeline |
-| `adversarial-review-lite` | 2.2K vs 13.8K for full `adversarial-review` + `ai-coding-best-practices` | ~11.5K system tokens saved |
+| Phase 4 fresh nm session | Different model family catches bias-blind spots | ~15% of pipeline |
+| Lite skills | 2.2K vs 13.8K for full skills | ~11.5K system tokens saved |
 
-**54% cheaper than an unoptimized pipeline.**
-
-Cost distribution by phase (approximate):
+**54% cheaper than an unoptimized pipeline.** Cost distribution by phase (approximate):
 
 | Phase | % of total |
-|---|---|
+|-------|-----------|
 | Strategist | 58% |
 | Coder | 8% |
 | vet | 0% |
 | nm | 15% |
 | Tech Lead | 19% |
-
----
-
-## Project Detection
-
-The panel auto-detects from the project directory:
-- **GitHub repo:** parsed from `git remote get-url origin` (supports HTTPS and SSH URLs)
-- **Test command:** parsed from `AGENTS.md` matching patterns like `Unit tests: \`npx vitest run\``
-- **Build command:** parsed from `AGENTS.md` matching patterns like `Full build: \`npm run build\``
-- **Lint command:** parsed from `AGENTS.md` matching patterns like `Lint: \`npx eslint .\``
-
-Falls back to `npm test` / `npm run build` / `npm run lint` if AGENTS.md patterns not found.
 
 ---
 
@@ -218,35 +249,20 @@ Per-phase timeout fallbacks:
 ## File Structure
 
 ```
-~/.hermes/scripts/hermes-panel              → canonical source
-<project>/specs/<feature>-spec.md           → cleaned strategist spec
-<project>/specs/<feature>-tasks.md          → task-extract for coder
-<project>/.hermes-panel/worktrees/          → parallel coder sandboxes
-/tmp/hermes-panel-output.txt               → full pipeline log
-/tmp/hermes-panel-interview.json           → interview state (exit code 2)
+~/bin/hermes-panel                        → canonical symlink (→ ~/hermes-panel/hermes-panel)
+<project>/specs/<feature>/spec.md          → cleaned strategist spec
+<project>/specs/<feature>/tasks.md         → task-extract for coder
+<project>/.hermes-panel/worktrees/         → parallel coder sandboxes
+/tmp/hermes-panel-output.txt              → full pipeline log
+/tmp/hermes-panel-interview.json          → interview state (exit code 2)
 ```
-
----
 
 ## Companion Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `nm` | Panel Phase 4 (adversarial review + PR) and standalone manual validation |
-| `vet` | Standalone shell verification (build+test) for manual pre-commit checks |
-| `daily-cleanup.sh` | Cron-driven cleanup |
-| `github-monitor.sh` | GitHub activity monitoring |
-
----
-
-## Setup & Deployment
-
-See [panel-setup.md](panel-setup.md) for:
-- One-time machine setup (profiles, skills, GH token)
-- Per-project setup (AGENTS.md, git remote)
-- Smoke test instructions
-- Cron integration
-- Troubleshooting
+| `~/bin/nm` | Phase 4 (adversarial review + PR) and standalone manual validation |
+| `~/bin/vet` | Standalone shell verification (build+test) for manual pre-commit checks |
 
 ---
 
@@ -258,4 +274,4 @@ See [panel-setup.md](panel-setup.md) for:
 - DeepSeek API access (strategist/coder/TL) + one additional model family (nm adversarial review)
 - `AGENTS.md` at project root with test, build, and lint commands
 - GitHub remote configured (`git remote get-url origin`)
-- `GH_TOKEN` in `~/.hermes/profiles/work/.env`
+- `GH_TOKEN` + `GITHUB_TOKEN` in environment

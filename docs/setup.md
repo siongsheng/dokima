@@ -7,18 +7,15 @@ Bring the multi-agent panel to a new repository or a fresh machine. One-time set
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────┐     ┌──────────────┐     ┌────────────┐
-│ Strategist  │────▶│  Coder   │────▶│ Verification │────▶│ Tech Lead  │
-│ (v4-pro)    │     │ (v4-flash)│     │  (shell)     │     │ (v4-pro)   │
-│ Spec + DAG  │     │ TDD impl │     │ test+build+PR│     │ adversarial│
-│ 5 min       │     │ 10 min   │     │ 2 min        │     │ 10 min     │
-└─────────────┘     └──────────┘     └──────────────┘     └────────────┘
-     ~$0.007           ~$0.002            $0.000             ~$0.004
-
-                          Total: ~$0.014/run (46% below unoptimized)
+Human Gate ──▶ Strategist ──▶ Coder ──▶ vet ──▶ nm ──▶ Tech Lead
+  (you)         v4-pro      v4-flash   shell   fresh    v4-pro
+                 58%          8%        0%      15%      19%
+                                     │       │
+                                     │       └─ different model family
+                                     └─ zero AI tokens
 ```
 
-**Gating:** Depth matrix auto-selects phases based on confidence × impact. `PANEL_FORCE_FULL=1` runs all 4.
+**5 phases + Human Gate.** Depth matrix auto-selects how many stages run based on confidence × impact. `PANEL_FORCE_FULL=1` runs all 6 stages. Full pipeline reference: [pipeline.md](pipeline.md).
 
 ---
 
@@ -32,7 +29,8 @@ Bring the multi-agent panel to a new repository or a fresh machine. One-time set
 | Python 3.6+ | `python3 --version` |
 | `gh` CLI (GitHub) | `gh --version` |
 | `git` 2.25+ | `git --version` |
-| DeepSeek API access | API key in `~/.hermes/profiles/work/.env` |
+| DeepSeek API access | API key configured |
+| One additional model family (for nm) | Anthropic or OpenAI API key |
 
 ### Per-project
 
@@ -46,15 +44,11 @@ Bring the multi-agent panel to a new repository or a fresh machine. One-time set
 
 ## 2. One-Time Machine Setup
 
-### 2.1 Install the panel script
+### 2.1 Install the panel
 
 ```bash
-# If hermes-config is already cloned:
-ln -sf ~/.hermes/scripts/hermes-panel ~/bin/hermes-panel
-
-# Or clone fresh:
-git clone https://github.com/siongsheng/hermes-config.git ~/hermes-config
-ln -sf ~/hermes-config/scripts/hermes-panel ~/bin/hermes-panel
+git clone https://github.com/siongsheng/hermes-panel.git ~/hermes-panel
+ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
 ```
 
 ### 2.2 Create the 3 agent profiles
@@ -62,7 +56,6 @@ ln -sf ~/hermes-config/scripts/hermes-panel ~/bin/hermes-panel
 The panel spawns agents by profile name: `strategist`, `coder`, `tech-lead`.
 
 ```bash
-# Create profiles (if they don't exist)
 hermes config profile create strategist
 hermes config profile create coder
 hermes config profile create tech-lead
@@ -79,8 +72,6 @@ agent:
   max_turns: 150
 terminal:
   env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-prompt_caching:
-  cache_ttl: 5m
 ```
 
 #### Coder profile (`~/.hermes/profiles/coder/config.yaml`)
@@ -93,11 +84,9 @@ agent:
   max_turns: 150
 terminal:
   env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-prompt_caching:
-  cache_ttl: 30m
 ```
 
-> **Why v4-flash for coder?** 3.1× cheaper than v4-pro ($0.28/M vs $0.89/M input tokens). The coder does mechanical TDD work — flash handles this reliably.
+> **Why v4-flash for coder?** 3.1× cheaper than v4-pro. The coder does mechanical TDD work — flash handles this reliably.
 
 #### Tech Lead profile (`~/.hermes/profiles/tech-lead/config.yaml`)
 
@@ -109,156 +98,52 @@ agent:
   max_turns: 150
 terminal:
   env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-prompt_caching:
-  cache_ttl: 30m
 ```
 
-### 2.3 Deploy the lite skills
+### 2.3 Deploy the panel skills
 
-Two stripped-down skills that replace the full 14K `ai-coding-best-practices` + `adversarial-review`:
+The panel ships four lite skills in `~/hermes-panel/skills/`. Install them into each profile:
 
 ```bash
-# Create coder skill directory
-mkdir -p ~/.hermes/skills/software-development/ai-coding-best-practices-lite
+# Strategist skills
+mkdir -p ~/.hermes/profiles/strategist/skills/software-development
+cp -r ~/hermes-panel/skills/spec-strategist-lite ~/.hermes/profiles/strategist/skills/software-development/
+cp -r ~/hermes-panel/skills/ponytail-guard ~/.hermes/profiles/strategist/skills/software-development/
 
-# Create tech-lead skill directory
-mkdir -p ~/.hermes/skills/software-development/adversarial-review-lite
-```
+# Coder skills
+mkdir -p ~/.hermes/profiles/coder/skills/software-development
+cp -r ~/hermes-panel/skills/ai-coding-best-practices-lite ~/.hermes/profiles/coder/skills/software-development/
 
-#### `ai-coding-best-practices-lite/SKILL.md` (coder skill)
+# Tech Lead skills
+mkdir -p ~/.hermes/profiles/tech-lead/skills/software-development
+cp -r ~/hermes-panel/skills/adversarial-review-lite ~/.hermes/profiles/tech-lead/skills/software-development/
+cp -r ~/hermes-panel/skills/ponytail-guard ~/.hermes/profiles/tech-lead/skills/software-development/
 
-```markdown
----
-name: ai-coding-best-practices-lite
-description: "Stripped coding best practices for coder agents — TDD, task granularity, anti-patterns, verification gates only."
-version: 1.0.0
----
-
-# AI Coding Best Practices (Lite — Coder Edition)
-
-## 1. TDD Enforcement (CRITICAL)
-
-Follow TDD: Red → Green → Refactor.
-1. Write simplest failing test first
-2. Minimum code to pass
-3. Refactor only after green
-4. NEVER modify or delete tests to pass — fix code, not test
-
-### Two-Commit Requirement
-
-Tests and code MUST be in SEPARATE commits with distinct timestamps.
-
-RED COMMIT (must show FIRST in git log):
-  git add <test files only>
-  git commit -m "test: <description>"
-
-GREEN COMMIT (must show SECOND, later timestamp):
-  git add <impl files only>
-  git commit -m "feat: <description>"
-
-## 2. Task Granularity
-
-- One function/component/test-file per task. 5-15 min each.
-- After each task: run tests, commit if green.
-- Implement ALL tasks from the spec. Do not stop until ALL done.
-
-## 3. No Scope Creep
-
-- NEVER add features not in the spec.
-- If you think something is missing, flag CLARIFICATION NEEDED: — do NOT implement.
-- If env vars unavailable, create test skeleton with skip + comment.
-
-## 4. Verification Gates
-
-Before marking complete:
-1. Tests pass
-2. Type check / build passes
-3. Lint passes
-4. No scope creep
-
-## 5. Anti-Patterns (BLOCKERS)
-
-- Skipping tests
-- Deleting failing tests
-- Bundling tests + code in one commit
-- Adding features not in spec
-- Auto-committing without verification
-```
-
-#### `adversarial-review-lite/SKILL.md` (tech-lead skill)
-
-```markdown
----
-name: adversarial-review-lite
-description: "Adversarial review + TDD verification for Tech Lead — review dimensions, severity levels, 2-commit check, output format."
-version: 1.0.0
----
-
-# Adversarial Review (Lite — Tech Lead Edition)
-
-## Pre-Review: TDD Verification
-
-Before reading code, verify the two-commit pattern:
-git log master..BRANCH --format="%H %ai %s"
-- RED commit (test:) must have EARLIER timestamp than GREEN commit (feat:)
-- Bundled commits (test + impl in one) = BLOCKER regardless of code quality
-
-## Three Review Dimensions
-
-### 1. Spec Compliance
-- Approach matches decision table?
-- API/interface matches proposal?
-- ALL tasks completed?
-- Scope creep?
-
-### 2. Architectural Impact
-- New dependencies or coupling?
-- Breaking changes?
-- Deployment impact?
-
-### 3. Code Quality
-- Correctness, security, error handling, performance
-
-## Severity
-
-| Level | When | Action |
-|-------|------|--------|
-| **BLOCKER** | Spec violation, architecture break, TDD violation, security | Fix before merge |
-| **SHOULD FIX** | Conventions, naming, redundant code | File GitHub Issue |
-| **NIT** | Formatting, comments, style | Optional |
-
-## Output Format
-
-## Adversarial Review
-### Pre-Review: TDD Check
-- RED commit: <hash> (<timestamp>)
-- GREEN commit: <hash> (<timestamp>)
-- Verdict: PASS / BLOCKED
-
-### Spec Compliance | Architectural Impact | Code Quality
-(Severity | Finding | Location tables)
-
-### Verdict
-VERDICT: APPROVED / CHANGES REQUESTED / BLOCKED
-RISK: LOW / MEDIUM / HIGH
+# nm skill (global — used by Phase 4)
+mkdir -p ~/.hermes/skills/software-development
+cp -r ~/hermes-panel/skills/no-mistakes ~/.hermes/skills/software-development/
 ```
 
 ### 2.4 Set GitHub token
 
 ```bash
-# Add to work profile's .env
-echo 'GH_TOKEN=ghp_yourpersonalaccesstoken' >> ~/.hermes/profiles/work/.env
+# Add to shared env
+echo 'GH_TOKEN=ghp_...' >> ~/.hermes/shared.env
+echo 'GITHUB_TOKEN=ghp_...' >> ~/.hermes/shared.env
 ```
 
-Token needs: `repo` scope (for `gh pr create`, `gh issue create`, `gh pr review`).
+Token needs: `repo` scope (for `gh pr create`, `gh issue create`, `gh pr review`). Both `GH_TOKEN` and `GITHUB_TOKEN` are required — `gh` CLI checks `GITHUB_TOKEN` first.
 
-### 2.5 Verify profiles start
+### 2.5 Verify
 
 ```bash
-# Start all profiles (one terminal each, or as daemons)
-hermes --profile strategist &
-hermes --profile coder &
-hermes --profile tech-lead &
+# Check panel is executable
+hermes-panel --help 2>&1 | head -5
+
+# Verify profiles start
+hermes --profile strategist -q "echo ok" --yolo
+hermes --profile coder -q "echo ok" --yolo
+hermes --profile tech-lead -q "echo ok" --yolo
 ```
 
 ---
@@ -317,7 +202,7 @@ cd ~/your-project
 # Quick test: add a comment to a file
 hermes-panel "Add a JSDoc comment to the main function" .
 
-# Force all 4 phases (for testing)
+# Force all phases (for testing)
 PANEL_FORCE_FULL=1 hermes-panel "Add a health check endpoint" .
 ```
 
@@ -326,13 +211,13 @@ PANEL_FORCE_FULL=1 hermes-panel "Add a health check endpoint" .
 ═══ HERMES PANEL — Multi-Agent Orchestration ═══
 ── Phase 1: Strategist (full session) ──
 ...
-✓ Spec saved: specs/add-a-jsdoc-comment-to-the-main-function-spec.md
+✓ Spec saved: specs/<feature>/spec.md
 ── Orchestrator Gate ──
-  Confidence: High, Impact: LOW → Depth: CODER
+  Confidence: High, Impact: LOW → Depth: vet
 ── Phase 2: Coder (feature branch) ──
 ...
 ✓ Coder finished
-── Phase 3: Verification ──
+── Phase 3: vet ──
   ✅ Tests: 42 passed, 0 failed
   ✅ Build: passed
   ✅ PR created: https://github.com/owner/repo/pull/1
@@ -346,14 +231,13 @@ PANEL_FORCE_FULL=1 hermes-panel "Add a health check endpoint" .
 Run the panel on a schedule for autonomous feature work:
 
 ```bash
-# Create a cron job that runs panel for a feature each weekday at 2pm
 hermes cron create \
   --schedule "0 14 * * 1-5" \
   --prompt "Run the panel for the next feature in the sprint backlog. Read ~/.hermes/sprints/12-week-plan.md to find the next unstarted feature." \
   --name "panel-daily-feature"
 ```
 
-> When run from cron, the panel uses non-interactive mode. If the strategist needs clarification, panel exits code 2 and saves questions to `/tmp/hermes-panel-interview.json`. The orchestrator must pick these up and re-run with `--answers`.
+> When run from cron, the panel uses non-interactive mode. Human Gate auto-skips. If the strategist needs clarification, panel exits code 2 and saves questions to `/tmp/hermes-panel-interview.json`. The orchestrator must pick these up and re-run with `--answers`.
 
 ---
 
@@ -361,20 +245,26 @@ hermes cron create \
 
 | Variable | Effect | Default |
 |----------|--------|---------|
-| `PANEL_REASONING` | Override strategist reasoning effort | `medium` (config) |
-| `PANEL_PARALLEL` | Force sequential (`0`) or parallel (`1`) coders | `1` |
-| `PANEL_FORCE_FULL` | Run all 4 phases regardless of depth matrix | off |
+| `PANEL_REASONING=high` | Bump strategist reasoning effort | `medium` |
+| `PANEL_PARALLEL=0` | Force sequential coder mode | `1` |
+| `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix | off |
+| `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode | off |
+| `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks | off |
+| `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback | off |
 | `GH_TOKEN` | GitHub auth for PR/issue creation | from `.env` |
 
 ```bash
 # High-quality spec for complex features
 PANEL_REASONING=high hermes-panel "Add OAuth2 integration" ~/project
 
-# Force adversarial review even for low-risk changes
+# Force all stages even for low-risk changes
 PANEL_FORCE_FULL=1 hermes-panel "Add unit test for helper" ~/project
 
 # Sequential mode (simpler debugging)
 PANEL_PARALLEL=0 hermes-panel "Refactor database layer" ~/project
+
+# Skip auto-fix (human reviews all findings)
+PANEL_SKIP_AUTOFIX=1 hermes-panel "Refactor auth middleware" ~/project
 ```
 
 ---
@@ -383,13 +273,11 @@ PANEL_PARALLEL=0 hermes-panel "Refactor database layer" ~/project
 
 When the strategist can't proceed with high confidence, it enters interview mode:
 
-```
-1. Panel exits with code 2, saves questions to /tmp/hermes-panel-interview.json
+1. Panel exits with code 2, saves questions to `/tmp/hermes-panel-interview.json`
 2. Orchestrator (you or a cron handler) reads the JSON
 3. Presents questions to the user, collects answers
 4. Writes answers back to the JSON file
-5. Re-runs: hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project
-```
+5. Re-runs: `hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project`
 
 **Interview JSON format:**
 ```json
@@ -413,16 +301,17 @@ When the strategist can't proceed with high confidence, it enters interview mode
 
 | Confidence → / Impact ↓ | HIGH | MEDIUM | LOW |
 |---|---|---|---|
-| **LOW** (tests/docs) | Phase 1-2 | Phase 1-3 | Phase 1-4 |
-| **MEDIUM** (API/DB/UI) | Phase 1-3 | Phase 1-4 | Phase 1-4 |
-| **HIGH** (auth/payments) | Phase 1-4 | Phase 1-4 | Phase 1-4 |
+| **LOW** (tests/docs/typos) | vet | vet+nm | full |
+| **MEDIUM** (API/DB/UI) | vet+nm | full | full |
+| **HIGH** (auth/payments) | full | full | full |
 
-- **Phase 1:** Strategist (always runs)
-- **Phase 2:** Coder (always runs)
-- **Phase 3:** Verification (test + build + PR)
-- **Phase 4:** Tech Lead (adversarial review)
+| Depth | Stages | When |
+|-------|--------|------|
+| **vet** | Human Gate + Strategist + Coder + vet | Trivial changes. Panel creates PR directly. |
+| **vet+nm** | + nm adversarial review | Medium-risk. nm creates PR with risk assessment. |
+| **full** | + Tech Lead sign-off | Anything impactful or uncertain. Two independent reviews. |
 
-`PANEL_FORCE_FULL=1` overrides everything → all 4 phases.
+Only HIGH confidence + LOW impact skips adversarial review. `PANEL_FORCE_FULL=1` overrides → all stages.
 
 ---
 
@@ -433,10 +322,11 @@ When the strategist can't proceed with high confidence, it enters interview mode
 | Spec noise extraction | 45-58% smaller spec |
 | Task-extract for coder | Coder reads ~800 chars, not ~12K |
 | Coder v4-flash model | 3.1× cheaper than v4-pro |
-| Phase 3 pure shell | Zero AI tokens (was ~3K tokens) |
-| `adversarial-review-lite` skill | 2.2K vs 13.8K for full skill |
+| Phase 3 pure shell (vet) | Zero AI tokens |
+| Lite skills | 2.2K vs 13.8K for full skills |
+| Different model family (nm) | Catches bias-blind spots — costs tokens but prevents bugs |
 
-**Result:** ~$0.014/full run → 46% cheaper than unoptimized.
+**54% cheaper than an unoptimized pipeline.** No dollar amounts — provider pricing changes; percentages don't.
 
 ---
 
@@ -454,7 +344,7 @@ Full build: `npm run build`
 Ensure `git remote get-url origin` returns a valid GitHub URL. The panel supports both HTTPS and SSH formats.
 
 ### "gh pr create fails with 401"
-`GH_TOKEN` not found or expired. Check `~/.hermes/profiles/work/.env`. Token needs `repo` scope.
+Both `GH_TOKEN` and `GITHUB_TOKEN` must be set. `gh` CLI checks `GITHUB_TOKEN` first. Verify `~/.hermes/shared.env` has both. Token needs `repo` scope.
 
 ### "Strategist produces zero-byte spec"
 Interview mode triggered but `--answers` was not provided. Check `/tmp/hermes-panel-interview.json` for questions. Re-run with `--answers`.
@@ -464,6 +354,9 @@ The coder profile may be hitting API rate limits or the feature is too large. Tr
 - `PANEL_PARALLEL=0` for sequential mode
 - Break the feature into smaller sub-features
 - Check `~/.hermes/profiles/coder/config.yaml` for model and provider config
+
+### "nm fails with model not found"
+nm requires a different model family from the coder. If coder uses DeepSeek, configure an Anthropic or OpenAI model in the profile nm uses. Check `~/bin/nm` script and ensure the second model provider has a valid API key.
 
 ### "Verification fails after 2 retries"
 The coder pushed broken code. Check the test/build failure output in the panel log (`/tmp/hermes-panel-output.txt`). Fix manually, then re-run with the same feature description.
