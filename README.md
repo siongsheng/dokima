@@ -4,7 +4,7 @@
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TB
 
     Plan : 🧠 Strategist + spec‑kit
     Plan : Specs, architecture, tasks
