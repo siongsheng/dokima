@@ -1207,7 +1207,7 @@ Keep ALL existing content — only add what's needed to close the gaps."""
         print(f"  Branch:   {branch}", flush=True)
         print(f"  Spec:     {spec_path}", flush=True)
         print(f"  Tasks:    {tasks_extract_path if tasks_extract_path else 'N/A'}", flush=True)
-        print(f"\\n  Options:", flush=True)
+        print(f"\n  Options:", flush=True)
         print(f"    [y] Review the spec now (opens in less)", flush=True)
         print(f"    [e] Edit the spec (opens in vim)", flush=True)
         print(f"    [Enter] Proceed — spec looks good", flush=True)
@@ -1222,11 +1222,11 @@ Keep ALL existing content — only add what's needed to close the gaps."""
             os.system(f"less {spec_path}")
             # After reviewing, re-ask
             try:
-                confirm = input("\\n  Proceed with this spec? [Enter=yes / q=quit]: ").strip().lower()
+                confirm = input("\n  Proceed with this spec? [Enter=yes / q=quit]: ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 confirm = "q"
             if confirm == "q":
-                print("\\n  ✋ Pipeline halted by human. Spec saved — revise and re-run.", flush=True)
+                print("\n  ✋ Pipeline halted by human. Spec saved — revise and re-run.", flush=True)
                 sys.exit(0)
         elif choice == "e":
             os.system(f"vim {spec_path}")
@@ -1242,25 +1242,25 @@ Keep ALL existing content — only add what's needed to close the gaps."""
                 if dag_pre.tasks:
                     tasks_extract = []
                     for t in sorted(dag_pre.tasks.values(), key=lambda x: int(x.id)):
-                        tasks_extract.append(f"### Task {t.id}: {t.description}\\n"
-                            f"**Files:** {', '.join(t.files) if t.files else 'from spec'}\\n"
-                            f"**Dependencies:** {', '.join(t.deps) if t.deps else '[none]'}\\n"
-                            f"**Description:** {t.description}\\n")
+                        tasks_extract.append(f"### Task {t.id}: {t.description}\n"
+                            f"**Files:** {', '.join(t.files) if t.files else 'from spec'}\n"
+                            f"**Dependencies:** {', '.join(t.deps) if t.deps else '[none]'}\n"
+                            f"**Description:** {t.description}\n")
                     with open(tasks_extract_path, "w") as tf:
-                        tf.write(f"# Task Breakdown: {feature}\\n\\n" + "\\n".join(tasks_extract))
+                        tf.write(f"# Task Breakdown: {feature}\n\n" + "\n".join(tasks_extract))
                     print(f"  Task extract regenerated: {tasks_extract_path} ({len(dag_pre.tasks)} tasks)", flush=True)
                 print("  ✓ Spec edited — proceeding with updated spec.", flush=True)
             except Exception as e:
                 print(f"  ⚠ Failed to re-read spec: {e} — proceeding with original.", flush=True)
         elif choice == "q":
-            print("\\n  ✋ Pipeline halted by human. Spec saved — revise and re-run.", flush=True)
+            print("\n  ✋ Pipeline halted by human. Spec saved — revise and re-run.", flush=True)
             sys.exit(0)
         # else: Enter or any other key → proceed
-        print("  ✓ Human gate passed — proceeding to implementation.\\n", flush=True)
+        print("  ✓ Human gate passed — proceeding to implementation.\n", flush=True)
     elif os.environ.get("PANEL_SKIP_HUMAN_GATE"):
-        print("\\n  ⚠ Human gate skipped (PANEL_SKIP_HUMAN_GATE=1)", flush=True)
+        print("\n  ⚠ Human gate skipped (PANEL_SKIP_HUMAN_GATE=1)", flush=True)
     else:
-        print("\\n  ⚠ Human gate skipped (non-interactive — Telegram/cron mode)", flush=True)
+        print("\n  ⚠ Human gate skipped (non-interactive — Telegram/cron mode)", flush=True)
 
     # ── PARALLEL EXECUTION GATE ──
     parallel_enabled = os.environ.get("PANEL_PARALLEL", "1") == "1"
