@@ -23,9 +23,9 @@ def test_complex_command(panel):
     assert "hello world" in result.stdout
 
 def test_unsplittable_falls_back_to_bash(panel):
-    result = panel._safe_run("echo \"unclosed", cwd="/tmp", timeout=10)
-    # Fallback worked — the command ran (even if bash gave a syntax error)
-    assert result is not None
+    # shlex.split failure now raises ValueError (no more bash -lc fallback)
+    with pytest.raises(ValueError, match="No closing quotation"):
+        panel._safe_run("echo \"unclosed", cwd="/tmp", timeout=10)
 
 def test_timeout(panel):
     with pytest.raises(subprocess.TimeoutExpired):

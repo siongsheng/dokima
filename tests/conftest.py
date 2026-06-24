@@ -10,9 +10,16 @@ PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "herm
 
 
 def _load_panel():
-    """Load hermes-panel as a Python module via exec, setting required globals."""
-    module = types.ModuleType("hermes_panel")
+    """Load hermes-panel as a Python module via exec, setting required globals.
+    Registers in sys.modules so patch('hermes_panel.X') works across all tests."""
+    module_name = "hermes_panel"
+    # Remove stale module if present
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+    module = types.ModuleType(module_name)
     module.__file__ = PANEL_PATH
+    sys.modules[module_name] = module
 
     # Set required globals BEFORE execution so functions reference them
     module.PROJECT_DIR = "/tmp/test-project"
@@ -33,9 +40,18 @@ def _load_panel():
     return module
 
 
-@pytest.fixture(scope="session")
+def _reload_panel():
+    """Reload a fresh panel module, clearing any global state pollution.
+    Use between tests that modify module-level globals."""
+    module_name = "hermes_panel"
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+    return _load_panel()
+
+
+@pytest.fixture
 def panel():
-    """Loaded hermes-panel module with globals set."""
+    """Loaded hermes-panel module with globals set. Fresh per test."""
     return _load_panel()
 
 
