@@ -150,10 +150,9 @@ def _safe_run(cmd_str: str, cwd: str, timeout: int = 300):
         args = shlex.split(cmd_str)
         return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               universal_newlines=True, timeout=timeout, cwd=cwd)
-    except Exception:
-        return subprocess.run(["bash", "-lc", cmd_str],
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              universal_newlines=True, timeout=timeout, cwd=cwd)
+    except Exception as e:
+        print(f"  _safe_run: shlex.split failed for '{cmd_str[:100]}': {e}")
+        raise
 
 def slugify(text):
     import hashlib
@@ -632,8 +631,15 @@ def try_auto_merge(pr_url: str) -> str:
     if not pr_num.isdigit():
         print(f"  Cannot parse PR number from: {pr_url}")
         return "failed"
-    merge_stdout, merge_stderr, merge_rc = gh("pr", "merge", pr_num, "--repo", REPO,
+    if not REPO:
+        print("  REPO not configured, cannot merge")
+        return "failed"
+    try:
+        merge_stdout, merge_stderr, merge_rc = gh("pr", "merge", pr_num, "--repo", REPO,
                             "--merge", "--delete-branch")
+    except Exception as e:
+        print(f"  gh merge failed with exception: {e}")
+        return "failed"
     if merge_rc == 0:
         print(f"  PR #{pr_num} merged")
         return "merged"
@@ -641,8 +647,12 @@ def try_auto_merge(pr_url: str) -> str:
     if any(kw in merge_err_lower for kw in
            ("required status", "required check", "status check", "required")):
         print(f"  PR #{pr_num} - branch protection requires CI. Queuing auto-merge...")
-        _, queue_stderr, queue_rc = gh("pr", "merge", pr_num, "--repo", REPO,
-                          "--auto", "--delete-branch")
+        try:
+            _, queue_stderr, queue_rc = gh("pr", "merge", pr_num, "--repo", REPO,
+                              "--auto", "--delete-branch")
+        except Exception:
+            print(f"  Auto-merge queue exception")
+            return "failed"
         if queue_rc == 0:
             print(f"  PR #{pr_num} auto-merge queued")
             return "queued"
@@ -1025,6 +1035,7 @@ def update_status_md(status_path: str, feature_id: str, title: str, status: str,
     if archived:
         output += "\n".join(archived) + "\n"
 
+    os.makedirs(os.path.dirname(status_path), exist_ok=True)
     with open(status_path, "w") as f:
         f.write(output)
 
@@ -1154,7 +1165,7 @@ def merge_worktree_branches(feature_branch: str, tasks: dict[str, Task],
         )
         if result.returncode != 0:
             print(f"  ❌ Merge conflict merging {task.branch}", flush=True)
-            print(f"  {result.stderr.decode()[:500]}", flush=True)
+            print(f"  {result.stderr[:500]}", flush=True)
             # Abort merge, return failure
             subprocess.run(["git", "merge", "--abort"], cwd=project_dir,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
@@ -1920,6 +1931,8 @@ def main():
     _LOCK_FD = lock_fd
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
+    import atexit
+    atexit.register(_cleanup_lock)
 
     # ── NEXT MODE: roadmap-driven autonomous pipeline ──
     if is_next:
@@ -1928,16 +1941,19 @@ def main():
         if not os.path.exists(agents_path):
             print(f"ERROR: No AGENTS.md found in {PROJECT_DIR}")
             print("  Run `hermes-panel init` first.")
+            _cleanup_lock()
             sys.exit(1)
 
         API_KEY = load_key()
         if not API_KEY:
             print("ERROR: Could not read API_SERVER_KEY from .env")
+            _cleanup_lock()
             sys.exit(1)
 
         REPO = detect_repo()
         if not REPO:
             print("ERROR: Could not detect GitHub owner/repo from git remote origin.")
+            _cleanup_lock()
             sys.exit(1)
 
         DEFAULT_BRANCH = _detect_default_branch(PROJECT_DIR)
@@ -1967,6 +1983,7 @@ def main():
             print("  The panel requires an AGENTS.md at the project root with at minimum:")
             print("  project description, test command, build command, and conventions.")
             print("  See ai-coding-best-practices for AGENTS.md guidelines.")
+            _cleanup_lock()
             sys.exit(1)
 
         API_KEY = load_key()
@@ -2529,7 +2546,7 @@ def main():
                         adr_output = result.stdout.strip()
                         print(f"  ADR created: {adr_output}", flush=True)
                         # Extract ADR filename and add cross-references
-                        adr_file_match = re.search(r'(docs/adr/\\d+-.+\\.md)', adr_output)
+                        adr_file_match = re.search(r'(docs/adr/\d+-.+\.md)', adr_output)
                         if adr_file_match:
                             adr_rel_path = adr_file_match.group(1)
                             adr_full_path = os.path.join(PROJECT_DIR, adr_rel_path)
@@ -2736,6 +2753,7 @@ def main():
                 # ── End coder clarification gate ──
 
                 # Coder contingency: check if branch + commits exist despite timeout
+                coder_ok = True  # default: assume OK unless proven otherwise
                 if "[TIMEOUT:" in coder_output:
                     branch_out, _, branch_rc = git("rev-parse", "--verify", branch)
                     if branch_rc != 0:
