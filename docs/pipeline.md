@@ -1,8 +1,8 @@
 # Hermes Panel — Pipeline Reference
 
-`hermes-panel` routes feature development through a pipeline of specialist AI agents: **Human Gate → Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, filtered auto-fix loopbacks, and parallel execution.
+`hermes-panel` routes feature development through a pipeline of specialist AI agents: **Human Gate → Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, filtered auto-fix loopbacks, and parallel execution. Works with Hermes Agent, Claude Code, or any agent runtime.
 
-> **New here?** Start with [setup.md](setup.md) for deployment. Overview at [README.md](../README.md).
+> **New here?** Start with [setup.md](setup.md) for deployment. Overview + design philosophy at [README.md](../README.md).
 
 ---
 
@@ -199,6 +199,7 @@ Gaps are sent back to the Strategist for ONE refinement pass. Skip with `PANEL_S
 | `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode | off |
 | `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks | off |
 | `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback | off |
+| `PANEL_AGENT` | Agent runtime: `hermes` (default), `claude`, `codex` | `hermes` |
 | `GH_TOKEN` | GitHub auth for PR/issue creation | from `.env` |
 
 ---

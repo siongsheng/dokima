@@ -251,6 +251,7 @@ hermes cron create \
 | `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode | off |
 | `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks | off |
 | `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback | off |
+| `PANEL_AGENT` | Agent runtime: `hermes` (default), `claude`, `codex` | `hermes` |
 | `GH_TOKEN` | GitHub auth for PR/issue creation | from `.env` |
 
 ```bash
