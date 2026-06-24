@@ -31,6 +31,7 @@ Human Gate ──▶ Strategist ──▶ Coder ──▶ vet ──▶ nm ─�
 | `git` 2.25+ | `git --version` |
 | DeepSeek API access | API key configured |
 | One additional model family (for nm) | Anthropic or OpenAI API key |
+| [adr-tools](https://github.com/npryce/adr-tools) (for ADR lifecycle) | `adr version` |
 
 ### Per-project
 
@@ -39,6 +40,7 @@ Human Gate ──▶ Strategist ──▶ Coder ──▶ vet ──▶ nm ─�
 | `AGENTS.md` at repo root | Panel reads test/build/lint commands |
 | GitHub remote configured | `git remote get-url origin` returns a GitHub URL |
 | Existing test suite | Phase 2 (TDD) needs a test runner |
+| `docs/adr/` directory (optional) | `adr init docs/adr` — enables ADR lifecycle |
 
 ---
 
