@@ -32,17 +32,6 @@ stateDiagram-v2
     Review --> Implement : auto‑fixable: test · guard · TDD · exception (1x)
     Review --> [*] : final verdict ✓
 ```
-
-**Loopback rules — three tiers, all vet after fix:**
-
-| Loopback | Retries | Auto-fixes | Never auto-fixes |
-|----------|---------|-----------|-----------------|
-| **Validate → Implement** | 2 | Build failures, test failures | — (all mechanical) |
-| **Verify → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
-| **Review → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
-
-Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
-
 ## Why
 
 Writing specs, implementing TDD, running tests, creating PRs, and reviewing code — for every feature — is mechanical work. AI agents can do this, but one agent alone drifts. The panel chains specialist agents with enforced gates: the strategist designs, the coder implements (RED→GREEN commits), vet checks the build mechanically (zero AI), nm runs adversarial review from a fresh session with a different model family, and the tech lead signs off against the spec.
@@ -100,6 +89,18 @@ Not every change needs all 5 stages. Confidence × impact → how many stages ru
 | **full** | + Tech Lead sign-off | Anything impactful or uncertain. Two independent reviews. |
 
 Only HIGH confidence + LOW impact skips adversarial review. Everything else gets at least nm's fresh-model review. `PANEL_FORCE_FULL=1` overrides → all stages.
+
+### Loopback Rules
+
+Three loopback tiers, all re-vet after fix:
+
+| Loopback | Retries | Auto-fixes | Never auto-fixes |
+|----------|---------|-----------|-----------------|
+| **Validate → Implement** | 2 | Build failures, test failures | — (all mechanical) |
+| **Verify → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
+| **Review → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
+
+Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
 
 ## Features
 
