@@ -136,18 +136,7 @@ The panel shines for **greenfield features with ambiguous requirements** where a
 - `AGENTS.md` at project root with test and build commands
 - GitHub remote configured on target project
 
-## Environment Variables
-
-| Variable | Effect |
-|----------|--------|
-| `PANEL_REASONING=high` | Bump strategist reasoning effort |
-| `PANEL_PARALLEL=0` | Force sequential coder mode |
-| `PANEL_FORCE_FULL=1` | Run all 5 stages regardless of depth matrix |
-| `PANEL_SKIP_HUMAN_GATE=1` | Skip the human gate even in interactive mode |
-| `PANEL_SKIP_AUTOFIX=1` | Disable nm+TL auto-fix loopbacks |
-| `PANEL_SKIP_ORCHESTRATOR_REVIEW=1` | Skip orchestrator spec review loopback |
-| `PANEL_AGENT` | Agent runtime: `hermes` (default), `claude`, `codex` |
-| `GH_TOKEN` | GitHub auth (auto-loaded from profile `.env`) |
+> **Environment variables, exit codes, and file layout:** [docs/pipeline.md](docs/pipeline.md)
 
 ## Standing on Shoulders
 
@@ -169,31 +158,7 @@ The panel doesn't invent methodology. Every stage draws from battle-tested open-
 ## Documentation
 
 - **[docs/setup.md](docs/setup.md)** — Deployment guide: one-time machine setup, per-project config, smoke test, cron integration, troubleshooting.
-- **[docs/pipeline.md](docs/pipeline.md)** — Full pipeline reference: phases, depth matrix, interview flow, token optimizations, failure handling.
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | Pipeline complete — PR created, all phases passed |
-| `1` | Pipeline halted — unrecoverable error (BLOCKER, failed verification) |
-| `2` | Interview mode — strategist needs clarification. Re-run with `--answers` |
-
-## Files
-
-```
-hermes-panel/
-├── hermes-panel                    # The main script
-├── skills/
-│   ├── spec-strategist-lite/       # Strategist skill (13-section spec format)
-│   ├── ai-coding-best-practices-lite/  # Coder skill (TDD, gates, anti-patterns)
-│   ├── no-mistakes/                # nm skill (adversarial review + PR + risk)
-│   └── adversarial-review-lite/    # Tech Lead skill (review dimensions, severity)
-├── docs/
-│   ├── setup.md                    # Deployment guide
-│   └── pipeline.md                 # Pipeline reference
-└── README.md
-```
+- **[docs/pipeline.md](docs/pipeline.md)** — Full pipeline reference: phases, depth matrix, interview flow, token optimizations, failure handling, env vars, exit codes.
 
 ## License
 

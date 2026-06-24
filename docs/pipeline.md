@@ -305,6 +305,16 @@ Per-phase timeout fallbacks:
 
 ---
 
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Pipeline complete — PR created, all phases passed |
+| `1` | Pipeline halted — unrecoverable error (BLOCKER, failed verification) |
+| `2` | Interview mode — strategist needs clarification. Re-run with `--answers` |
+
+---
+
 ## Requirements
 
 - Python 3.6+ (compatible with Oracle Linux 8 system Python)
