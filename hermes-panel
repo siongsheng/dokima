@@ -2072,7 +2072,7 @@ def main():
             print("\n── Stop signal received — exiting loop")
             os.remove(_stop_path())
             break
-        if iteration > 1:
+        if True:  # was iteration > 1 (fixed: pipeline must run on iter 1)
             print(f"\n{'═' * 55}")
             print(f"  CONTINUOUS — Feature {iteration}")
             print(f"{'═' * 55}")
@@ -2886,19 +2886,33 @@ def main():
                     print("  ⏳ Creating PR...", flush=True)
 
                     pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+                    try:
+                        tp = int(tests_passed)
+                    except (ValueError, TypeError):
+                        tp = 0
+                    try:
+                        tf = int(tests_failed)
+                    except (ValueError, TypeError):
+                        tf = 0
+                    total_tests = tp + tf if (tp + tf) > 0 else "?"
+                    passed_str = f"{tests_passed}/{total_tests}" if total_tests != "?" else f"{tests_passed} passed"
                     pr_body = (
                         f"{pr_sections_final}\n\n"
                         f"## Validation\n"
-                        f"- {tests_passed}/{int(tests_passed) + int(tests_failed) if tests_failed != '?' else tests_passed} tests pass\n"
+                        f"- {passed_str} tests\n"
                         f"- Build passes\n"
                     )
                     pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
                         "--base", DEFAULT_BRANCH, "--head", branch,
                         "--title", f"feat: {feature}",
                         "--body", pr_body)
-                    if pr_rc == 0:
-                        pr_url = pr_stdout.strip().split()[-1]
-                        print(f"  ✅ PR created: {pr_url}", flush=True)
+                    if pr_rc == 0 and pr_stdout.strip():
+                        parts = pr_stdout.strip().split()
+                        if parts:
+                            pr_url = parts[-1]
+                            print(f"  ✅ PR created: {pr_url}", flush=True)
+                        else:
+                            pr_url = None
                     else:
                         # Try finding existing PR
                         stdout, _, rc = gh("pr", "list", "--repo", REPO, "--head", branch,
