@@ -101,11 +101,11 @@ Only HIGH confidence + LOW impact skips adversarial review. Everything else gets
 
 Three loopback tiers, all re-vet after fix:
 
-| Loopback | Retries | Auto-fixes | Never auto-fixes |
-|----------|---------|-----------|-----------------|
-| **Validate → Implement** | 2 | Build failures, test failures | — (all mechanical) |
-| **Verify → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
-| **Review → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
+| Condition (diagram arrow) | Retries | Auto-fixes | Never auto-fixes |
+|---------------------------|---------|-----------|-----------------|
+| **build / test fail** (Validate → Implement) | 2 | Build failures, test failures | — (all mechanical) |
+| **auto‑fixable: test · TDD · exception** (Verify → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
+| **auto‑fixable: test · guard · TDD · exception** (Review → Implement) | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
 
 Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
 
