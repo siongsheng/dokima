@@ -109,9 +109,6 @@ Every stage has a contract:
 - **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
 - **Filtered auto-fix** — nm and TL loop back to Coder for objective issues (missing tests, uncaught exceptions, TDD violations). Architecture and spec findings stay human-only. Re-verified after fix. `PANEL_SKIP_AUTOFIX=1` to disable.
-- **Adversarial test design** — strategist specifies concrete edge cases and failure modes the coder must test. Happy path, null inputs, boundary values, failure modes — not "test edge cases" but *these specific edge cases.*
-- **Specialist review lenses** — nm applies security, reliability, and performance lenses in a single pass instead of a generic "review everything." Findings labeled `[SECURITY]`, `[RELIABILITY]`, `[PERFORMANCE]`.
-- **Evidence-grounded specs** — strategist Impact Assessment cites actual `git diff --stat` and dependency analysis, not guesswork. "Affects ~5 files" is speculation. `src/client.rs (+23/-4)` is evidence.
 - **Cost-optimized** — 54% below unoptimized baseline. Shell verification (zero AI tokens), flash model for coder, lite skills (2.2K vs 13.8K system tokens), spec noise extraction (45-58% smaller), task-extract (coder reads ~800 chars, not full 12K spec).
 - **Two adversarial reviews** — nm (fresh model, different family) + TL (spec compliance). Two independent models catch different classes of bugs.
 - **Graceful degradation** — timeouts produce partial results, not failures. Partial review > no review.
