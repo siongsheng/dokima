@@ -81,20 +81,26 @@ stateDiagram-v2
 
 ## Design
 
-Why five agents, not one? Because one agent writing code and reviewing its own work is how you ship bugs. Each phase exists to catch what the previous one missed:
+Hermes Panel doesn't ask "how many agents?" It asks: **what unique failure class does each stage catch?**
 
-| Phase | What it catches | Remove it, and... |
-|-------|---------------|-------------------|
-| **Human Gate** | Bad specs before code gets written | The pipeline faithfully builds the wrong thing. No human sees the spec until the final PR. |
-| **Strategist** | Unbounded ambition | "Just code it" → 47 files for a button. No spec means no task breakdown, no trade-off analysis, no bounds. |
-| **Coder** | — (builds the thing) | Nothing gets built. But an unconstrained coder overbuilds. The spec + TDD keep it focused. |
-| **vet** | Broken builds, failing tests | AI agents claim "tests pass" without running them. Shell scripts don't hallucinate. Deterministic, zero AI tokens. |
-| **nm** | Blind spots from the coder's model family | Same model reviewing its own work misses edge cases. Different model family = genuinely independent review. |
-| **Tech Lead** | Spec non-compliance, architecture drift | nm reviews the code; TL reviews against the spec. Catches "this doesn't do what was asked for." |
+Most multi-agent systems add stages to look impressive. Hermes adds a stage only when it catches something no other stage can — and only when the catch justifies the tokens.
 
-**Why not 3 phases?** Strategist → Coder → vet would ship code that passes tests but might not match the spec (no adversarial review, no spec-compliance check). vet+nm is our default for medium-risk changes — adversarial review but no spec check. Full depth adds TL for anything impactful.
+Every stage has a contract:
 
-**Why not 7 phases?** More phases = more tokens, more latency, diminishing returns. The jump from 5 to 7 would add another review pass (redundant with nm+TL) or a separate security audit (TL's code quality dimension already covers security). Five is the set that each catches a distinct failure class.
+| Stage | Information it sees | Unique failure mode it detects | Does NOT detect |
+|-------|-------------------|-------------------------------|-----------------|
+| **Human Gate** | The spec | Misaligned intent — spec describes wrong thing | Code quality, edge cases |
+| **Strategist** | Codebase + AGENTS.md + brief | Unbounded ambition — overbuilding without design | Whether the spec is implementable |
+| **Coder** | Spec + task list | Implementation gaps — spec says X, code does Y | Whether the spec is correct |
+| **vet** | Build + test output | Broken builds, failing tests — ground truth | Design issues, architecture drift |
+| **nm** | Git diff (different model family) | Model-family blind spots — same inductive bias would miss these | Spec compliance (doesn't see the spec) |
+| **Tech Lead** | PR + spec + full context | Spec non-compliance, architecture drift, system-wide inconsistency | Blind spots from the coder's model family |
+
+**Why not fewer?** Strategist → Coder → vet would ship code that passes tests but might not match the spec (no adversarial review, no spec-compliance check). Every skipped stage leaves a failure class uncovered.
+
+**Why not more?** Adding stages without eliminating overlap is anti-Hermes. A Test Architect overlaps with Strategist (both design upstream). A separate Security Reviewer overlaps with nm (both review code). The bar for a new stage is: *prove it catches a failure class no existing stage can catch, with evidence, not intuition.*
+
+**Coherence vs Specialization.** nm and vet are specialists — each catches one category. TL is the coherence anchor — the only stage that asks "does this change make the SYSTEM consistent?" Distributed checks without a coherence anchor produce locally correct components and globally broken systems.
 
 ## Features
 
