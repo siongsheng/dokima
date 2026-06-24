@@ -258,21 +258,19 @@ Gaps are sent back to the Strategist for ONE refinement pass. Skip with `PANEL_S
 
 ## Organizational Memory
 
-For long-lived projects, every Strategist run shouldn't rediscover the same decisions. Hermes distinguishes two kinds of memory:
+For long-lived projects, every Strategist run shouldn't rediscover the same decisions. The panel does NOT capture organizational memory — and that's intentional.
 
-### Static Memory (belongs in the repo)
-- **ADRs** — architecture decisions, trade-offs, rejected alternatives. Lives in `docs/adr/` or `specs/conventions.md`.
-- **Coding standards** — what AGENTS.md already captures: test commands, build commands, conventions.
-- **Known constraints** — "this module cannot import that one," "don't use async in this layer."
+### Static Memory → repo (not pipeline)
 
-**The Strategist reads AGENTS.md and explores the codebase before writing any spec.** Stronger AGENTS.md conventions directly improve spec quality without pipeline changes.
+ADRs, conventions, and known constraints belong in the repo: `AGENTS.md`, `docs/adr/`, `specs/conventions.md`. The Strategist reads AGENTS.md and explores the codebase before writing any spec — stronger repo docs directly improve spec quality. The panel doesn't create these docs; you do, once. Every run benefits.
 
-### Dynamic Memory (belongs in git history + pipeline context)
-- "This module recently caused a bug" → visible in `git log --oneline` + issue tracker.
-- "This API was changed 3 PRs ago" → visible in `git diff master...HEAD`.
-- "This pattern tends to break tests" → visible in nm's false-BLOCKER history.
+### Dynamic Memory → git + issues (not pipeline)
 
-**The panel already surfaces this:** vet reports actual test results, nm's diff review catches recurring patterns, TL's spec-compliance check references recent spec updates. The information exists — the pipeline doesn't need a separate memory layer. It needs the agents to *read the signals already available*.
+Recent bugs, changed APIs, and recurring patterns are already in `git log` and the issue tracker. The panel reads git history during codebase exploration. It doesn't need a separate memory layer — the signals exist. The agents need to *read them*, not store them.
+
+### What the panel won't do
+
+The panel won't maintain an ADR index, track false-BLOCKER history across runs, or remember which modules are fragile. Those are knowledge management problems, not pipeline problems. Each panel run is self-contained by design — no accumulated state, no drift between runs.
 
 ---
 
