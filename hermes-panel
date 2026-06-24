@@ -1660,7 +1660,6 @@ Report: what was broken, what you fixed, commit hash."""
         if depth in ("vet+nm", "full"):
             print("\n── Phase 4: nm (adversarial review) ──", flush=True)
             print("  ⏳ Spawning fresh Hermes session with different model family...", flush=True)
-            import shlex
             nm_cmd = f"cd {shlex.quote(PROJECT_DIR)} && ~/bin/nm --skip-tests"
             nm_result = subprocess.run(
                 ["bash", "-c", nm_cmd],
