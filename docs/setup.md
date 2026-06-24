@@ -146,6 +146,36 @@ hermes --profile coder -q "echo ok" --yolo
 hermes --profile tech-lead -q "echo ok" --yolo
 ```
 
+### 2.6 Claude Code Setup (alternative)
+
+The panel can use [Claude Code](https://claude.ai) instead of Hermes Agent. Claude Code doesn't have profiles or skills; instead, instructions are inlined into the prompt and tools are enabled via `--allowedTools`.
+
+```bash
+# Install Claude Code
+npm install -g @anthropic-ai/claude-code
+
+# Set API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Run the panel with Claude Code as the agent runtime
+PANEL_AGENT=claude hermes-panel "Add rate limiting middleware" ~/project
+```
+
+**Model mapping with Claude Code:**
+
+| Panel Phase | Claude Code Model | Flag |
+|-------------|-----------------|------|
+| Strategist | Claude Opus 4 | `--model claude-opus-4-20250514` |
+| Coder | Claude Sonnet 4 | `--model claude-sonnet-4-20250514` |
+| nm | Different provider (e.g. DeepSeek via OpenRouter) | `--model openrouter/deepseek/deepseek-chat` |
+| Tech Lead | Claude Opus 4 | `--model claude-opus-4-20250514` |
+
+**How skills work:** Hermes skills (SKILL.md files) are inlined into the prompt as system instructions when using Claude Code. The panel reads the relevant skill files and prepends them to the agent prompt. No manual translation needed.
+
+**How nm works with Claude Code:** When `PANEL_AGENT=claude`, the `~/bin/nm` script delegates to Claude Code instead of Hermes. The adversarial review still uses a different model family (DeepSeek vs Claude).
+
+> **Current status:** Claude Code support is documented and the `PANEL_AGENT` env var is reserved. The agent provider abstraction in the panel script is the next implementation milestone. See [the issue tracker](https://github.com/siongsheng/hermes-panel/issues) for progress.
+
 ---
 
 ## 3. Per-Project Setup
