@@ -265,7 +265,7 @@ create_profile() {
     hermes --profile "$name" config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
 
     if [ "$name" = "strategist" ]; then
-        hermes --profile "$name" config set agent.reasoning_effort medium
+        hermes --profile "$name" config set agent.reasoning_effort high
     fi
 
     log "Profile '$name' configured ($model @ $provider)"

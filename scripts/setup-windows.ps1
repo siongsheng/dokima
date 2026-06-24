@@ -225,7 +225,7 @@ function New-HermesProfile {
     hermes --profile $Name config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
 
     if ($Name -eq "strategist") {
-        hermes --profile $Name config set agent.reasoning_effort medium
+        hermes --profile $Name config set agent.reasoning_effort high
     }
 
     Write-OK "Profile '$Name' configured ($Model @ $Provider)"

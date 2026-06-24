@@ -57,50 +57,35 @@ ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
 
 The panel spawns agents by profile name: `strategist`, `coder`, `tech-lead`.
 
+> **Recommended:** Run the setup script (`scripts/setup-linux.sh` or `scripts/setup-windows.ps1`) instead — it handles profiles, API keys, and GitHub tokens interactively in one step. See [Quick Start](../README.md#quick-start).
+
 ```bash
-hermes config profile create strategist
-hermes config profile create coder
-hermes config profile create tech-lead
+# Create profiles (generates full default configs)
+hermes profile create strategist
+hermes profile create coder
+hermes profile create tech-lead
+
+# Override specific values
+hermes --profile strategist config set model.default deepseek-v4-pro
+hermes --profile strategist config set model.provider deepseek
+hermes --profile strategist config set agent.max_turns 150
+hermes --profile strategist config set agent.reasoning_effort high
+hermes --profile strategist config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
+
+hermes --profile coder config set model.default deepseek-v4-flash
+hermes --profile coder config set model.provider deepseek
+hermes --profile coder config set agent.max_turns 150
+hermes --profile coder config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
+
+hermes --profile tech-lead config set model.default deepseek-v4-pro
+hermes --profile tech-lead config set model.provider deepseek
+hermes --profile tech-lead config set agent.max_turns 150
+hermes --profile tech-lead config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
 ```
 
-#### Strategist profile (`~/.hermes/profiles/strategist/config.yaml`)
-
-```yaml
-model:
-  default: deepseek-v4-pro
-  provider: deepseek
-agent:
-  reasoning_effort: medium
-  max_turns: 150
-terminal:
-  env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-```
-
-#### Coder profile (`~/.hermes/profiles/coder/config.yaml`)
-
-```yaml
-model:
-  default: deepseek-v4-flash
-  provider: deepseek
-agent:
-  max_turns: 150
-terminal:
-  env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-```
+> **Provider-agnostic:** Replace `deepseek-v4-pro` / `deepseek` with any model and provider. The panel works with Anthropic, OpenAI, DeepSeek, or OpenRouter. Just set the matching API key in `~/.hermes/shared.env`.
 
 > **Why v4-flash for coder?** 3.1× cheaper than v4-pro. The coder does mechanical TDD work — flash handles this reliably.
-
-#### Tech Lead profile (`~/.hermes/profiles/tech-lead/config.yaml`)
-
-```yaml
-model:
-  default: deepseek-v4-pro
-  provider: deepseek
-agent:
-  max_turns: 150
-terminal:
-  env_passthrough: '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
-```
 
 ### 2.3 Deploy the panel skills
 
