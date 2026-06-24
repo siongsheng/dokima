@@ -3,38 +3,45 @@
 **Multi-agent orchestration engine for Hermes Agent.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review.
 
 ```mermaid
-graph TD
-    A[Feature Request] --> B[👤 Human Gate: Review Spec]
-    B -->|approved| C[🧠 Strategist: Design Spec]
-    C -->|low confidence| D[❓ Interview Mode]
-    D -->|user answers| C
-    C -->|spec ready| E[👷 Coder: TDD Implementation]
-    E -->|code pushed| F[🔧 vet: Build + Test]
-    F -->|fail| G[👷 Coder: Fix]
-    G -->|re-push| F
-    F -->|pass| H{Depth Gate}
-    H -->|vet| I[📦 Create PR — Done ✓]
-    H -->|vet+nm / full| J[🔍 nm: Adversarial Review]
-    J -->|auto-fixable| K[👷 Coder: Objective Fix]
-    K -->|re-vet| F
-    J -->|clean| L{Depth Gate}
-    L -->|vet+nm| M[📦 PR + Risk — Done ✓]
-    L -->|full| N[👔 Tech Lead: Review]
-    N -->|auto-fixable| O[👷 Coder: Objective Fix]
-    O -->|re-vet| F
-    N -->|clean| P[📦 Final Verdict — Done ✓]
+stateDiagram-v2
+    direction LR
 
-    style A fill:#4a9,stroke:#333
-    style B fill:#f96,stroke:#333
-    style I fill:#6c6,stroke:#333
-    style M fill:#6c6,stroke:#333
-    style P fill:#6c6,stroke:#333
-    style F fill:#fc6,stroke:#333
-    style J fill:#c9f,stroke:#333
-    style N fill:#9cf,stroke:#333
+    Plan : 🧠 Strategist + spec‑kit
+    Plan : Specs, architecture, tasks
+    Implement : 👷 Coder (TDD)
+    Implement : RED → GREEN commits
+    Validate : 🔧 vet (shell)
+    Validate : Build + test
+    Verify : 🔍 nm (adversarial)
+    Verify : Fresh model, clean context
+    Review : 👔 Tech Lead
+    Review : Spec compliance, code quality
+
+    [*] --> Plan : feature request
+    Plan --> Implement : spec approved (Human Gate)
+
+    Implement --> Validate : code pushed
+    Validate --> Implement : build / test fail (2x)
+    Validate --> [*] : vet‑only → PR ✓
+    Validate --> Verify : vet+nm / full
+
+    Verify --> Implement : auto‑fixable: test · TDD · exception (1x)
+    Verify --> [*] : vet+nm → PR + Risk ✓
+    Verify --> Review : full
+
+    Review --> Implement : auto‑fixable: test · guard · TDD · exception (1x)
+    Review --> [*] : final verdict ✓
 ```
 
-**Loopback rules:** vet always retries (2x). nm and TL only auto-fix objective issues — missing tests, uncaught exceptions, TDD violations. Architecture, spec compliance, and security findings go to the human. All three loopbacks vet after fix. `PANEL_SKIP_AUTOFIX=1` disables nm+TL auto-fix.
+**Loopback rules — three tiers, all vet after fix:**
+
+| Loopback | Retries | Auto-fixes | Never auto-fixes |
+|----------|---------|-----------|-----------------|
+| **Validate → Implement** | 2 | Build failures, test failures | — (all mechanical) |
+| **Verify → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, `unwrap` on Result/Option | Architecture concerns, spec compliance gaps, security findings |
+| **Review → Implement** | 1 | Missing tests, uncaught exceptions, TDD violations, missing guards, missing README update | Spec violations, architecture violations, security findings |
+
+Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` disables Verify+Review auto-fix.
 
 ## Why
 
