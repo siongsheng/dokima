@@ -265,8 +265,8 @@ For long-lived projects, every Strategist run shouldn't rediscover the same deci
 **Before spec — Strategist reads existing ADRs.**
 If `docs/adr/` exists, the Strategist runs `adr list` during codebase exploration and reads recent ADRs. Past decisions become context for the current design — no re-litigating whether to use Redis vs in-memory.
 
-**After spec — Panel creates a new ADR.**
-The panel extracts the Strategist's decision table from the spec and runs `adr new` to persist it as a numbered ADR in `docs/adr/`. Status: Proposed. The user promotes it to Accepted at the Human Gate (or rejects it).
+**After Human Gate — Panel creates a new ADR.**
+Once the spec is final (user approved or edited), the panel extracts the Strategist's decision table and runs `adr new` to persist it as a numbered ADR in `docs/adr/`. Status: Proposed. The user changes status to Accepted later.
 
 **TL pre-review — checks spec against existing ADRs.**
 TL runs `adr list` and checks whether the spec violates any existing architectural decision. Violations are flagged as CONCERN with the ADR reference — e.g. "ADR-0003 chose in-memory cache; this spec introduces Redis."
