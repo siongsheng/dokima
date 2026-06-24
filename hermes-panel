@@ -689,6 +689,10 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
             if rc == 0 and stdout.strip():
                 update_roadmap_status(roadmap_path, f.id, "done")
                 print(f"  Auto-repair: {f.id} → [x] Done (merged PR: {stdout.strip()})")
+                # Update STATUS.md
+                status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+                update_status_md(status_path, f.id, f.title, "done",
+                                 pr_url=stdout.strip(), source="auto-repair")
                 repaired += 1
                 break
 
@@ -701,6 +705,107 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
         git("push", "origin", DEFAULT_BRANCH)
 
     return repaired
+
+
+# ── STATUS.md helpers ─────────────────────────────
+
+def _parse_status_md(status_path: str) -> tuple:
+    """Parse STATUS.md into (header, active_entries, archived_entries).
+       Returns defaults if file doesn't exist."""
+    if not os.path.exists(status_path):
+        header = f"# Specs Status — initialized {time.strftime('%Y-%m-%d %H:%M')}\n\n"
+        return header, [], []
+
+    with open(status_path) as f:
+        content = f.read()
+
+    # Extract header (everything before ## Active or ## Archived)
+    header_end = len(content)
+    for marker in ["\n## Active", "\n## Archived"]:
+        idx = content.find(marker)
+        if idx != -1 and idx < header_end:
+            header_end = idx
+    header = content[:header_end].strip() + "\n"
+
+    # Parse active entries
+    active = []
+    active_m = re.search(r'## Active\n(.*?)(?=\n## |\Z)', content, re.DOTALL)
+    if active_m:
+        for line in active_m.group(1).strip().split("\n"):
+            line = line.strip()
+            if line:
+                active.append(line)
+
+    # Parse archived entries
+    archived = []
+    archive_m = re.search(r'## Archived\n(.*?)(?=\n## |\Z)', content, re.DOTALL)
+    if archive_m:
+        for line in archive_m.group(1).strip().split("\n"):
+            line = line.strip()
+            if line:
+                archived.append(line)
+
+    return header, active, archived
+
+
+def _make_status_entry(feature_id: str, title: str, status: str, timestamp: str = "",
+                       branch: str = "", pr_url: str = "", source: str = "panel") -> str:
+    """Build a structured STATUS.md entry line."""
+    ts = timestamp or time.strftime('%Y-%m-%d %H:%M')
+
+    if status == "in_progress":
+        branch_part = f", branch `{branch}`" if branch else ""
+        return f"- **{feature_id}: {title}** — in progress since {ts}{branch_part} [{source}]"
+    else:
+        # done
+        if pr_url:
+            pr_match = re.search(r'/pull/(\d+)', pr_url)
+            pr_num = pr_match.group(1) if pr_match else "?"
+            pr_part = f", PR [#{pr_num}]({pr_url})"
+        else:
+            pr_part = ""
+        return f"- **{feature_id}: {title}** — done {ts}{pr_part} [{source}]"
+
+
+def update_status_md(status_path: str, feature_id: str, title: str, status: str,
+                     timestamp: str = "", branch: str = "", pr_url: str = "",
+                     source: str = "panel"):
+    """Update STATUS.md for a feature lifecycle event.
+       status: 'in_progress' or 'done'. Dedupes, preserves manual entries."""
+
+    header, active, archived = _parse_status_md(status_path)
+
+    new_entry = _make_status_entry(feature_id, title, status, timestamp,
+                                   branch, pr_url, source)
+
+    # Pattern to match existing panel-managed entries for this feature
+    entry_pattern = re.compile(rf'^- \*\*{feature_id}:')
+
+    # Remove existing entry for this feature from both sections
+    active = [e for e in active if not entry_pattern.match(e)]
+    archived = [e for e in archived if not entry_pattern.match(e)]
+
+    # Place in correct section
+    if status == "in_progress":
+        active.append(new_entry)
+    else:
+        archived.append(new_entry)
+
+    # Update header timestamp
+    ts = timestamp or time.strftime('%Y-%m-%d %H:%M')
+    header = re.sub(r'(# Specs Status).*', rf'\1 — last updated {ts}', header)
+
+    # Build output
+    output = header + "\n"
+    output += "## Active\n"
+    if active:
+        output += "\n".join(active) + "\n"
+    output += "\n## Archived\n"
+    if archived:
+        output += "\n".join(archived) + "\n"
+
+    with open(status_path, "w") as f:
+        f.write(output)
 
 
 # ── parallel execution ────────────────────────────
@@ -985,6 +1090,12 @@ def run_next_setup(interactive: bool = False) -> str | None:
     # 4. Mark in progress (on default branch)
     update_roadmap_status(roadmap_path, next_feat.id, "in_progress")
     commit_roadmap_update(roadmap_path, next_feat.id, "start")
+
+    # Update STATUS.md
+    status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+    branch = f"feat/{slugify(f'{next_feat.id}-{next_feat.title}')[:50]}"
+    update_status_md(status_path, next_feat.id, next_feat.title, "in_progress",
+                     branch=branch, source="panel")
 
     # 5. Return feature string for the pipeline
     feature = f"{next_feat.id}: {next_feat.title}"
@@ -2675,8 +2786,14 @@ Report: what you fixed, commit hash."""
             fid_match = re.match(r'(F\d{3})', PANEL_FEATURE)
             if fid_match:
                 fid = fid_match.group(1)
+                # Extract title from PANEL_FEATURE
+                title = PANEL_FEATURE.split(": ", 1)[1] if ": " in PANEL_FEATURE else PANEL_FEATURE
                 update_roadmap_status(roadmap_path, fid, "done")
                 commit_roadmap_update(roadmap_path, fid, "done")
+                # Update STATUS.md
+                status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+                update_status_md(status_path, fid, title, "done",
+                                 pr_url=pr_url or "", source="panel")
 
     # ── Release lock ──
     lock_fd.close()
