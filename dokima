@@ -2495,82 +2495,14 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
         fix_verdict = tl_result.get("verdict", "UNKNOWN")
         tl_output = tl_result.get("tl_output", "")
 
-        # Update PR body with TL verdict
         print(f"\n  TL Verdict: {fix_verdict}", flush=True)
         if fix_verdict == "APPROVED":
             print(f"  ✅ All blockers resolved — PR #{pr_num} APPROVED", flush=True)
-            print(f"  {pr_url}", flush=True)
         elif fix_verdict == "BLOCKED":
-            new_blockers = [
-                l.strip() for l in tl_output.split("\n")
-                if any(kw in l.upper() for kw in ("BLOCKER", "MUST FIX"))
-                and l.strip()
-            ]
-            if new_blockers:
-                print(f"  ⚠ Fix introduced {len(new_blockers)} new blocker(s):", flush=True)
-                for b in new_blockers:
-                    print(f"     - {b}", flush=True)
-            else:
-                print(f"  PR #{pr_num} still has unresolved blockers. Run --fix again.", flush=True)
-            print(f"  {pr_url}", flush=True)
+            print(f"  ❌ PR #{pr_num} still has unresolved blockers.", flush=True)
         else:
             print(f"  Verdict: {fix_verdict}. Check PR: {pr_url}", flush=True)
-
-        # Prepend resolution block to PR body
-        try:
-            # Build resolution table from original blockers
-            table_rows = ""
-            for b in blockers:
-                # Truncate long blocker descriptions for table
-                b_clean = b.strip()
-                if len(b_clean) > 80:
-                    b_clean = b_clean[:77] + "..."
-                status = "✅ Resolved" if fix_verdict == "APPROVED" else "⚠️ Pending"
-                table_rows += f"| {b_clean} | {status} |\n"
-            status_emoji = "✅" if fix_verdict == "APPROVED" else "❌" if fix_verdict == "BLOCKED" else "⚠️"
-            resolution = (
-                f"## Fix Applied — {status_emoji} {fix_verdict}\n\n"
-                f"| Blocker | Status |\n"
-                f"|---------|--------|\n"
-                f"{table_rows}\n"
-            )
-            # Fetch existing PR body and prepend
-            existing_body = ""
-            body_out, _, body_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
-                                      "--json", "body", "--jq", ".body")
-            if body_rc == 0 and body_out.strip():
-                existing_body = body_out.strip()
-            # Remove any previous Fix Applied block to avoid stacking
-            existing_body = re.sub(
-                r'## Fix Applied[^\n]*\n\n(\|.*?\n)*\n?',
-                '', existing_body, flags=re.DOTALL
-            )
-            # Remove old Review sections (TL appends new one after us)
-            existing_body = re.sub(
-                r'\n## Review\n\n.*?(?=\n## |\Z)',
-                '', existing_body, flags=re.DOTALL
-            )
-            # Append correct Review section with fix verdict
-            review_block = (
-                f"\n\n## Review\n\n"
-                f"**Verdict:** {fix_verdict}  \n"
-                f"**Risk:** LOW\n\n"
-                f"### Re-reviewed Blockers\n"
-            )
-            for b in blockers:
-                review_block += f"- {b.strip()} → {'✅ Resolved' if fix_verdict == 'APPROVED' else '⚠️ Pending'}\n"
-            existing_body += review_block
-            new_body = f"{resolution}\n{existing_body}" if existing_body else resolution
-            _, edit_err, edit_rc = gh("api",
-                f"repos/{REPO}/pulls/{pr_num}",
-                "--method", "PATCH",
-                "-f", f"body={new_body}")
-            if edit_rc == 0:
-                print("  📝 PR description updated with resolution", flush=True)
-            else:
-                print(f"  ⚠ PR update failed: {edit_err[:200]}", flush=True)
-        except (OSError, IOError) as e:
-            print(f"  ⚠ Could not update PR description: {e}", flush=True)
+        print(f"  {pr_url}", flush=True)
     else:
         print(f"\n{'═'*60}", flush=True)
         print(f"  ❌ Fix failed — coder could not complete.", flush=True)
@@ -3044,7 +2976,11 @@ SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missin
 FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {REPO} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
 Do NOT --approve (self-approval blocked). User merges manually.
 
-End with: VERDICT (APPROVED/CHANGES REQUESTED/BLOCKED) + RISK (LOW/MEDIUM/HIGH) + RELEASE (YES/NO + level if yes).
+CRITICAL — your final output MUST end with this exact format (these lines are parsed):
+VERDICT: APPROVED
+RISK: LOW
+RELEASE: NO
+(Use APPROVED / BLOCKED / CHANGES REQUESTED. Use LOW / MEDIUM / HIGH. Use YES + semver or NO.)
 RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed."""
     tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
                             tl_prompt, timeout=600, cwd=PROJECT_DIR)
