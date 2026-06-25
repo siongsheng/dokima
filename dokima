@@ -2931,7 +2931,9 @@ CRITICAL — your final output MUST end with this exact format (these lines are 
 VERDICT: APPROVED
 RISK: LOW
 RELEASE: NO
-(Use APPROVED / BLOCKED / CHANGES REQUESTED. Use LOW / MEDIUM / HIGH. Use YES + semver or NO.)
+(Use APPROVED / BLOCKED / CHANGES REQUESTED.
+ Risk: LOW = isolated, well-tested, no DB/API surface. MEDIUM = DB/API/UI, moderate blast radius. HIGH = auth/payments/security, wide blast radius → human review required.
+ Use YES + semver or NO for RELEASE.)
 RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed."""
     tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
                             tl_prompt, timeout=600, cwd=PROJECT_DIR)
