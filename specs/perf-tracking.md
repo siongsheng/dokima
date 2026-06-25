@@ -18,7 +18,7 @@
 **Bugs found this run:**
 - `spec-strategist-lite` and `ponytail-guard` not accessible (external_dirs empty) ✅ FIXED
 - AGENTS.md missing Build:/Lint: entries → npm defaults on Python project ✅ FIXED (484b2c6)
-- `detect_commands()` caches from main at startup — coder AGENTS.md changes invisible ⚠ ARCHITECTURAL
+- `detect_commands()` caches from main at startup — coder AGENTS.md changes invisible ✅ RESOLVED (2026-06-25: re-run in run_phase3_vet after branch checkout)
 - One test timeout at 61s (exit 124) during coder exploration
 
 ## Historical Runs
