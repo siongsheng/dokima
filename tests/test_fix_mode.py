@@ -159,8 +159,8 @@ def test_fix_flag_dispatches_to_run_fix_mode(panel, tmpdir):
     try:
         sys.argv = ['dokima', '--fix', project_dir]
 
-        def mock_run_fix(pd):
-            run_fix_args.append(pd)
+        def mock_run_fix(**kwargs):
+            run_fix_args.append(kwargs.get('project_dir', ''))
 
         with patch.object(panel, 'acquire_lock', return_value=(None, None)):
             with patch.object(panel, 'run_fix_mode', side_effect=mock_run_fix):
@@ -241,6 +241,90 @@ def test_fix_answers_warning(panel):
     output = "".join(captured)
     # Should not crash — at minimum no "ERROR: Feature description required" from fix mode path
     assert "ERROR" not in output or "answers" not in output
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Task 5+6+7: run_fix_mode() orchestrator
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_run_fix_mode_discover_none(panel):
+    """No BLOCKED PR → prints message, returns."""
+    with patch.object(panel, 'discover_blocked_pr', return_value=None):
+        with patch.object(panel, 'gh'):
+            panel.run_fix_mode("/tmp/test")
+            panel.gh.assert_not_called()
+
+
+def test_run_fix_mode_extracts_blockers(panel):
+    """Happy path: discovers PR, extracts blockers, proceeds."""
+    mock_pr = {"number": 42, "title": "[BLOCKED] Fix bug", "headRefName": "feat/fix-bug",
+               "body": "## Review\n**Verdict:** BLOCKED\n\n### Blockers\n- Login fails\n- Tests broken", "updatedAt": "2026-06-25T10:00:00Z"}
+    # Mock gh for PR view (not merged, not closed) and git
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ('{"state": "OPEN", "merged": false}', "", 0)
+        return ("", "", 0)
+    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+        with patch.object(panel, 'gh', side_effect=mock_gh):
+            with patch.object(panel, 'git'):
+                with patch.object(panel, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/42"}):
+                    with patch.object(panel, 'run_phase3_vet', return_value={"nm_output": "", "pr_url": "", "coder_failed": False, "verdict": "APPROVED"}):
+                        with patch.object(panel, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "", "risk": "LOW"}):
+                            with patch.object(panel, 'run_phase5_tech_lead', return_value={"verdict": "APPROVED", "tl_output": "All good"}):
+                                with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
+                                    with patch('sys.stdout'):
+                                        panel.run_fix_mode("/tmp/test")
+
+
+def test_run_fix_mode_merged_pr(panel):
+    """PR is already merged → exits with message."""
+    mock_pr = {"number": 42, "title": "[BLOCKED] Merged PR", "headRefName": "feat/merged",
+               "body": "", "updatedAt": "2026-06-25T10:00:00Z"}
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ('{"state": "OPEN", "merged": true}', "", 0)
+        return ("", "", 0)
+    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+        with patch.object(panel, 'gh', side_effect=mock_gh):
+            with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
+                with patch('sys.stdout'):
+                    panel.run_fix_mode("/tmp/test")
+    # Should not crash
+
+
+def test_run_fix_mode_no_blockers(panel):
+    """PR has no blockers → prints message."""
+    mock_pr = {"number": 42, "title": "[BLOCKED] No blockers", "headRefName": "feat/none",
+               "body": "## Review\n**Verdict:** BLOCKED", "updatedAt": "2026-06-25T10:00:00Z"}
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ('{"state": "OPEN", "merged": false}', "", 0)
+        return ("", "", 0)
+    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+        with patch.object(panel, 'gh', side_effect=mock_gh):
+            with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
+                with patch('sys.stdout'):
+                    panel.run_fix_mode("/tmp/test")
+    # Should not crash
+
+
+def test_run_fix_mode_architectural_only(panel):
+    """All blockers are architectural → exits."""
+    mock_pr = {"number": 42, "title": "[BLOCKED] Architectural",
+               "headRefName": "feat/arch",
+               "body": "## Review\n**Verdict:** BLOCKED\n\n### Blockers\n- ARCHITECTURAL: Redesign everything",
+               "updatedAt": "2026-06-25T10:00:00Z"}
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ('{"state": "OPEN", "merged": false}', "", 0)
+        return ("", "", 0)
+    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+        with patch.object(panel, 'gh', side_effect=mock_gh):
+            with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
+                with patch('sys.stdout'):
+                    panel.run_fix_mode("/tmp/test")
+    # Should not crash
 
 
 # ═══════════════════════════════════════════════════════════════════
