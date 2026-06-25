@@ -2546,11 +2546,10 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
                 '', existing_body, flags=re.DOTALL
             )
             new_body = f"{resolution}\n{existing_body}" if existing_body else resolution
-            tmp_body = "/tmp/pr-resolution.md"
-            with open(tmp_body, 'w') as f:
-                f.write(new_body)
-            _, edit_err, edit_rc = gh("pr", "edit", str(pr_num), "--repo", REPO,
-                                     "--body-file", tmp_body)
+            _, edit_err, edit_rc = gh("api",
+                f"repos/{REPO}/pulls/{pr_num}",
+                "--method", "PATCH",
+                "-f", f"body={new_body}")
             if edit_rc == 0:
                 print("  📝 PR description updated with resolution", flush=True)
             else:
