@@ -1,6 +1,6 @@
 # Dokima
 
-**Multi-agent orchestration engine.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review. Works with Hermes Agent, Claude Code, or any agent that can follow instructions.
+**Multi-agent orchestration engine.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, prompted TDD discipline, and two independent adversarial reviews. Works with Hermes Agent (primary). Claude Code and Codex support in development.
 
 ## Why
 
@@ -126,10 +126,10 @@ Every stage has a contract:
 
 - **Human gate** — pauses after strategist so you can review the spec before code gets written. `[y]` review in less, `[e]` edit in vim, `[Enter]` approve, `[q]` abort. Auto-skipped in non-interactive mode.
 - **Project-agnostic** — takes any repo path. Reads test/build/lint commands from `AGENTS.md`.
-- **TDD enforced** — RED→GREEN two-commit discipline verified at each phase. Bundled commits = BLOCKER.
+- **TDD prompted** — coder is instructed to use RED→GREEN two-commit discipline. nm reviews check for bundled commits.
 - **Parallel coders** — worktree isolation with task claiming. DAG-based wave scheduling.
 - **Filtered auto-fix** — nm and TL loop back to Coder for objective issues (missing tests, uncaught exceptions, TDD violations). Architecture and spec findings stay human-only. Re-verified after fix. `PANEL_SKIP_AUTOFIX=1` to disable.
-- **Cost-optimized** — Uses depth-gating to skip unnecessary phases. Shell verification (zero AI tokens), flash model for coder, lite skills (2.2K vs 13.8K system tokens), spec noise extraction (45-58% smaller), task-extract (coder reads ~800 chars, not full 12K spec).
+- **Cost-optimized** — depth-gating skips unnecessary phases. Shell verification (zero AI tokens), flash model for coding, compressed lite skills, spec noise extraction, task-extract (coder reads condensed task breakdown, not the full spec).
 - **Two adversarial reviews** — nm (fresh model, different family) + TL (spec compliance). Two independent models catch different classes of bugs.
 - **Graceful degradation for coder and tech lead phases** — timeouts produce partial results, not failures (strategist short output aborts). Partial review > no review.
 - **ADR lifecycle** — strategist reads past architectural decisions before designing. Panel creates new ADRs from decision tables. TL checks spec against existing ADRs. Powered by [adr-tools](https://github.com/npryce/adr-tools).
@@ -167,7 +167,7 @@ The panel doesn't invent methodology. Every stage draws from battle-tested open-
 
 | Stage | Draws from | What we took | Why |
 |-------|-----------|-------------|-----|
-| **Strategist** | [Spec Kit](https://github.com/github/spec-kit) (51K ★) | Constitution-first development — mission, tech-stack, roadmap, conventions before any code | Spec-kit proved agents produce better code when they design first |
+| **Strategist** | [Spec Kit](https://github.com/github/spec-kit) | Constitution-first development — mission, tech-stack, roadmap, conventions before any code | Spec-kit proved agents produce better code when they design first |
 | | [ponytail](https://github.com/DietrichGebert/ponytail) | YAGNI laziness ladder — "Does this already exist? Can stdlib do it?" before writing a spec | Prevents the #1 waste in agentic coding: building things that don't need to exist |
 | **Coder** | [Kent Beck's TDD](https://en.wikipedia.org/wiki/Test-driven_development) | RED → GREEN → REFACTOR cycle, enforced by the coder skill | 25 years of evidence: tests written first produce fewer defects |
 | | AI Coding Best Practices | Task granularity (5-15 min), no scope creep, pipeline gates | Agents drift without guardrails. Small tasks keep them focused |

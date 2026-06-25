@@ -337,14 +337,14 @@ Only HIGH confidence + LOW impact skips adversarial review. `PANEL_FORCE_FULL=1`
 
 | Optimization | Savings |
 |-------------|---------|
-| Spec noise extraction | 45-58% smaller spec |
-| Task-extract for coder | Coder reads ~800 chars, not ~12K |
-| Coder v4-flash model | 3.1× cheaper than v4-pro |
+| Spec noise extraction | Significantly smaller spec (strips transcript noise) |
+| Task-extract for coder | Coder reads condensed task breakdown, not the full spec |
+| Coder v4-flash model | Flash model for implementation tasks |
 | Phase 3 pure shell (vet) | Zero AI tokens |
-| Lite skills | 2.2K vs 13.8K for full skills |
+| Lite skills | Compressed skill files (~84% smaller than full equivalents) |
 | Different model family (nm) | Catches bias-blind spots — costs tokens but prevents bugs |
 
-**54% cheaper than an unoptimized pipeline.** No dollar amounts — provider pricing changes; percentages don't.
+**Substantially cheaper than running all phases at maximum model level.** Savings come from: shell-based verification (zero tokens), flash model for coding, compressed skills, and noise extraction. No dollar amounts — provider pricing changes; the architecture is the savings.
 
 ---
 

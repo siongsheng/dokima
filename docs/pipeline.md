@@ -237,12 +237,12 @@ Gaps are sent back to the Strategist for ONE refinement pass. Skip with `PANEL_S
 
 | Optimization | Mechanism | Saving |
 |-------------|-----------|---------|
-| Spec noise extraction | Strip session transcript (prompt echo, tool calls) from strategist output | 45-58% smaller |
-| Task-extract for coder | Generate `specs/<feature>-tasks.md` — coder reads ~800 chars, not ~12K | ~93% smaller read |
-| Coder flash model | `deepseek-v4-flash` instead of v4-pro for implementation | 3.1× cheaper |
+| Spec noise extraction | Strip session transcript (prompt echo, tool calls) from strategist output | Significantly smaller |
+| Task-extract for coder | Generate `specs/<feature>-tasks.md` — coder reads condensed task breakdown | Substantially smaller read |
+| Coder flash model | `deepseek-v4-flash` instead of v4-pro for implementation | Flash-tier pricing |
 | Phase 3 pure shell (vet) | No AI agent — `git checkout`, test, build | Zero AI tokens |
-| Phase 4 fresh nm session | Different model family catches bias-blind spots | ~15% of pipeline |
-| Lite skills | 2.2K vs 13.8K for full skills | ~11.5K system tokens saved |
+| Phase 4 fresh nm session | Different model family catches bias-blind spots | One additional model call |
+| Lite skills | Compressed skill files vs full equivalents | ~84% smaller files |
 
 **Cost distribution by phase (approximate):**
 
