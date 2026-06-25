@@ -2005,7 +2005,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
-def run_fix_mode(project_dir):
+def run_fix_mode(project_dir, fix_all=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
     PROJECT_DIR = project_dir
@@ -3617,7 +3617,7 @@ def main():
 
     # ── FIX MODE: early dispatch ──
     if is_fix:
-        run_fix_mode(project_dir=PROJECT_DIR)
+        run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all)
         _cleanup_lock()
         return
 
