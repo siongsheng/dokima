@@ -2515,6 +2515,48 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             print(f"  {pr_url}", flush=True)
         else:
             print(f"  Verdict: {fix_verdict}. Check PR: {pr_url}", flush=True)
+
+        # Prepend resolution block to PR body
+        try:
+            # Build resolution table from original blockers
+            table_rows = ""
+            for b in blockers:
+                # Truncate long blocker descriptions for table
+                b_clean = b.strip()
+                if len(b_clean) > 80:
+                    b_clean = b_clean[:77] + "..."
+                status = "✅ Resolved" if fix_verdict == "APPROVED" else "⚠️ Pending"
+                table_rows += f"| {b_clean} | {status} |\n"
+            status_emoji = "✅" if fix_verdict == "APPROVED" else "❌" if fix_verdict == "BLOCKED" else "⚠️"
+            resolution = (
+                f"## Fix Applied — {status_emoji} {fix_verdict}\n\n"
+                f"| Blocker | Status |\n"
+                f"|---------|--------|\n"
+                f"{table_rows}\n"
+            )
+            # Fetch existing PR body and prepend
+            existing_body = ""
+            body_out, _, body_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+                                      "--json", "body", "--jq", ".body")
+            if body_rc == 0 and body_out.strip():
+                existing_body = body_out.strip()
+            # Remove any previous Fix Applied block to avoid stacking
+            existing_body = re.sub(
+                r'## Fix Applied[^\n]*\n\n(\|.*?\n)*\n?',
+                '', existing_body, flags=re.DOTALL
+            )
+            new_body = f"{resolution}\n{existing_body}" if existing_body else resolution
+            tmp_body = "/tmp/pr-resolution.md"
+            with open(tmp_body, 'w') as f:
+                f.write(new_body)
+            _, edit_err, edit_rc = gh("pr", "edit", str(pr_num), "--repo", REPO,
+                                     "--body-file", tmp_body)
+            if edit_rc == 0:
+                print("  📝 PR description updated with resolution", flush=True)
+            else:
+                print(f"  ⚠ PR update failed: {edit_err[:200]}", flush=True)
+        except (OSError, IOError) as e:
+            print(f"  ⚠ Could not update PR description: {e}", flush=True)
     else:
         print(f"\n{'═'*60}", flush=True)
         print(f"  ❌ Fix failed — coder could not complete.", flush=True)
