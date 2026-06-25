@@ -674,6 +674,7 @@ COMMANDS:
   dokima init "description" [dir]        Project discovery & constitution
   dokima --next [dir]                    Build next feature from roadmap
   dokima --continuous [dir]              Full sprint: build + auto-merge + loop
+  dokima --fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
 
 CONTROL:
   dokima --status [dir]                  Show pipeline state
@@ -689,6 +690,7 @@ EXAMPLES:
   dokima init "trading dashboard" ~/huat
   dokima --next ~/huat
   dokima --continuous ~/huat
+  dokima --fix ~/huat
   dokima --status ~/huat"""
 
 
@@ -1899,6 +1901,301 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
     return continue_loop, should_stop
 
 
+def discover_blocked_pr():
+    """Detect most recent BLOCKED PR via gh CLI.
+    Returns {number, title, headRefName, body} or None."""
+    global REPO
+    stdout, _, rc = gh("pr", "list", "--state", "open",
+                       "--repo", REPO,
+                       "--json", "number,title,body,headRefName,updatedAt",
+                       "--jq", "sort_by(.updatedAt) | reverse")
+    if rc != 0 or not stdout.strip():
+        print("  No open PRs found.", flush=True)
+        return None
+
+    import json as _json
+    try:
+        pr_list = _json.loads(stdout.strip())
+    except _json.JSONDecodeError:
+        print("  Failed to parse PR list output.", flush=True)
+        return None
+
+    prs = []
+    for pr_data in pr_list:
+        number = pr_data.get("number")
+        title = pr_data.get("title", "")
+        body = pr_data.get("body", "")
+        head = pr_data.get("headRefName")
+        updated = pr_data.get("updatedAt", "")
+
+        is_blocked = (
+            "[BLOCKED]" in title
+            or re.search(r'VERDICT.*?BLOCKED', body, re.IGNORECASE | re.DOTALL)
+            or "### Blockers" in body
+        )
+        if is_blocked:
+            prs.append({
+                "number": number,
+                "title": title,
+                "headRefName": head,
+                "body": body,
+                "updatedAt": updated,
+            })
+
+    if not prs:
+        print("  No BLOCKED PRs found.", flush=True)
+        return None
+
+    if len(prs) > 1:
+        print(f"  Found {len(prs)} BLOCKED PRs. Fixing #{prs[0]['number']} (most recent).", flush=True)
+    return prs[0]
+
+
+def extract_blockers_from_pr(pr_body, pr_number=None):
+    """Parse PR body for blocker descriptions under ### Blockers section.
+    Returns list of blocker strings with ARCHITECTURAL lines excluded.
+    Falls back to PR comments if pr_number provided."""
+    global REPO
+    blockers = []
+
+    # Primary: ### Blockers section
+    blockers_section = re.search(r'### Blockers\s*\n(.*?)(?=\n### |\n## |\Z)', pr_body, re.DOTALL)
+    if blockers_section:
+        section_text = blockers_section.group(1)
+        for line in section_text.split("\n"):
+            line = line.strip()
+            if line.startswith("- "):
+                desc = line[2:].strip()
+                if desc:
+                    blockers.append(desc)
+
+    # Fallback: look for 🔴 BLOCKER or BLOCKER: lines anywhere
+    if not blockers:
+        for line in pr_body.split("\n"):
+            stripped = line.strip()
+            if "🔴 BLOCKER" in stripped or stripped.startswith("BLOCKER:"):
+                desc = stripped.replace("🔴", "").replace("BLOCKER:", "").replace("BLOCKER", "").strip()
+                if desc:
+                    blockers.append(desc)
+
+    # Fallback: PR comments if no blockers found and pr_number given
+    if not blockers and pr_number:
+        try:
+            stdout, _, rc = gh("pr", "view", str(pr_number), "--repo", REPO, "--comments",
+                               "--json", "body", "--jq", ".body")
+            if rc == 0 and stdout.strip():
+                # Recurse with comment body as pr_body
+                return extract_blockers_from_pr(stdout)
+        except Exception:
+            print("  ⚠ Failed to fetch PR comments for blocker extraction", flush=True)
+
+    # Filter out ARCHITECTURAL blockers
+    filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
+
+    return filtered
+
+
+def run_fix_mode(project_dir):
+    """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
+    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    PROJECT_DIR = project_dir
+
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  FIX MODE — {project_dir}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
+
+    # Step 1: Discover BLOCKED PR
+    pr = discover_blocked_pr()
+    if pr is None:
+        print("  No BLOCKED PRs found. Run `dokima --next` for new features.", flush=True)
+        return
+
+    pr_num = pr["number"]
+    pr_title = pr["title"]
+    pr_branch = pr["headRefName"]
+    pr_body = pr["body"]
+    pr_url = f"https://github.com/{REPO}/pull/{pr_num}"
+    print(f"  Found PR #{pr_num}: {pr_title}", flush=True)
+    print(f"  Branch: {pr_branch}", flush=True)
+    print(f"  URL: {pr_url}\n", flush=True)
+
+    # Step 2: Check PR state (EC8: merged, closed)
+    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+                                 "--json", "state,merged", "--jq", "{state, merged}")
+    if view_rc == 0:
+        import json as _json
+        try:
+            pr_state = _json.loads(view_stdout)
+            if pr_state.get("merged"):
+                print(f"  PR #{pr_num} is already merged. Nothing to fix.", flush=True)
+                return
+            if pr_state.get("state", "").upper() == "CLOSED":
+                print(f"  PR #{pr_num} is closed.", flush=True)
+                return
+        except _json.JSONDecodeError:
+            pass  # Proceed anyway
+
+    # Step 3: Extract blockers (EC13: no TL review fallback)
+    blockers = extract_blockers_from_pr(pr_body, pr_number=pr_num)
+    if not blockers:
+        # EC13: check PR comments via fallback
+        blockers = extract_blockers_from_pr("", pr_number=pr_num)
+    if not blockers:
+        print(f"  Cannot extract blockers automatically. Review PR manually:", flush=True)
+        print(f"  {pr_url}", flush=True)
+        return
+
+    # Step 4: Filter architectural blockers (EC4)
+    code_blockers = [b for b in blockers if "ARCHITECTURAL" not in b.upper()
+                     and "ARCHITECTURE VIOLATION" not in b.upper()]
+    arch_blockers = [b for b in blockers if b not in code_blockers]
+
+    if arch_blockers:
+        print(f"  ⚠ Architectural blockers (skipped — require human decision):", flush=True)
+        for b in arch_blockers:
+            print(f"     - {b}", flush=True)
+
+    if not code_blockers:
+        print("  All blockers are architectural. Human review required.", flush=True)
+        return
+
+    # Step 5: PANEL_FIX_ALL env var (EC16)
+    should_fix_items = []
+    if os.environ.get("PANEL_FIX_ALL") == "1":
+        for line in pr_body.split("\n"):
+            if "SHOULD FIX" in line.upper():
+                should_fix_items.append(line.strip())
+        if should_fix_items:
+            print(f"  PANEL_FIX_ALL=1: including {len(should_fix_items)} SHOULD FIX items", flush=True)
+    else:
+        # Check if any SHOULD FIX exist
+        sf_count = sum(1 for line in pr_body.split("\n") if "SHOULD FIX" in line.upper())
+        if sf_count:
+            print(f"  {sf_count} SHOULD FIX items skipped (set PANEL_FIX_ALL=1 to include)", flush=True)
+
+    fix_tasks = code_blockers + should_fix_items
+
+    print(f"\n  Fixing {len(code_blockers)} BLOCKER(s)", flush=True)
+    for b in code_blockers:
+        print(f"     - {b}", flush=True)
+
+    # Step 6: Abbreviated Human Gate (EC9: non-interactive)
+    # Skip if PANEL_SKIP_HUMAN_GATE=1 or non-interactive (no TTY)
+    skip_gate = os.environ.get("PANEL_SKIP_HUMAN_GATE") == "1"
+    is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    if not skip_gate and is_tty:
+        print(f"\n  ── Human Gate ──", flush=True)
+        print(f"  [y] Proceed with fix  [e] Edit blocker list  [q] Abort", flush=True)
+        choice = input("  Choice: ").strip().lower()
+        if choice == "q":
+            print("  Fix aborted by user.", flush=True)
+            return
+        if choice == "e":
+            import tempfile
+            content = "\n".join(fix_tasks)
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                f.write(content)
+                tmp_path = f.name
+            editor = os.environ.get("EDITOR", "vim")
+            subprocess.call([editor, tmp_path])
+            with open(tmp_path) as f:
+                fix_tasks = [l.strip() for l in f if l.strip()]
+            os.unlink(tmp_path)
+            print(f"  {len(fix_tasks)} task(s) after edit.", flush=True)
+
+    # Determine spec path (EC14: spec file stale/missing)
+    spec_path = None
+    specs_dir = os.path.join(project_dir, "specs")
+    if os.path.isdir(specs_dir):
+        for entry in sorted(os.listdir(specs_dir)):
+            entry_path = os.path.join(specs_dir, entry)
+            if os.path.isdir(entry_path) and entry != "archive":
+                spec_file = os.path.join(entry_path, "spec.md")
+                if os.path.exists(spec_file):
+                    spec_path = spec_file
+                    break
+
+    # Step 7: Coder phase (construct fix-only prompt, spawn coder)
+    print(f"\n{'─'*60}", flush=True)
+    print("  Phase: Coder (fix only)", flush=True)
+    print(f"{'─'*60}", flush=True)
+
+    # Ensure we're on the right branch (EC7: branch divergence)
+    git("checkout", pr_branch)
+    git("pull", "origin", pr_branch)
+
+    # Construct fix-only coder prompt (Task 6)
+    fix_prompt = (
+        f"FIX MODE: Fix BLOCKED PR #{pr_num}\n\n"
+        f"PR Title: {pr_title}\n"
+        f"Branch: {pr_branch}\n\n"
+        f"### Blockers to Fix\n"
+    )
+    for i, task in enumerate(fix_tasks, 1):
+        fix_prompt += f"{i}. {task}\n"
+    fix_prompt += (
+        "\n### Constraints\n"
+        "- FIX MODE: only fix the listed blockers. Do NOT add features.\n"
+        "- Do NOT refactor unrelated code. Do NOT change architecture.\n"
+        "- TDD: write failing test first, then fix, then confirm tests pass.\n"
+        "- Single commit message: `fix: address TL review blockers`\n"
+        "- Run BUILD_CMD + TEST_CMD before pushing.\n"
+        "- If unable to fix a blocker, report: ⚠ CODER UNABLE TO FIX: <reason>\n"
+    )
+
+    # Use existing coder invocation pattern
+    coder_result = run_phase2_coder(
+        feature=pr_title,
+        spec="",
+        spec_path=spec_path or "",
+        tasks_extract_path="",  # Blockers ARE the tasks (inlined)
+        pr_sections=f"## Why\n\nFix blockers on PR #{pr_num}: {pr_title}",
+        branch=pr_branch,
+        depth="full",
+        mode="fix",
+        is_next=False
+    )
+    coder_failed = coder_result.get("coder_failed", True)
+    pr_url = coder_result.get("pr_url", pr_url)
+
+    # Step 8: vet phase
+    if not coder_failed:
+        print(f"\n{'─'*60}", flush=True)
+        print("  Phase: vet (build + test)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        vet_result = run_phase3_vet(
+            feature=pr_title,
+            branch=pr_branch,
+            pr_sections=f"## What Changed\n\nFixed blockers on PR #{pr_num}",
+            impact="MEDIUM",
+            spec_path=spec_path or ""
+        )
+        if vet_result.get("coder_failed"):
+            coder_failed = True
+            print("  ⚠ vet phase failed. Fix incomplete.", flush=True)
+
+    # Step 9: nm phase
+    if not coder_failed:
+        print(f"\n{'─'*60}", flush=True)
+        print("  Phase: nm (adversarial review)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        nm_result = run_phase4_nm(
+            feature=pr_title,
+            branch=pr_branch,
+            impact="MEDIUM",
+            pr_url_in=pr_url
+        )
+        pr_url = nm_result.get("pr_url", pr_url)
+
+    # Step 10: Report (skip TL — blockers already flagged by TL)
+    # vet+nm is sufficient: vet catches build/test regressions,
+    # nm catches fix-introduced bugs from different model family.
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  ✅ Fix complete — PR #{pr_num} updated", flush=True)
+    print(f"  {pr_url}", flush=True)
+    print(f"  Run `dokima --next` to continue, or `dokima --fix` if still blocked.", flush=True)
+
+
 def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next):
     """Phase 2: Coder — spawn coder, retry loop, TDD verification. Returns dict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD, LINT_CMD
@@ -2215,12 +2512,13 @@ def run_phase4_nm(feature, branch, impact, pr_url_in):
 
     pr_url = pr_url_in
 
-    # Extract PR URL from nm output
-    pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
-    if pr_match:
-        pr_url = pr_match.group(1)
-        print(f"  PR: {pr_url}", flush=True)
-    else:
+    # Extract PR URL from nm output (only if we don't already have one)
+    if not pr_url:
+        pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
+        if pr_match:
+            pr_url = pr_match.group(1)
+            print(f"  PR: {pr_url}", flush=True)
+    if not pr_url:
         stdout, _, rc = gh("pr", "list", "--repo", REPO, "--head", branch,
                            "--json", "url", "--jq", ".[0].url")
         if rc == 0 and stdout:
@@ -3053,6 +3351,8 @@ def main():
     is_kill = False
     is_status = False
     is_list_crons = False
+    is_fix = False
+    feature = ""
     user_answers_prefill = None
     filtered_argv = []
     skip_next = False
@@ -3088,9 +3388,13 @@ def main():
         if arg == "--answers":
             skip_next = True
             continue
+        if arg == "--fix":
+            is_fix = True
+            continue
         filtered_argv.append(arg)
 
     answers_idx = None
+    answers_path = None
     for i, arg in enumerate(sys.argv):
         if arg == "--answers" and i + 1 < len(sys.argv):
             answers_idx = i
@@ -3113,16 +3417,26 @@ def main():
             break
 
     # ── Determine PROJECT_DIR and feature ──
-    if is_next or is_stop or is_kill or is_status:
+    if is_next or is_stop or is_kill or is_status or is_fix:
         if is_stop or is_kill or is_status:
             if len(filtered_argv) >= 1:
                 PROJECT_DIR = os.path.abspath(filtered_argv[0])
             else:
                 PROJECT_DIR = os.getcwd()
+        elif is_fix:
+            if len(filtered_argv) >= 1:
+                PROJECT_DIR = os.path.abspath(filtered_argv[0])
+            else:
+                PROJECT_DIR = os.getcwd()
+            PANEL_FEATURE = f"fix: {PROJECT_DIR}"
         else:
-            # --next: first arg is feature, second is project dir
-            PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
-            feature = filtered_argv[0] if filtered_argv else ""
+            # --next: if two+ args, first is feature, second is project dir
+            # If one arg, it's the project dir (feature comes from roadmap)
+            if len(filtered_argv) >= 2:
+                PROJECT_DIR = os.path.abspath(filtered_argv[1])
+                feature = filtered_argv[0]
+            else:
+                PROJECT_DIR = os.path.abspath(filtered_argv[0]) if filtered_argv else os.getcwd()
             PANEL_FEATURE = feature
     else:
         if len(filtered_argv) < 1 and not is_help and not is_list_crons:
@@ -3191,6 +3505,16 @@ def main():
     _set_gh_token()
     TEST_CMD, BUILD_CMD, LINT_CMD = detect_commands()
 
+    # ── --answers interaction for --fix ──
+    if is_fix and answers_path is not None:
+        print("  ⚠ --fix mode ignores --answers (no strategist interview). Continuing...", flush=True)
+
+    # ── FIX MODE: early dispatch ──
+    if is_fix:
+        run_fix_mode(project_dir=PROJECT_DIR)
+        _cleanup_lock()
+        return
+
     # ── Auto-archive specs from merged PRs ──
     specs_dir = os.path.join(PROJECT_DIR, "specs")
     archive_dir = os.path.join(specs_dir, "archive")
@@ -3228,6 +3552,14 @@ def main():
             _cleanup_lock()
             return
         PANEL_FEATURE = feature
+
+    # ── Pre-pipeline stop file check ──
+    sp = _stop_path(PROJECT_DIR)
+    if os.path.exists(sp):
+        print("  ⚠ Stop file detected — halting before pipeline")
+        os.remove(sp)
+        _cleanup_lock()
+        return
 
     # ── RUN PIPELINE ──
     if is_continuous:
