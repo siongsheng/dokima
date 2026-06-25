@@ -1997,13 +1997,233 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
 
 def run_fix_mode(project_dir):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
-    print(f"  Running fix mode on {project_dir}...", flush=True)
+    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    PROJECT_DIR = project_dir
+
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  FIX MODE — {project_dir}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
+
+    # Step 1: Discover BLOCKED PR
     pr = discover_blocked_pr()
     if pr is None:
         print("  No BLOCKED PRs found. Run `dokima --next` for new features.", flush=True)
         return
 
-    print(f"  Fixing PR #{pr['number']}: {pr['title']}", flush=True)
+    pr_num = pr["number"]
+    pr_title = pr["title"]
+    pr_branch = pr["headRefName"]
+    pr_body = pr["body"]
+    pr_url = f"https://github.com/{REPO}/pull/{pr_num}"
+    print(f"  Found PR #{pr_num}: {pr_title}", flush=True)
+    print(f"  Branch: {pr_branch}", flush=True)
+    print(f"  URL: {pr_url}\n", flush=True)
+
+    # Step 2: Check PR state (EC8: merged, closed)
+    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+                                 "--json", "state,merged", "--jq", "{state, merged}")
+    if view_rc == 0:
+        import json as _json
+        try:
+            pr_state = _json.loads(view_stdout)
+            if pr_state.get("merged"):
+                print(f"  PR #{pr_num} is already merged. Nothing to fix.", flush=True)
+                return
+            if pr_state.get("state", "").upper() == "CLOSED":
+                print(f"  PR #{pr_num} is closed.", flush=True)
+                return
+        except _json.JSONDecodeError:
+            pass  # Proceed anyway
+
+    # Step 3: Extract blockers (EC13: no TL review fallback)
+    blockers = extract_blockers_from_pr(pr_body, pr_number=pr_num)
+    if not blockers:
+        # EC13: check PR comments via fallback
+        blockers = extract_blockers_from_pr("", pr_number=pr_num)
+    if not blockers:
+        print(f"  Cannot extract blockers automatically. Review PR manually:", flush=True)
+        print(f"  {pr_url}", flush=True)
+        return
+
+    # Step 4: Filter architectural blockers (EC4)
+    code_blockers = [b for b in blockers if "ARCHITECTURAL" not in b.upper()
+                     and "ARCHITECTURE VIOLATION" not in b.upper()]
+    arch_blockers = [b for b in blockers if b not in code_blockers]
+
+    if arch_blockers:
+        print(f"  ⚠ Architectural blockers (skipped — require human decision):", flush=True)
+        for b in arch_blockers:
+            print(f"     - {b}", flush=True)
+
+    if not code_blockers:
+        print("  All blockers are architectural. Human review required.", flush=True)
+        return
+
+    # Step 5: PANEL_FIX_ALL env var (EC16)
+    should_fix_items = []
+    if os.environ.get("PANEL_FIX_ALL") == "1":
+        for line in pr_body.split("\n"):
+            if "SHOULD FIX" in line.upper():
+                should_fix_items.append(line.strip())
+        if should_fix_items:
+            print(f"  PANEL_FIX_ALL=1: including {len(should_fix_items)} SHOULD FIX items", flush=True)
+    else:
+        # Check if any SHOULD FIX exist
+        sf_count = sum(1 for line in pr_body.split("\n") if "SHOULD FIX" in line.upper())
+        if sf_count:
+            print(f"  {sf_count} SHOULD FIX items skipped (set PANEL_FIX_ALL=1 to include)", flush=True)
+
+    fix_tasks = code_blockers + should_fix_items
+
+    print(f"\n  Fixing {len(code_blockers)} BLOCKER(s)", flush=True)
+    for b in code_blockers:
+        print(f"     - {b}", flush=True)
+
+    # Step 6: Abbreviated Human Gate (EC9: non-interactive)
+    # Skip if PANEL_SKIP_HUMAN_GATE=1 or non-interactive (no TTY)
+    skip_gate = os.environ.get("PANEL_SKIP_HUMAN_GATE") == "1"
+    is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    if not skip_gate and is_tty:
+        print(f"\n  ── Human Gate ──", flush=True)
+        print(f"  [y] Proceed with fix  [e] Edit blocker list  [q] Abort", flush=True)
+        choice = input("  Choice: ").strip().lower()
+        if choice == "q":
+            print("  Fix aborted by user.", flush=True)
+            return
+        if choice == "e":
+            import tempfile
+            content = "\n".join(fix_tasks)
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                f.write(content)
+                tmp_path = f.name
+            editor = os.environ.get("EDITOR", "vim")
+            subprocess.call([editor, tmp_path])
+            with open(tmp_path) as f:
+                fix_tasks = [l.strip() for l in f if l.strip()]
+            os.unlink(tmp_path)
+            print(f"  {len(fix_tasks)} task(s) after edit.", flush=True)
+
+    # Determine spec path (EC14: spec file stale/missing)
+    spec_path = None
+    specs_dir = os.path.join(project_dir, "specs")
+    if os.path.isdir(specs_dir):
+        for entry in sorted(os.listdir(specs_dir)):
+            entry_path = os.path.join(specs_dir, entry)
+            if os.path.isdir(entry_path) and entry != "archive":
+                spec_file = os.path.join(entry_path, "spec.md")
+                if os.path.exists(spec_file):
+                    spec_path = spec_file
+                    break
+
+    # Step 7: Coder phase (construct fix-only prompt, spawn coder)
+    print(f"\n{'─'*60}", flush=True)
+    print("  Phase: Coder (fix only)", flush=True)
+    print(f"{'─'*60}", flush=True)
+
+    # Ensure we're on the right branch (EC7: branch divergence)
+    git("checkout", pr_branch)
+    git("pull", "origin", pr_branch)
+
+    # Construct fix-only coder prompt (Task 6)
+    fix_prompt = (
+        f"FIX MODE: Fix BLOCKED PR #{pr_num}\n\n"
+        f"PR Title: {pr_title}\n"
+        f"Branch: {pr_branch}\n\n"
+        f"### Blockers to Fix\n"
+    )
+    for i, task in enumerate(fix_tasks, 1):
+        fix_prompt += f"{i}. {task}\n"
+    fix_prompt += (
+        "\n### Constraints\n"
+        "- FIX MODE: only fix the listed blockers. Do NOT add features.\n"
+        "- Do NOT refactor unrelated code. Do NOT change architecture.\n"
+        "- TDD: write failing test first, then fix, then confirm tests pass.\n"
+        "- Single commit message: `fix: address TL review blockers`\n"
+        "- Run BUILD_CMD + TEST_CMD before pushing.\n"
+        "- If unable to fix a blocker, report: ⚠ CODER UNABLE TO FIX: <reason>\n"
+    )
+
+    # Use existing coder invocation pattern
+    coder_result = run_phase2_coder(
+        feature=pr_title,
+        spec="",
+        spec_path=spec_path or "",
+        tasks_extract_path="",  # Blockers ARE the tasks (inlined)
+        pr_sections=f"## Why\n\nFix blockers on PR #{pr_num}: {pr_title}",
+        branch=pr_branch,
+        depth="full",
+        mode="fix",
+        is_next=False
+    )
+    coder_failed = coder_result.get("coder_failed", True)
+    pr_url = coder_result.get("pr_url", pr_url)
+
+    # Step 8: vet phase
+    if not coder_failed:
+        print(f"\n{'─'*60}", flush=True)
+        print("  Phase: vet (build + test)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        vet_result = run_phase3_vet(
+            feature=pr_title,
+            branch=pr_branch,
+            pr_sections=f"## What Changed\n\nFixed blockers on PR #{pr_num}",
+            impact="MEDIUM",
+            spec_path=spec_path or ""
+        )
+        if vet_result.get("coder_failed"):
+            coder_failed = True
+            print("  ⚠ vet phase failed. Fix incomplete.", flush=True)
+
+    # Step 9: nm phase
+    if not coder_failed:
+        print(f"\n{'─'*60}", flush=True)
+        print("  Phase: nm (adversarial review)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        nm_result = run_phase4_nm(
+            feature=pr_title,
+            branch=pr_branch,
+            impact="MEDIUM",
+            pr_url_in=pr_url
+        )
+        pr_url = nm_result.get("pr_url", pr_url)
+
+    # Step 10: TL re-review
+    if not coder_failed:
+        print(f"\n{'─'*60}", flush=True)
+        print("  Phase: TL re-review", flush=True)
+        print(f"{'─'*60}", flush=True)
+        tl_result = run_phase5_tech_lead(
+            feature=pr_title,
+            pr_url=pr_url,
+            branch=pr_branch,
+            spec_path=spec_path or "original spec not found — review against PR blockers",
+            impact="MEDIUM"
+        )
+        verdict = tl_result.get("verdict", "UNKNOWN")
+        tl_output = tl_result.get("tl_output", "")
+
+        # Step 11: Report (EC5: new blockers)
+        print(f"\n{'═'*60}", flush=True)
+        if verdict == "APPROVED":
+            print(f"  ✅ Fix successful — PR #{pr_num} APPROVED", flush=True)
+            print(f"  {pr_url}", flush=True)
+        elif verdict == "BLOCKED":
+            # Extract new blockers from TL output
+            new_blockers = [
+                l.strip() for l in tl_output.split("\n")
+                if any(kw in l.upper() for kw in ("BLOCKER", "MUST FIX"))
+                and l.strip()
+            ]
+            if new_blockers:
+                print(f"  Fix introduced {len(new_blockers)} new blocker(s):", flush=True)
+                for b in new_blockers:
+                    print(f"     - {b}", flush=True)
+                print("  Run --fix again or review manually.", flush=True)
+            else:
+                print(f"  PR #{pr_num} still BLOCKED. Run --fix again or review manually.", flush=True)
+        else:
+            print(f"  Verdict: {verdict}. Check PR for details.", flush=True)
+            print(f"  {pr_url}", flush=True)
 
 
 def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next):
