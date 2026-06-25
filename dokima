@@ -2282,7 +2282,8 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             reviews = _json.loads(reviews_out)
             if reviews:
                 latest_body = (reviews[-1].get("body") or "").upper()
-                if "VERDICT: APPROVED" in latest_body or "\nAPPROVED" in latest_body:
+                # Match: "VERDICT: APPROVED", "**APPROVED**", "VERDICT\n\n**APPROVED**"
+                if "VERDICT: APPROVED" in latest_body or "**APPROVED**" in latest_body:
                     print(f"  ✅ PR #{pr_num} already APPROVED in most recent review — nothing to fix.", flush=True)
                     print(f"  {pr_url}", flush=True)
                     return
