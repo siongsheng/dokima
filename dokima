@@ -674,6 +674,7 @@ COMMANDS:
   dokima init "description" [dir]        Project discovery & constitution
   dokima --next [dir]                    Build next feature from roadmap
   dokima --continuous [dir]              Full sprint: build + auto-merge + loop
+  dokima --fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
 
 CONTROL:
   dokima --status [dir]                  Show pipeline state
@@ -689,6 +690,7 @@ EXAMPLES:
   dokima init "trading dashboard" ~/huat
   dokima --next ~/huat
   dokima --continuous ~/huat
+  dokima --fix ~/huat
   dokima --status ~/huat"""
 
 
@@ -1993,6 +1995,17 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
+def run_fix_mode(project_dir):
+    """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
+    print(f"  Running fix mode on {project_dir}...", flush=True)
+    pr = discover_blocked_pr()
+    if pr is None:
+        print("  No BLOCKED PRs found. Run `dokima --next` for new features.", flush=True)
+        return
+
+    print(f"  Fixing PR #{pr['number']}: {pr['title']}", flush=True)
+
+
 def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next):
     """Phase 2: Coder — spawn coder, retry loop, TDD verification. Returns dict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD, LINT_CMD
@@ -3147,6 +3160,8 @@ def main():
     is_kill = False
     is_status = False
     is_list_crons = False
+    is_fix = False
+    feature = ""
     user_answers_prefill = None
     filtered_argv = []
     skip_next = False
@@ -3182,9 +3197,13 @@ def main():
         if arg == "--answers":
             skip_next = True
             continue
+        if arg == "--fix":
+            is_fix = True
+            continue
         filtered_argv.append(arg)
 
     answers_idx = None
+    answers_path = None
     for i, arg in enumerate(sys.argv):
         if arg == "--answers" and i + 1 < len(sys.argv):
             answers_idx = i
@@ -3207,12 +3226,18 @@ def main():
             break
 
     # ── Determine PROJECT_DIR and feature ──
-    if is_next or is_stop or is_kill or is_status:
+    if is_next or is_stop or is_kill or is_status or is_fix:
         if is_stop or is_kill or is_status:
             if len(filtered_argv) >= 1:
                 PROJECT_DIR = os.path.abspath(filtered_argv[0])
             else:
                 PROJECT_DIR = os.getcwd()
+        elif is_fix:
+            if len(filtered_argv) >= 1:
+                PROJECT_DIR = os.path.abspath(filtered_argv[0])
+            else:
+                PROJECT_DIR = os.getcwd()
+            PANEL_FEATURE = f"fix: {PROJECT_DIR}"
         else:
             # --next: first arg is feature, second is project dir
             PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
@@ -3284,6 +3309,16 @@ def main():
     DEFAULT_BRANCH = _detect_default_branch(PROJECT_DIR)
     _set_gh_token()
     TEST_CMD, BUILD_CMD, LINT_CMD = detect_commands()
+
+    # ── --answers interaction for --fix ──
+    if is_fix and answers_path is not None:
+        print("  ⚠ --fix mode ignores --answers (no strategist interview). Continuing...", flush=True)
+
+    # ── FIX MODE: early dispatch ──
+    if is_fix:
+        run_fix_mode(project_dir=PROJECT_DIR)
+        _cleanup_lock()
+        return
 
     # ── Auto-archive specs from merged PRs ──
     specs_dir = os.path.join(PROJECT_DIR, "specs")
