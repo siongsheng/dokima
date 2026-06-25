@@ -186,71 +186,23 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
             pos = pos[:397] + "..."
         why += f"\n\n{pos}"
 
-    # 2. ## Impact — cascading effects, breaking changes, total lines
-    impact_lines = []
+    # 2. ## Impact — one sentence from strategist, plain English
+    impact = ""
     imp_m = re.search(
-        r'IMPACT\s*ASSESSMENT\s*\n(.*?)(?=\n\s*\n\s*(?:CONFIDENCE|\d\.\s*CONFIDENCE|### Task|Task \d|\Z))',
+        r'Impact:\s*(.+?)(?=\n\s*\n|\n(?:What Changed|Confidence|### Task|\Z))',
         spec_text, re.DOTALL | re.IGNORECASE
     )
     if imp_m:
-        imp = imp_m.group(1).strip()
-        # Cascading effects (skip if "None" or empty)
-        casc = re.search(r'Cascading effects?:?\s*\n(.+?)$', imp, re.DOTALL | re.IGNORECASE)
-        if casc:
-            casc_text = casc.group(1).strip()
-            if casc_text.lower() not in ("none", "none."):
-                impact_lines.append(casc_text)
-        # Breaking changes
-        breaking = re.search(r'Breaking\s*(?:change|changes?):?\s*(.+?)(?=\n\s*\n|\Z)', imp, re.DOTALL | re.IGNORECASE)
-        if breaking:
-            impact_lines.append(f"**Breaking:** {breaking.group(1).strip().replace(chr(10), ' ')}")
-        # Total lines (handles both "Est. Lines:" and "Lines Est.:")
-        total_lines = sum(int(n) for n in re.findall(r'(?:Est\.\s*Lines?|Lines\s*Est\.):?\s*[~+]?(\d+)', imp))
-        if total_lines > 0:
-            impact_lines.append(f"~{total_lines} lines changed across affected files")
+        impact = f"## Impact\n\n{imp_m.group(1).strip()}"
 
-    impact = f"## Impact\n\n" + "\n\n".join(impact_lines) if impact_lines else ""
-
-    # 3. ## What Changed — area + file + change, formatted as clean bullets
-    changed_lines = []
-    if imp_m:
-        imp = imp_m.group(1).strip()
-        # Format A: Area: name, File(s): path, Change: desc
-        items_a = re.findall(
-            r'Area:\s*(.+?)\n\s*File\(s\):\s*(.+?)\n\s*Change:\s*(.+?)(?=\n\s*(?:Est\.|Risk|Area|──|\Z))',
-            imp, re.DOTALL
-        )
-        if items_a:
-            changed_lines.append("## What Changed")
-            seen = set()
-            for area, files, change in items_a:
-                files_clean = files.strip()
-                change_clean = change.strip().replace("\n", " ").strip()
-                if len(change_clean) > 120:
-                    change_clean = change_clean[:117] + "..."
-                key = (area.strip(), files_clean)
-                if key not in seen:
-                    seen.add(key)
-                    changed_lines.append(f"- **{area.strip()}:** {files_clean} — {change_clean}")
-        else:
-            # Format B: Area: filepath, Change: desc (area IS the file)
-            items_b = re.findall(
-                r'Area:\s*(.+?)\n\s*Change:\s*(.+?)(?=\n\s*(?:Lines Est\.|Risk|Area|──|\Z))',
-                imp, re.DOTALL
-            )
-            if items_b:
-                changed_lines.append("## What Changed")
-                seen = set()
-                for area, change in items_b:
-                    area_clean = area.strip()
-                    change_clean = change.strip().replace("\n", " ").strip()
-                    if len(change_clean) > 120:
-                        change_clean = change_clean[:117] + "..."
-                    if area_clean not in seen:
-                        seen.add(area_clean)
-                        changed_lines.append(f"- **{area_clean}:** {change_clean}")
-
-    what_changed = "\n".join(changed_lines) if len(changed_lines) > 1 else ""
+    # 3. ## What Changed — bullet list from strategist
+    what_changed = ""
+    wc_m = re.search(
+        r'What Changed:\s*\n((?:\s*[-*]\s*.+\n?)+)',
+        spec_text, re.IGNORECASE
+    )
+    if wc_m:
+        what_changed = f"## What Changed\n{wc_m.group(1).strip()}"
 
     parts = [why]
     if impact:
@@ -259,7 +211,6 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
         parts.append(what_changed)
 
     result = "\n\n".join(parts)
-    # Fallback: if extraction produced very little content, generate a basic PR body
     if len(result) < 100:
         result = f"## Why\n\n{feature}\n\n## What Changed\n\nSee diff for details."
     return result
@@ -3194,30 +3145,28 @@ def run_phase1_strategist(feature, user_answers_prefill):
 
     1. DECISION TABLE: Compare ≥2 approaches (approach, isolation, faithfulness to patterns, simplicity, verdict). Pick one.
 
-    2. IMPACT ASSESSMENT (REQUIRED — this section is parsed for the PR body). Use exact format:
-       Area: <component/module being changed>
-       File(s): <paths, comma-separated>
-       Change: <plain English — what changes and how it affects users/developers>
-       Est. Lines: ~N
-       Risk: LOW/MEDIUM/HIGH
-       Cascading effects: <what else breaks or needs updating>
+    2. Impact: <one sentence in plain English — how does this affect users/developers? Not technical details, just what changes for them.>
 
-    3. CONFIDENCE + IMPACT markers (REQUIRED — exact format):
+    3. What Changed: <bullet list of key file changes and what they do>
+       - <file>: <what changed>
+       Do NOT use Area/File(s)/Change format. Simple bullets.
+
+    4. CONFIDENCE + IMPACT markers (REQUIRED — exact format):
        Confidence: (High)/(Medium)/(Low)
        High=clear scope, Low=novel/unclear pattern
        Impact: (LOW)/(MEDIUM)/(HIGH)
        LOW=tests/docs, MEDIUM=DB/API/UI, HIGH=auth/payments/migrations/security
 
-    4. API/INTERFACE PROPOSAL: Function signatures, routes, request/response shapes, data structures. No implementation code.
+    5. API/INTERFACE PROPOSAL: Function signatures, routes, request/response shapes, data structures. No implementation code.
 
-    5. SECURITY CONSIDERATIONS: Auth, injection, rate limiting, data exposure.
+    6. SECURITY CONSIDERATIONS: Auth, injection, rate limiting, data exposure.
 
-    6. DOCUMENTATION IMPACT (REQUIRED): State whether README.md needs updating.
+    7. DOCUMENTATION IMPACT (REQUIRED): State whether README.md needs updating.
        - If YES: what section and what should be added/changed.
        - If NO: write "README: No change needed."
        The README lives at {{project_dir}}/README.md. Read it to determine impact.
 
-    7. TASK BREAKDOWN — DAG FORMAT MANDATORY. Each task = one 5-15min RED\u2192GREEN TDD cycle. Use EXACTLY:
+    8. TASK BREAKDOWN — DAG FORMAT MANDATORY. Each task = one 5-15min RED→GREEN TDD cycle. Use EXACTLY:
 
     ### Task N: Brief description
     **Files:** path/to/file1, path/to/file2
