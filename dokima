@@ -14,6 +14,9 @@ PROFILES = os.path.join(HERMES, "profiles")
 PANEL_PORT = {"strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648}
 OUTPUT_LOG = "/tmp/dokima-output.txt"
 DEFAULT_BRANCH = "master"  # detected at startup, may be 'main'
+SKIP_AUTOFIX = False       # set from --skip-autofix flag or PANEL_SKIP_AUTOFIX env
+FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
+SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 
 # ── helpers ──────────────────────────────────────
 
@@ -2618,7 +2621,7 @@ def run_phase4_nm(feature, branch, impact, pr_url_in):
         if re.search(pattern, nm_stdout):
             nm_auto_fixable.append(label)
 
-    if nm_auto_fixable and not skip_autofix:
+    if nm_auto_fixable and not SKIP_AUTOFIX:
         issues_text = "\n".join(f"  - {i}" for i in nm_auto_fixable)
         print(f"\n  ↻ nm found {len(nm_auto_fixable)} auto-fixable issue(s):", flush=True)
         print(issues_text, flush=True)
@@ -2700,7 +2703,7 @@ RELEASE determination: Check if this feature introduces new functionality, API c
     # ── TL AUTO-FIX LOOPBACK ──
     # Auto-fix objective TL BLOCKERs (missing tests, TDD violations, uncaught exceptions).
     # Skips subjective BLOCKERs (spec violation, architecture, security) — human judges.
-    if not skip_autofix:
+    if not SKIP_AUTOFIX:
         tl_auto_fix_keywords = {
             "tdd violation": "TDD violation",
             "missing test": "missing test",
@@ -3145,7 +3148,7 @@ Output NOTHING ELSE."""
         ("Low", "HIGH"):    "full",
     }
     depth = depth_matrix.get((confidence, impact), "full")
-    if force_full:
+    if FORCE_FULL:
         depth = "full"
         print("  ⚠ --force-full — forcing full pipeline (all 5 phases)", flush=True)
     mode = "passive" if confidence == "High" else "active"
@@ -3158,7 +3161,7 @@ Output NOTHING ELSE."""
     print(f"  Branch: {branch}", flush=True)
 
     # Human gate
-    if sys.stdin.isatty() and not skip_human_gate:
+    if sys.stdin.isatty() and not SKIP_HUMAN_GATE:
         print(f"\n{'─' * 55}", flush=True)
         print(f"  HUMAN GATE \u2014 Spec ready for review", flush=True)
         print(f"{'─' * 55}", flush=True)
@@ -3211,7 +3214,7 @@ Output NOTHING ELSE."""
             print("\n  \u270b Pipeline halted by human. Spec saved \u2014 revise and re-run.", flush=True)
             sys.exit(0)
         print("  \u2713 Human gate passed \u2014 proceeding to implementation.\n", flush=True)
-    elif skip_human_gate:
+    elif SKIP_HUMAN_GATE:
         print("\n  ⚠ Human gate skipped (--skip-human-gate)", flush=True)
     else:
         print("\n  \u26a0 Human gate skipped (non-interactive \u2014 Telegram/cron mode)", flush=True)
@@ -3405,7 +3408,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
 # ── main ──
 
 def main():
-    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd
+    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE
     import shutil
     if len(sys.argv) < 2:
         print("Usage: dokima [--next|--continuous|--fix] [--fix-all] [--skip-autofix] [--force-full] [--skip-auto-archive] [--skip-human-gate] [--max-parallel=N] [--interactive] [--answers <json>] 'Feature' [dir]")
@@ -3475,15 +3478,18 @@ def main():
             continue
         if arg == "--skip-autofix":
             skip_autofix = True
+            SKIP_AUTOFIX = True
             continue
         if arg == "--force-full":
             force_full = True
+            FORCE_FULL = True
             continue
         if arg == "--skip-auto-archive":
             skip_auto_archive = True
             continue
         if arg == "--skip-human-gate":
             skip_human_gate = True
+            SKIP_HUMAN_GATE = True
             continue
         if arg.startswith("--max-parallel="):
             try:
@@ -3498,12 +3504,15 @@ def main():
         fix_all = True
     if not skip_autofix and os.environ.get("PANEL_SKIP_AUTOFIX") == "1":
         skip_autofix = True
+        SKIP_AUTOFIX = True
     if not force_full and os.environ.get("PANEL_FORCE_FULL") == "1":
         force_full = True
+        FORCE_FULL = True
     if not skip_auto_archive and os.environ.get("PANEL_SKIP_AUTO_ARCHIVE") == "1":
         skip_auto_archive = True
     if not skip_human_gate and os.environ.get("PANEL_SKIP_HUMAN_GATE") == "1":
         skip_human_gate = True
+        SKIP_HUMAN_GATE = True
     if max_parallel_override is None:
         mp = os.environ.get("PANEL_MAX_PARALLEL")
         if mp and mp.isdigit():
