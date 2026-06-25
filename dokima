@@ -2482,7 +2482,8 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             pr_url=pr_url,
             branch=pr_branch,
             spec_path=spec_path or "original spec not found — review against PR blockers",
-            impact="MEDIUM"
+            impact="MEDIUM",
+            nm_output=nm_result.get("nm_stdout", "") if nm_result else ""
         )
         fix_verdict = tl_result.get("verdict", "UNKNOWN")
         tl_output = tl_result.get("tl_output", "")
@@ -2944,7 +2945,7 @@ Report: what you fixed, commit hash."""
     return {"nm_ok": True, "pr_url": pr_url, "risk": risk, "nm_stdout": nm_stdout}
 
 
-def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact):
+def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -2965,9 +2966,12 @@ THEN — review the pull request{' at ' + pr_url if pr_url else ' for branch ' +
 THREE DIMENSIONS (every finding: severity + dimension + file:line + rule violated):
 1. SPEC COMPLIANCE: Approach matches decision table? API/interface matches? ALL tasks done? README updated if spec required it? Scope creep?
 2. ARCHITECTURAL IMPACT: New deps/coupling? Breaking changes? DB schema impact? Deployment impact?
-3. CODE QUALITY: TDD, correctness, security, error handling, performance.
+3. CODE QUALITY + DOCUMENTATION: TDD, correctness, security, error handling, performance. Also check documentation freshness — if README, docs/, or specs/perf-tracking.md describe old behavior that changed, flag as SHOULD FIX.
 
-SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missing guards, uncaught exceptions, security, missing tests, missing README update when spec required it) | SHOULD FIX (conventions, naming, AGENTS.md, redundant code) | NIT (formatting, comments, style)
+NM FINDINGS (supplementary): The nm pipeline stage already reviewed this diff with a different model family. If nm findings below are relevant and not already addressed, include them in your review:
+{nm_output[:2000] if nm_output else '(no nm output available)'}
+
+SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missing guards, uncaught exceptions, security, missing tests, missing README update when spec required it) | SHOULD FIX (conventions, naming, AGENTS.md, redundant code, stale docs referencing old behavior) | NIT (formatting, comments, style)
 
 FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {REPO} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
 Do NOT --approve (self-approval blocked). User merges manually.
@@ -3686,7 +3690,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
 
     # Phase 5: Tech Lead
     if not coder_failed and depth == "full":
-        tl_result = run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact)
+        tl_result = run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=nm_output)
         verdict = tl_result["verdict"]
         tl_output = tl_result["tl_output"]
     else:
