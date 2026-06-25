@@ -1721,7 +1721,7 @@ Create {PROJECT_DIR}/AGENTS.md:
 PHASE 4 — VALIDATION LOOP:
 - Review ALL four documents. Find gaps.
 - Are there features missing from roadmap? Unjustified tech choices?
-- Present gap analysis. Flag anything needing user clarification.
+- Present gap analysis. If anything is uncertain, use best judgment and note the assumption. Do NOT ask questions — make decisions and document them.
 - Self-correct before final output.
 
 CRITICAL RULES:
