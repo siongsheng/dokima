@@ -1621,7 +1621,7 @@ def run_init(description, project_dir):
         REPO = repo
 
     print("═" * 55)
-    print("  HERMES PANEL — init (Discovery & Constitution)")
+    print("  DOKIMA — init (Discovery & Constitution)")
     print("═" * 55)
     print(f"\nDescription: {description}")
     print(f"Project:    {PROJECT_DIR}")
@@ -3124,7 +3124,11 @@ def main():
             sys.exit(1)
         feature = filtered_argv[0] if filtered_argv else ""
         PANEL_FEATURE = feature
-        PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
+        # init uses different argv layout: "init" <description> [project_dir]
+        if feature == "init":
+            PROJECT_DIR = os.path.abspath(filtered_argv[2]) if len(filtered_argv) >= 3 else os.getcwd()
+        else:
+            PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
 
     # ── CONTROL FLAGS: early exit (priority order) ──
     if is_help:
