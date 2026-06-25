@@ -3114,10 +3114,16 @@ def main():
 
     # ── Determine PROJECT_DIR and feature ──
     if is_next or is_stop or is_kill or is_status:
-        if len(filtered_argv) >= 1:
-            PROJECT_DIR = os.path.abspath(filtered_argv[0])
+        if is_stop or is_kill or is_status:
+            if len(filtered_argv) >= 1:
+                PROJECT_DIR = os.path.abspath(filtered_argv[0])
+            else:
+                PROJECT_DIR = os.getcwd()
         else:
-            PROJECT_DIR = os.getcwd()
+            # --next: first arg is feature, second is project dir
+            PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
+            feature = filtered_argv[0] if filtered_argv else ""
+            PANEL_FEATURE = feature
     else:
         if len(filtered_argv) < 1 and not is_help and not is_list_crons:
             print("ERROR: Feature description required")
