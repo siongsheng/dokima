@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ───────────────────────────────────────────────────────────────────
-# Hermes Panel — Linux Server Setup
+# Dokima — Linux Server Setup
 # One-time machine setup. Idempotent — safe to re-run.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/siongsheng/hermes-panel/main/scripts/setup-linux.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/siongsheng/dokima/main/scripts/setup-linux.sh | bash
 # ───────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -30,8 +30,8 @@ else
 fi
 
 # ── Config (override via env) ──────────────────────────────────────
-PANEL_REPO="${PANEL_REPO:-https://github.com/siongsheng/hermes-panel.git}"
-PANEL_DIR="${PANEL_DIR:-$HOME/hermes-panel}"
+PANEL_REPO="${PANEL_REPO:-https://github.com/siongsheng/dokima.git}"
+PANEL_DIR="${PANEL_DIR:-$HOME/dokima}"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 SHARED_ENV="$HERMES_HOME/shared.env"
@@ -56,22 +56,22 @@ else
 fi
 
 # ── 2. Install the Panel ───────────────────────────────────────────
-section "Installing hermes-panel"
+section "Installing dokima"
 
 if [ -d "$PANEL_DIR" ]; then
     log "Panel repo exists — pulling latest"
     git -C "$PANEL_DIR" pull --ff-only 2>/dev/null || warn "Could not pull (dirty tree? skipping)"
 else
-    log "Cloning hermes-panel to $PANEL_DIR"
+    log "Cloning dokima to $PANEL_DIR"
     git clone "$PANEL_REPO" "$PANEL_DIR"
 fi
 
 mkdir -p "$BIN_DIR"
-if [ -L "$BIN_DIR/hermes-panel" ] || [ -f "$BIN_DIR/hermes-panel" ]; then
-    log "hermes-panel already linked in $BIN_DIR"
+if [ -L "$BIN_DIR/dokima" ] || [ -f "$BIN_DIR/dokima" ]; then
+    log "dokima already linked in $BIN_DIR"
 else
-    ln -sf "$PANEL_DIR/hermes-panel" "$BIN_DIR/hermes-panel"
-    log "Linked hermes-panel → $BIN_DIR/hermes-panel"
+    ln -sf "$PANEL_DIR/dokima" "$BIN_DIR/dokima"
+    log "Linked dokima → $BIN_DIR/dokima"
 fi
 
 case ":$PATH:" in
@@ -341,10 +341,10 @@ fi
 # ── 7. Verify ──────────────────────────────────────────────────────
 section "Verifying setup"
 
-if python3 -c "compile(open('$PANEL_DIR/hermes-panel').read(), 'hermes-panel', 'exec')" 2>/dev/null; then
-    log "hermes-panel: syntax OK"
+if python3 -c "compile(open('$PANEL_DIR/dokima').read(), 'dokima', 'exec')" 2>/dev/null; then
+    log "dokima: syntax OK"
 else
-    err "hermes-panel has syntax errors"
+    err "dokima has syntax errors"
 fi
 
 for profile in strategist coder tech-lead; do
@@ -372,8 +372,8 @@ echo "  Next steps:"
 echo "  1. Add AGENTS.md to your project root (see docs/setup.md §3.1)"
 echo "  2. Run a smoke test:"
 echo "     cd ~/your-project"
-echo "     hermes-panel \"Add a comment\" ."
+echo "     dokima \"Add a comment\" ."
 echo "  3. Force full pipeline test:"
-echo "     PANEL_FORCE_FULL=1 hermes-panel \"Add a health check\" ."
+echo "     PANEL_FORCE_FULL=1 dokima \"Add a health check\" ."
 echo ""
 log "Happy orchestrating! 🎭"

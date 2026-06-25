@@ -1,9 +1,9 @@
 #!/home/opc/.hermes/hermes-agent/venv/bin/python3
-"""Hermes Panel — Multi-agent orchestration engine.
-Usage: hermes-panel "Feature description" [project_dir]
+"""Dokima — Multi-agent orchestration engine.
+Usage: dokima "Feature description" [project_dir]
        If project_dir is omitted, uses current working directory.
 Flow: Strategist → User Clarifications → Strategist Refine → TL Spec Pre-Review → Orchestrator Gate → Human Gate → Coder(branch) → vet(validate) → nm(adversarial+PR) → Tech Lead(spec review) → Report
-Output: Live to terminal + saved to /tmp/hermes-panel-output.txt
+Output: Live to terminal + saved to /tmp/dokima-output.txt
 """
 import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal
 
@@ -12,7 +12,7 @@ HERMES = os.path.join(REAL_HOME, ".hermes")
 HERMES_BIN = os.path.join(HERMES, "hermes-agent/venv/bin/hermes")
 PROFILES = os.path.join(HERMES, "profiles")
 PANEL_PORT = {"strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648}
-OUTPUT_LOG = "/tmp/hermes-panel-output.txt"
+OUTPUT_LOG = "/tmp/dokima-output.txt"
 DEFAULT_BRANCH = "master"  # detected at startup, may be 'main'
 
 # ── helpers ──────────────────────────────────────
@@ -337,7 +337,7 @@ class WorktreeManager:
     Pattern adapted from Baton (symphony/workspace.py, MIT license)."""
     def __init__(self, project_root):
         self.project_root = os.path.abspath(project_root)
-        self.worktrees_dir = os.path.join(project_root, ".hermes-panel", "worktrees")
+        self.worktrees_dir = os.path.join(project_root, ".dokima", "worktrees")
 
     def worktree_path(self, task_id: str) -> str:
         path = os.path.join(self.worktrees_dir, task_id)
@@ -547,7 +547,7 @@ def _lock_path(project_dir=None):
             slug = os.path.basename(os.path.abspath(PROJECT_DIR))
         except NameError:
             slug = "unknown"
-    return f"/tmp/hermes-panel-{slug or 'unknown'}.lock"
+    return f"/tmp/dokima-{slug or 'unknown'}.lock"
 
 def _stop_path(project_dir=None):
     """Project-scoped stop signal file path."""
@@ -558,7 +558,7 @@ def _stop_path(project_dir=None):
             slug = os.path.basename(os.path.abspath(PROJECT_DIR))
         except NameError:
             slug = "unknown"
-    return f"/tmp/hermes-panel-{slug or 'unknown'}.stop"
+    return f"/tmp/dokima-{slug or 'unknown'}.stop"
 MAX_CONTINUOUS = 20
 
 def acquire_lock():
@@ -667,29 +667,29 @@ def try_auto_merge(pr_url: str) -> str:
 
 
 
-HELP_TEXT = """Hermes Panel — Multi-Agent Orchestration Engine
+HELP_TEXT = """Dokima — Multi-Agent Orchestration Engine
 
 COMMANDS:
-  hermes-panel "Feature description" [dir]     Run full pipeline for a feature
-  hermes-panel init "description" [dir]        Project discovery & constitution
-  hermes-panel --next [dir]                    Build next feature from roadmap
-  hermes-panel --continuous [dir]              Full sprint: build + auto-merge + loop
+  dokima "Feature description" [dir]     Run full pipeline for a feature
+  dokima init "description" [dir]        Project discovery & constitution
+  dokima --next [dir]                    Build next feature from roadmap
+  dokima --continuous [dir]              Full sprint: build + auto-merge + loop
 
 CONTROL:
-  hermes-panel --status [dir]                  Show pipeline state
-  hermes-panel --stop [dir]                    Graceful stop after current feature
-  hermes-panel --kill [dir]                    Emergency kill (SIGTERM then SIGKILL)
-  hermes-panel --list-crons                    List all scheduled pipelines
+  dokima --status [dir]                  Show pipeline state
+  dokima --stop [dir]                    Graceful stop after current feature
+  dokima --kill [dir]                    Emergency kill (SIGTERM then SIGKILL)
+  dokima --list-crons                    List all scheduled pipelines
 
 FLAGS:
   --interactive      Show human gate (with --next/--continuous)
   --answers <file>   Resume from saved interview state
 
 EXAMPLES:
-  hermes-panel init "trading dashboard" ~/huat
-  hermes-panel --next ~/huat
-  hermes-panel --continuous ~/huat
-  hermes-panel --status ~/huat"""
+  dokima init "trading dashboard" ~/huat
+  dokima --next ~/huat
+  dokima --continuous ~/huat
+  dokima --status ~/huat"""
 
 
 
@@ -1191,7 +1191,7 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
                         project_dir: str, spec_path: str,
                         tasks_extract_path: str = "") -> bool:
     """Execute parallel coder phase with worktree isolation."""
-    panel_dir = os.path.join(project_dir, ".hermes-panel")
+    panel_dir = os.path.join(project_dir, ".dokima")
     os.makedirs(panel_dir, exist_ok=True)
 
     worktrees = WorktreeManager(project_dir)
@@ -1302,11 +1302,11 @@ def _check_pid(pid_str):
 
 
 def _verify_pid_owner(pid: int) -> bool:
-    """Verify /proc/{pid}/comm is hermes-panel or python. Returns True/False."""
+    """Verify /proc/{pid}/comm is dokima or python. Returns True/False."""
     try:
         with open(f"/proc/{pid}/comm") as f:
             comm = f.read().strip()
-        return comm in ("hermes-panel", "python3", "python")
+        return comm in ("dokima", "python3", "python")
     except Exception:
         return False
 
@@ -1407,9 +1407,9 @@ def handle_kill(project_dir):
     if not running:
         print(f"No pipeline running for {os.path.basename(os.path.abspath(project_dir))}.")
         sys.exit(0)
-    # Verify PID still belongs to hermes-panel before signaling
+    # Verify PID still belongs to dokima before signaling
     if not _verify_pid_owner(int(pid)):
-        print(f"PID {pid} is not hermes-panel (recycled?) — cleaning stale lock")
+        print(f"PID {pid} is not dokima (recycled?) — cleaning stale lock")
         try:
             os.remove(_lock_path(project_dir))
         except OSError:
@@ -1457,7 +1457,7 @@ def handle_list_crons():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            if "hermes-panel" in line:
+            if "dokima" in line:
                 parts = line.split(None, 5)
                 if len(parts) >= 6:
                     schedule = " ".join(parts[:5])
@@ -1469,11 +1469,11 @@ def handle_list_crons():
 
     # Scan lock files for running state
     import glob as _glob
-    lock_files = _glob.glob("/tmp/hermes-panel-*.lock")
+    lock_files = _glob.glob("/tmp/dokima-*.lock")
     running_projects = {}
     for lf in lock_files:
         try:
-            slug = os.path.basename(lf).replace("hermes-panel-", "").replace(".lock", "")
+            slug = os.path.basename(lf).replace("dokima-", "").replace(".lock", "")
             with open(lf) as f:
                 pid_str = f.read().strip()
             if pid_str and _check_pid(pid_str):
@@ -1488,7 +1488,7 @@ def handle_list_crons():
 
     print("── Continuous Pipelines ──")
     if not cron_entries and not running_projects:
-        print("No hermes-panel pipelines found.")
+        print("No dokima pipelines found.")
         sys.exit(0)
 
     print(f"{'PROJECT':<30} {'SCHEDULE':<18} {'STATE'}")
@@ -1519,7 +1519,7 @@ def run_next_setup(interactive: bool = False) -> str | None:
     # 1. Parse
     features = parse_roadmap(roadmap_path)
     if not features:
-        print("ERROR: No features found in roadmap.md. Run `hermes-panel init` first.")
+        print("ERROR: No features found in roadmap.md. Run `dokima init` first.")
         sys.exit(1)
 
     print(f"  Roadmap: {len(features)} features")
@@ -1583,7 +1583,7 @@ def run_init(description, project_dir):
 
     if not description:
         print("ERROR: init requires a project description.")
-        print("  hermes-panel init 'trading dashboard for SGX options' [project_dir]")
+        print("  dokima init 'trading dashboard for SGX options' [project_dir]")
         sys.exit(1)
 
     # Load API key (needed for strategist)
@@ -1821,7 +1821,7 @@ CRITICAL RULES:
             print(f"    ✗ {fname} (missing — strategist may have skipped)")
     print()
     print("  Next: review the constitution, then:")
-    print(f"    hermes-panel 'F001: first feature' {PROJECT_DIR}")
+    print(f"    dokima 'F001: first feature' {PROJECT_DIR}")
     print(f"    or develop manually using the roadmap as your guide.")
 
 
@@ -2594,7 +2594,7 @@ def run_phase1_strategist(feature, user_answers_prefill):
                 "questions": clarification_blocks,
                 "prompt": strat_prompt
             }
-            interview_path = "/tmp/hermes-panel-interview.json"
+            interview_path = "/tmp/dokima-interview.json"
             with open(interview_path, "w") as f:
                 json.dump(interview_state, f)
             print(f"\n{'═' * 55}", flush=True)
@@ -2612,7 +2612,7 @@ def run_phase1_strategist(feature, user_answers_prefill):
                         print(f"  \u2502  {ctx.strip()}", flush=True)
                 print(f"  \u2514{'─' * 40}", flush=True)
             print(f"\n  State saved: {interview_path}", flush=True)
-            print(f"  Re-run with: hermes-panel --answers {interview_path}", flush=True)
+            print(f"  Re-run with: dokima --answers {interview_path}", flush=True)
             print(f"{'═' * 55}", flush=True)
             sys.exit(2)
 
@@ -3038,10 +3038,10 @@ def main():
     global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd
     import shutil
     if len(sys.argv) < 2:
-        print("Usage: hermes-panel [--next|--continuous] [--interactive] [--answers <json>] 'Feature' [dir]")
-        print("  hermes-panel --next [project_dir]             # one feature, manual merge")
-        print("  hermes-panel --continuous [project_dir]       # full sprint, auto-merge, loop")
-        print("  hermes-panel init 'description' [project_dir]")
+        print("Usage: dokima [--next|--continuous] [--interactive] [--answers <json>] 'Feature' [dir]")
+        print("  dokima --next [project_dir]             # one feature, manual merge")
+        print("  dokima --continuous [project_dir]       # full sprint, auto-merge, loop")
+        print("  dokima init 'description' [project_dir]")
         sys.exit(1)
 
     # ── FLAG SCANNING ──

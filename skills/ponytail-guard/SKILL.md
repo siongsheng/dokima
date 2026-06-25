@@ -1,10 +1,10 @@
 ---
 name: ponytail-guard
-description: YAGNI laziness guard for hermes-panel — stops agents from building things that don't need to exist. Pre-spec check for strategist, post-build review for Tech Lead. Based on the ponytail ladder (DietrichGebert/ponytail, MIT).
+description: YAGNI laziness guard for dokima — stops agents from building things that don't need to exist. Pre-spec check for strategist, post-build review for Tech Lead. Based on the ponytail ladder (DietrichGebert/ponytail, MIT).
 version: 1.0.0
 ---
 
-# Ponytail Guard — Laziness Ladder for hermes-panel
+# Ponytail Guard — Laziness Ladder for dokima
 
 Before building anything, stop at the first rung that holds:
 

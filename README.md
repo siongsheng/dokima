@@ -1,4 +1,4 @@
-# Hermes Panel
+# Dokima
 
 **Multi-agent orchestration engine.** Routes feature development through a pipeline of specialist AI agents — with automated depth-gating, TDD enforcement, and adversarial review. Works with Hermes Agent, Claude Code, or any agent that can follow instructions.
 
@@ -10,7 +10,7 @@ It installed Tailwind. Refactored your CSS. Wrote 14 components, a theme context
 
 One agent, zero accountability, unlimited ambition. Give it a button and it builds you a space elevator.
 
-Hermes Panel puts five agents in a room and makes them distrust each other. The strategist writes the spec — because "just code it" is the fastest route to 47 files for a button. The coder tests first (RED commit, GREEN commit, or it didn't happen). vet runs the build with zero AI tokens — shell scripts don't hallucinate, and they certainly don't install Tailwind. nm reviews from a fresh session — configured to use a different model family, because nobody grades their own homework (note: the panel shells out to `~/bin/nm` and cannot enforce which model nm uses — requires nm to be pre-configured with a different model family). The Tech Lead checks the spec, checks the code, and checks for space elevators.
+Dokima puts five agents in a room and makes them distrust each other. The strategist writes the spec — because "just code it" is the fastest route to 47 files for a button. The coder tests first (RED commit, GREEN commit, or it didn't happen). vet runs the build with zero AI tokens — shell scripts don't hallucinate, and they certainly don't install Tailwind. nm reviews from a fresh session — configured to use a different model family, because nobody grades their own homework (note: the panel shells out to `~/bin/nm` and cannot enforce which model nm uses — requires nm to be pre-configured with a different model family). The Tech Lead checks the spec, checks the code, and checks for space elevators.
 
 **What comes out:** passing tests, passing build, a PR with two independent reviews, all automated. **What doesn't:** a CSS framework you didn't ask for.
 
@@ -21,36 +21,36 @@ Hermes Panel puts five agents in a room and makes them distrust each other. The 
 The setup script walks you through everything — provider choice, API keys, GitHub token, profile creation. Works with DeepSeek, Anthropic, OpenAI, or OpenRouter.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/siongsheng/hermes-panel/main/scripts/setup-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/siongsheng/dokima/main/scripts/setup-linux.sh | bash
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/siongsheng/hermes-panel/main/scripts/setup-windows.ps1 | iex
+irm https://raw.githubusercontent.com/siongsheng/dokima/main/scripts/setup-windows.ps1 | iex
 ```
 
 ### Manual install
 
 ```bash
 # Clone
-git clone https://github.com/siongsheng/hermes-panel.git ~/hermes-panel
+git clone https://github.com/siongsheng/dokima.git ~/dokima
 
 # Install (symlink to PATH)
-ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
+ln -sf ~/dokima/dokima ~/bin/dokima
 ```
 
 ### Usage
 
 ```bash
 # Run on any project with AGENTS.md + git remote
-hermes-panel "Add rate limiting middleware" ~/project
+dokima "Add rate limiting middleware" ~/project
 
 # Force all 5 phases (even for low-risk changes)
-PANEL_FORCE_FULL=1 hermes-panel "Add payment webhook" ~/project
+PANEL_FORCE_FULL=1 dokima "Add payment webhook" ~/project
 
 # Resume after strategist interview
-hermes-panel --answers /tmp/hermes-panel-interview.json "Add API key auth" ~/project
+dokima --answers /tmp/dokima-interview.json "Add API key auth" ~/project
 ```
 
 > **Full setup guide:** [docs/setup.md](docs/setup.md) — one-time machine setup, per-project config, troubleshooting.
@@ -101,7 +101,7 @@ stateDiagram-v2
 
 ## Design
 
-Hermes Panel doesn't ask "how many agents?" It asks: **what unique failure class does each stage catch?**
+Dokima doesn't ask "how many agents?" It asks: **what unique failure class does each stage catch?**
 
 Most multi-agent systems add stages to look impressive. Hermes adds a stage only when it catches something no other stage can — and only when the catch justifies the tokens.
 

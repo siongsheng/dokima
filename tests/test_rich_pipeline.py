@@ -82,17 +82,17 @@ def _apply_rich_patches(fn):
             "stderr": None,
         })()
         mock_subprocess_run = type("RunResult", (), {"returncode": 0, "stdout": "mock", "stderr": ""})()
-        with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-             patch("hermes_panel._set_gh_token"), \
-             patch("hermes_panel.git", return_value=("", "", 0)), \
-             patch("hermes_panel.gh", side_effect=gh_side_effect), \
-             patch("hermes_panel.load_key", return_value="fk"), \
-             patch("hermes_panel.load_github_token", return_value="ft"), \
-             patch("hermes_panel.detect_repo", return_value="t/t"), \
-             patch("hermes_panel._safe_run", return_value=mock_run), \
-             patch("hermes_panel.subprocess.Popen", return_value=mock_proc), \
-             patch("hermes_panel.subprocess.run", return_value=mock_subprocess_run), \
-             patch("hermes_panel.time.sleep"):
+        with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+             patch("dokima._set_gh_token"), \
+             patch("dokima.git", return_value=("", "", 0)), \
+             patch("dokima.gh", side_effect=gh_side_effect), \
+             patch("dokima.load_key", return_value="fk"), \
+             patch("dokima.load_github_token", return_value="ft"), \
+             patch("dokima.detect_repo", return_value="t/t"), \
+             patch("dokima._safe_run", return_value=mock_run), \
+             patch("dokima.subprocess.Popen", return_value=mock_proc), \
+             patch("dokima.subprocess.run", return_value=mock_subprocess_run), \
+             patch("dokima.time.sleep"):
             return fn(*args, **kwargs)
     return wrapper
 
@@ -152,7 +152,7 @@ class TestParallelCoders:
     def _run(self, panel, project_dir, mock_spawn_fn, argv=None):
         old = sys.argv
         try:
-            sys.argv = argv or ["hermes-panel", "--next", project_dir]
+            sys.argv = argv or ["dokima", "--next", project_dir]
             panel.spawn_agent = mock_spawn_fn
             try:
                 panel.main()
@@ -183,8 +183,8 @@ class TestParallelCoders:
             "remove": lambda self, *a, **kw: None,
             "cleanup_all": lambda self, *a, **kw: None,
         })()
-        with patch("hermes_panel.merge_worktree_branches", return_value=True), \
-             patch("hermes_panel.WorktreeManager", return_value=wt_mgr_instance):
+        with patch("dokima.merge_worktree_branches", return_value=True), \
+             patch("dokima.WorktreeManager", return_value=wt_mgr_instance):
             self._run(panel, project_dir, mock)
 
         # Parallel coders use subprocess.Popen, not spawn_agent.
@@ -213,7 +213,7 @@ class TestVetFailure:
 
         old = sys.argv
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             panel.spawn_agent = mock
 
             # _safe_run returns failure for test → triggers fix loop
@@ -236,17 +236,17 @@ class TestVetFailure:
 
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "mock", "stderr": ""})()
 
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", side_effect=gh_side_effect), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", side_effect=safe_run_side_effect), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"), \
-                 patch("hermes_panel.sys.stdin.isatty", return_value=False):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", side_effect=gh_side_effect), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", side_effect=safe_run_side_effect), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"), \
+                 patch("dokima.sys.stdin.isatty", return_value=False):
                 try:
                     panel.main()
                 except SystemExit:

@@ -106,23 +106,23 @@ class TestContinuousDecisions:
 
         old = sys.argv
         try:
-            sys.argv = ["hermes-panel", "--continuous", project_dir]
+            sys.argv = ["dokima", "--continuous", project_dir]
             panel.spawn_agent = mock
             os.environ["PANEL_MAX_RETRIES"] = "0"
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             os.environ["PANEL_PARALLEL"] = "0"
 
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"):
                 try:
                     panel.main()
                 except SystemExit:
@@ -150,7 +150,7 @@ class TestContinuousDecisions:
 
         old = sys.argv
         try:
-            sys.argv = ["hermes-panel", "--continuous", project_dir]
+            sys.argv = ["dokima", "--continuous", project_dir]
             panel.spawn_agent = mock
             os.environ["PANEL_MAX_RETRIES"] = "0"
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
@@ -161,16 +161,16 @@ class TestContinuousDecisions:
                 if len(a) > 1 and a[1] == "create":
                     return ("https://github.com/t/t/pull/1", "", 0)
                 return ("", "", 0)
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", side_effect=gh_se), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", side_effect=gh_se), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"):
                 try:
                     panel.main()
                 except SystemExit:

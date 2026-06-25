@@ -1,6 +1,6 @@
-# Hermes Panel — Pipeline Reference
+# Dokima — Pipeline Reference
 
-`hermes-panel` routes feature development through a pipeline of specialist AI agents: **Human Gate → Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, filtered auto-fix loopbacks, and parallel execution. Works with Hermes Agent, Claude Code, or any agent runtime.
+`dokima` routes feature development through a pipeline of specialist AI agents: **Human Gate → Strategist → Coder → vet → nm → Tech Lead**, with automated depth-gating, filtered auto-fix loopbacks, and parallel execution. Works with Hermes Agent, Claude Code, or any agent runtime.
 
 > **New here?** Start with [setup.md](setup.md) for deployment. Overview + design philosophy at [README.md](../README.md).
 
@@ -68,7 +68,7 @@ Explores the codebase, reads `AGENTS.md`, searches for relevant code, understand
 
 **Model:** `deepseek-v4-pro` with `spec-strategist-lite` + `ponytail-guard` skills.
 
-**Interview mode:** When confidence < High, the strategist saves clarification questions to `/tmp/hermes-panel-interview.json` and exits code 2. Re-run with `--answers` to continue.
+**Interview mode:** When confidence < High, the strategist saves clarification questions to `/tmp/dokima-interview.json` and exits code 2. Re-run with `--answers` to continue.
 
 ### TL Spec Pre-Review (between Strategist and Coder)
 **Why:** Architecture issues and test-plan gaps are cheapest to fix before code is written. TL reviews the spec — not the code — for architectural impact and test plan completeness.
@@ -194,10 +194,10 @@ Subjective findings halt — human judges the trade-off. `PANEL_SKIP_AUTOFIX=1` 
 When the strategist cannot proceed with high confidence, it enters interview mode:
 
 1. Panel exits with code 2
-2. Saves questions + context to `/tmp/hermes-panel-interview.json`
+2. Saves questions + context to `/tmp/dokima-interview.json`
 3. Orchestrator reads JSON, presents questions to user
 4. User answers → orchestrator writes answers back to JSON
-5. Re-run: `hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project`
+5. Re-run: `dokima --answers /tmp/dokima-interview.json "feature" ~/project`
 
 The interview JSON captures full context (assumption, impact if wrong) for each question. This keeps the panel stateless and replayable — perfect for Telegram/cron workflows.
 
@@ -319,12 +319,12 @@ Per-phase timeout fallbacks:
 ## File Structure
 
 ```
-~/bin/hermes-panel                        → canonical symlink (→ ~/hermes-panel/hermes-panel)
+~/bin/dokima                        → canonical symlink (→ ~/dokima/dokima)
 <project>/specs/<feature>/spec.md          → cleaned strategist spec
 <project>/specs/<feature>/tasks.md         → task-extract for coder
-<project>/.hermes-panel/worktrees/         → parallel coder sandboxes
-/tmp/hermes-panel-output.txt              → full pipeline log
-/tmp/hermes-panel-interview.json          → interview state (exit code 2)
+<project>/.dokima/worktrees/         → parallel coder sandboxes
+/tmp/dokima-output.txt              → full pipeline log
+/tmp/dokima-interview.json          → interview state (exit code 2)
 ```
 
 ## Companion Scripts

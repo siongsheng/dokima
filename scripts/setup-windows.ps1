@@ -1,12 +1,12 @@
 # ───────────────────────────────────────────────────────────────────
-# Hermes Panel — Windows PC Setup
+# Dokima — Windows PC Setup
 # One-time machine setup. Idempotent — safe to re-run.
 # Usage:
-#   irm https://raw.githubusercontent.com/siongsheng/hermes-panel/main/scripts/setup-windows.ps1 | iex
+#   irm https://raw.githubusercontent.com/siongsheng/dokima/main/scripts/setup-windows.ps1 | iex
 # ───────────────────────────────────────────────────────────────────
 param(
-    [string]$PanelRepo = "https://github.com/siongsheng/hermes-panel.git",
-    [string]$PanelDir  = "$env:USERPROFILE\hermes-panel",
+    [string]$PanelRepo = "https://github.com/siongsheng/dokima.git",
+    [string]$PanelDir  = "$env:USERPROFILE\dokima",
     [string]$BinDir    = "$env:USERPROFILE\bin",
     [string]$HermesHome = "$env:USERPROFILE\.hermes"
 )
@@ -50,30 +50,30 @@ if (-not (Get-Command adr -ErrorAction SilentlyContinue)) {
 }
 
 # ── 2. Install the Panel ───────────────────────────────────────────
-Write-Step "Installing hermes-panel"
+Write-Step "Installing dokima"
 
 if (Test-Path $PanelDir) {
     Write-OK "Panel repo exists — pulling latest"
     Push-Location $PanelDir
     try { git pull --ff-only 2>$null } finally { Pop-Location }
 } else {
-    Write-OK "Cloning hermes-panel to $PanelDir"
+    Write-OK "Cloning dokima to $PanelDir"
     git clone $PanelRepo $PanelDir
 }
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-$panelScript = "$PanelDir\hermes-panel"
-$panelLink   = "$BinDir\hermes-panel"
+$panelScript = "$PanelDir\dokima"
+$panelLink   = "$BinDir\dokima"
 if (-not (Test-Path $panelLink)) {
     try {
         New-Item -ItemType SymbolicLink -Path $panelLink -Target $panelScript -ErrorAction Stop | Out-Null
-        Write-OK "Symlinked hermes-panel → $panelLink"
+        Write-OK "Symlinked dokima → $panelLink"
     } catch {
         Copy-Item $panelScript $panelLink
-        Write-OK "Copied hermes-panel → $panelLink"
+        Write-OK "Copied dokima → $panelLink"
     }
 } else {
-    Write-OK "hermes-panel already linked in $BinDir"
+    Write-OK "dokima already linked in $BinDir"
 }
 
 # Ensure ~/bin in PATH
@@ -301,14 +301,14 @@ if ((Test-Path $sharedEnv) -and (Select-String -Path $sharedEnv -Pattern "GH_TOK
 Write-Step "Verifying setup"
 
 try {
-    & $pyCmd -c "compile(open('$panelScript').read(), 'hermes-panel', 'exec')" 2>$null
+    & $pyCmd -c "compile(open('$panelScript').read(), 'dokima', 'exec')" 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-OK "hermes-panel: syntax OK"
+        Write-OK "dokima: syntax OK"
     } else {
-        Write-Warn "hermes-panel syntax check failed"
+        Write-Warn "dokima syntax check failed"
     }
 } catch {
-    Write-Warn "Could not syntax-check hermes-panel: $_"
+    Write-Warn "Could not syntax-check dokima: $_"
 }
 
 foreach ($profile in @("strategist", "coder", "tech-lead")) {
@@ -337,8 +337,8 @@ Write-Host "  Next steps:"
 Write-Host '  1. Add AGENTS.md to your project root (see docs/setup.md)'
 Write-Host '  2. Run a smoke test:'
 Write-Host '     cd ~/your-project'
-Write-Host '     hermes-panel "Add a comment" .'
+Write-Host '     dokima "Add a comment" .'
 Write-Host '  3. Force full pipeline test:'
-Write-Host '     $env:PANEL_FORCE_FULL = 1; hermes-panel "Add a health check" .'
+Write-Host '     $env:PANEL_FORCE_FULL = 1; dokima "Add a health check" .'
 Write-Host ""
 Write-OK "Happy orchestrating! 🎭"

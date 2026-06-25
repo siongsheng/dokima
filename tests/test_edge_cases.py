@@ -1,4 +1,4 @@
-"""Edge-case tests for uncovered branches in hermes-panel.
+"""Edge-case tests for uncovered branches in dokima.
 
 Covers: call_agent, spawn_agent, gh, ADR creation, clarification gate,
 human gate, TL auto-fix, parallel failure, continuous decisions, PR extraction.
@@ -177,20 +177,20 @@ class TestAdrCreation:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"):
                 try:
                     panel.main()
                 except SystemExit:
@@ -224,23 +224,23 @@ class TestHumanGate:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             panel.spawn_agent = mock
             # Remove PANEL_SKIP_HUMAN_GATE from env so gate fires
             os.environ.pop("PANEL_SKIP_HUMAN_GATE", None)
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"), \
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"), \
                  patch("builtins.input", return_value=""), \
-                 patch("hermes_panel.sys.stdin.isatty", return_value=True):
+                 patch("dokima.sys.stdin.isatty", return_value=True):
                 try:
                     panel.main()
                 except SystemExit:
@@ -265,20 +265,20 @@ class TestHumanGate:
 
         old = sys.argv
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"), \
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"), \
                  patch("builtins.input", return_value="q"), \
-                 patch("hermes_panel.sys.stdin.isatty", return_value=True):
+                 patch("dokima.sys.stdin.isatty", return_value=True):
                 with pytest.raises(SystemExit) as exc:
                     panel.main()
                 assert exc.value.code == 0
@@ -328,24 +328,24 @@ class TestParallelFailure:
 
         old = sys.argv
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
             mock_proc = type("MockProc", (), {"poll": lambda s: 1, "communicate": lambda s, t=None: (b"fail", None)})()
             import tempfile
             wt_dir = tempfile.mkdtemp()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.Popen", return_value=mock_proc), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.WorktreeManager", return_value=type("W", (), {"create": lambda s,*a: wt_dir, "remove": lambda s,*a: None, "cleanup_all": lambda s,*a: None})()), \
-                 patch("hermes_panel.time.sleep"):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.Popen", return_value=mock_proc), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.WorktreeManager", return_value=type("W", (), {"create": lambda s,*a: wt_dir, "remove": lambda s,*a: None, "cleanup_all": lambda s,*a: None})()), \
+                 patch("dokima.time.sleep"):
                 try:
                     panel.main()
                 except SystemExit:
@@ -384,20 +384,20 @@ class TestClarificationGate:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", return_value=("", "", 0)), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"), \
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", return_value=("", "", 0)), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"), \
                  patch.object(panel, "sys") as mock_sys, \
                  patch.object(panel, "select") as mock_sel:
                 mock_sys.stdin.isatty.return_value = False
@@ -457,7 +457,7 @@ class TestTechLeadPaths:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["hermes-panel", "--next", project_dir]
+            sys.argv = ["dokima", "--next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             if gh_se is None:
@@ -466,16 +466,16 @@ class TestTechLeadPaths:
                         return ("https://github.com/t/t/pull/1", "", 0)
                     return ("", "", 0)
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
-            with patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}), \
-                 patch("hermes_panel._set_gh_token"), \
-                 patch("hermes_panel.git", return_value=("", "", 0)), \
-                 patch("hermes_panel.gh", side_effect=gh_se), \
-                 patch("hermes_panel.load_key", return_value="fk"), \
-                 patch("hermes_panel.load_github_token", return_value="ft"), \
-                 patch("hermes_panel.detect_repo", return_value="t/t"), \
-                 patch("hermes_panel._safe_run", return_value=mock_run), \
-                 patch("hermes_panel.subprocess.run", return_value=mock_run), \
-                 patch("hermes_panel.time.sleep"):
+            with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
+                 patch("dokima._set_gh_token"), \
+                 patch("dokima.git", return_value=("", "", 0)), \
+                 patch("dokima.gh", side_effect=gh_se), \
+                 patch("dokima.load_key", return_value="fk"), \
+                 patch("dokima.load_github_token", return_value="ft"), \
+                 patch("dokima.detect_repo", return_value="t/t"), \
+                 patch("dokima._safe_run", return_value=mock_run), \
+                 patch("dokima.subprocess.run", return_value=mock_run), \
+                 patch("dokima.time.sleep"):
                 try:
                     panel.main()
                 except SystemExit:

@@ -54,7 +54,7 @@ def _run_pipeline(panel, project_dir, spawn_mock, extra_patches=None, is_continu
     old = sys.argv
     try:
         flag = "--continuous" if is_continuous else "--next"
-        sys.argv = ["hermes-panel", flag, project_dir]
+        sys.argv = ["dokima", flag, project_dir]
         panel.spawn_agent = spawn_mock
 
         mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
@@ -64,16 +64,16 @@ def _run_pipeline(panel, project_dir, spawn_mock, extra_patches=None, is_continu
             return ("", "", 0)
 
         patches = [
-            patch("hermes_panel.call_agent", return_value={"content": "M", "tokens": 1}),
-            patch("hermes_panel._set_gh_token"),
-            patch("hermes_panel.git", return_value=("", "", 0)),
-            patch("hermes_panel.gh", side_effect=gh_se),
-            patch("hermes_panel.load_key", return_value="fk"),
-            patch("hermes_panel.load_github_token", return_value="ft"),
-            patch("hermes_panel.detect_repo", return_value="t/t"),
-            patch("hermes_panel._safe_run", return_value=mock_run),
-            patch("hermes_panel.subprocess.run", return_value=mock_run),
-            patch("hermes_panel.time.sleep"),
+            patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}),
+            patch("dokima._set_gh_token"),
+            patch("dokima.git", return_value=("", "", 0)),
+            patch("dokima.gh", side_effect=gh_se),
+            patch("dokima.load_key", return_value="fk"),
+            patch("dokima.load_github_token", return_value="ft"),
+            patch("dokima.detect_repo", return_value="t/t"),
+            patch("dokima._safe_run", return_value=mock_run),
+            patch("dokima.subprocess.run", return_value=mock_run),
+            patch("dokima.time.sleep"),
         ]
         if extra_patches:
             patches.extend(extra_patches)
@@ -163,7 +163,7 @@ class TestCoderTimeout:
             return "Mock"
 
         _run_pipeline(panel, project_dir, mock,
-                      extra_patches=[patch("hermes_panel.git", side_effect=mock_git)])
+                      extra_patches=[patch("dokima.git", side_effect=mock_git)])
 
     def test_coder_timeout_no_branch(self, tmpdir):
         """Coder timed out + no branch → halt_and_revert."""
@@ -186,7 +186,7 @@ class TestCoderTimeout:
             return "Mock"
 
         _run_pipeline(panel, project_dir, mock,
-                      extra_patches=[patch("hermes_panel.git", side_effect=mock_git)])
+                      extra_patches=[patch("dokima.git", side_effect=mock_git)])
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -263,9 +263,9 @@ class TestMergeFailure:
         mock_proc = type("P", (), {"poll": lambda s: 0, "communicate": lambda s,t=None: (b"done", None)})()
 
         _run_pipeline(panel, project_dir, mock, extra_patches=[
-            patch("hermes_panel.merge_worktree_branches", return_value=False),
-            patch("hermes_panel.WorktreeManager", return_value=wt_mgr),
-            patch("hermes_panel.subprocess.Popen", return_value=mock_proc),
+            patch("dokima.merge_worktree_branches", return_value=False),
+            patch("dokima.WorktreeManager", return_value=wt_mgr),
+            patch("dokima.subprocess.Popen", return_value=mock_proc),
         ])
 
 
@@ -295,7 +295,7 @@ class TestAutoMerge:
         os.environ["PANEL_PARALLEL"] = "0"
 
         _run_pipeline(panel, project_dir, mock, is_continuous=True, extra_patches=[
-            patch("hermes_panel.try_auto_merge", return_value="queued"),
+            patch("dokima.try_auto_merge", return_value="queued"),
         ])
 
         for k in ("PANEL_PARALLEL", "PANEL_MAX_RETRIES", "PANEL_SKIP_HUMAN_GATE"):
@@ -322,7 +322,7 @@ class TestAutoMerge:
         os.environ["PANEL_PARALLEL"] = "0"
 
         _run_pipeline(panel, project_dir, mock, is_continuous=True, extra_patches=[
-            patch("hermes_panel.try_auto_merge", return_value="failed"),
+            patch("dokima.try_auto_merge", return_value="failed"),
         ])
 
         for k in ("PANEL_PARALLEL", "PANEL_MAX_RETRIES", "PANEL_SKIP_HUMAN_GATE"):

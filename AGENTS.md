@@ -1,4 +1,4 @@
-# Hermes Panel — Multi-Agent Orchestration Engine
+# Dokima — Multi-Agent Orchestration Engine
 
 Python script that routes feature development through a pipeline of AI agents.
 This repo IS the panel — you don't run the panel on itself.
@@ -11,7 +11,7 @@ This repo IS the panel — you don't run the panel on itself.
 
 ## Commands
 - Test: `python3 -m pytest tests/ -q`
-- Syntax check: `python3 -c "compile(open('hermes-panel').read(), 'hermes-panel', 'exec')"`
+- Syntax check: `python3 -c "compile(open('dokima').read(), 'dokima', 'exec')"`
 - Verify nm script: `bash -n ~/bin/nm`
 - Verify vet script: `bash -n ~/bin/vet`
 

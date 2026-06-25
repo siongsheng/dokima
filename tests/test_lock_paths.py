@@ -3,20 +3,20 @@ import pytest
 
 def test_explicit_project_dir_lock(panel):
     result = panel._lock_path("/home/user/my-project")
-    assert result == "/tmp/hermes-panel-my-project.lock"
+    assert result == "/tmp/dokima-my-project.lock"
 
 def test_explicit_project_dir_stop(panel):
     result = panel._stop_path("/home/user/my-project")
-    assert result == "/tmp/hermes-panel-my-project.stop"
+    assert result == "/tmp/dokima-my-project.stop"
 
 def test_implicit_from_global(panel):
     panel.PROJECT_DIR = "/home/user/foo"
     result = panel._lock_path()
-    assert result == "/tmp/hermes-panel-foo.lock"
+    assert result == "/tmp/dokima-foo.lock"
 
 def test_trailing_slash_normalized(panel):
     result = panel._lock_path("/home/user/project/")
-    assert result == "/tmp/hermes-panel-project.lock"
+    assert result == "/tmp/dokima-project.lock"
 
 def test_no_project_dir_no_arg(panel):
     # Simulate NameError by temporarily deleting and capturing

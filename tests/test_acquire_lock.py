@@ -52,7 +52,7 @@ def test_stale_lock_dead_pid(panel, tmpdir_path):
 
 def test_stale_lock_wrong_process(panel, tmpdir_path):
     panel.PROJECT_DIR = tmpdir_path
-    # Write a lock file with PID 1 (init, not hermes-panel)
+    # Write a lock file with PID 1 (init, not dokima)
     lp = panel._lock_path()
     with open(lp, "w") as f:
         f.write("1\n")

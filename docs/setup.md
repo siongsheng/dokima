@@ -1,4 +1,4 @@
-# Hermes Panel — Deployment & Setup Guide
+# Dokima — Deployment & Setup Guide
 
 Bring the multi-agent panel to a new repository or a fresh machine. One-time setup takes ~5 minutes per machine; per-project setup takes 60 seconds.
 
@@ -49,8 +49,8 @@ Human Gate ──▶ Strategist ──▶ Coder ──▶ vet ──▶ nm ─�
 ### 2.1 Install the panel
 
 ```bash
-git clone https://github.com/siongsheng/hermes-panel.git ~/hermes-panel
-ln -sf ~/hermes-panel/hermes-panel ~/bin/hermes-panel
+git clone https://github.com/siongsheng/dokima.git ~/dokima
+ln -sf ~/dokima/dokima ~/bin/dokima
 ```
 
 ### 2.2 Create the 3 agent profiles
@@ -89,26 +89,26 @@ hermes --profile tech-lead config set terminal.env_passthrough '[GH_TOKEN, GITHU
 
 ### 2.3 Deploy the panel skills
 
-The panel ships four lite skills in `~/hermes-panel/skills/`. Install them into each profile:
+The panel ships four lite skills in `~/dokima/skills/`. Install them into each profile:
 
 ```bash
 # Strategist skills
 mkdir -p ~/.hermes/profiles/strategist/skills/software-development
-cp -r ~/hermes-panel/skills/spec-strategist-lite ~/.hermes/profiles/strategist/skills/software-development/
-cp -r ~/hermes-panel/skills/ponytail-guard ~/.hermes/profiles/strategist/skills/software-development/
+cp -r ~/dokima/skills/spec-strategist-lite ~/.hermes/profiles/strategist/skills/software-development/
+cp -r ~/dokima/skills/ponytail-guard ~/.hermes/profiles/strategist/skills/software-development/
 
 # Coder skills
 mkdir -p ~/.hermes/profiles/coder/skills/software-development
-cp -r ~/hermes-panel/skills/ai-coding-best-practices-lite ~/.hermes/profiles/coder/skills/software-development/
+cp -r ~/dokima/skills/ai-coding-best-practices-lite ~/.hermes/profiles/coder/skills/software-development/
 
 # Tech Lead skills
 mkdir -p ~/.hermes/profiles/tech-lead/skills/software-development
-cp -r ~/hermes-panel/skills/adversarial-review-lite ~/.hermes/profiles/tech-lead/skills/software-development/
-cp -r ~/hermes-panel/skills/ponytail-guard ~/.hermes/profiles/tech-lead/skills/software-development/
+cp -r ~/dokima/skills/adversarial-review-lite ~/.hermes/profiles/tech-lead/skills/software-development/
+cp -r ~/dokima/skills/ponytail-guard ~/.hermes/profiles/tech-lead/skills/software-development/
 
 # nm skill (global — used by Phase 4)
 mkdir -p ~/.hermes/skills/software-development
-cp -r ~/hermes-panel/skills/no-mistakes ~/.hermes/skills/software-development/
+cp -r ~/dokima/skills/no-mistakes ~/.hermes/skills/software-development/
 ```
 
 ### 2.4 Set GitHub token
@@ -125,7 +125,7 @@ Token needs: `repo` scope (for `gh pr create`, `gh issue create`, `gh pr review`
 
 ```bash
 # Check panel is executable
-hermes-panel --help 2>&1 | head -5
+dokima --help 2>&1 | head -5
 
 # Verify profiles start
 hermes --profile strategist -q "echo ok" --yolo
@@ -145,7 +145,7 @@ npm install -g @anthropic-ai/claude-code
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Run the panel with Claude Code as the agent runtime
-PANEL_AGENT=claude hermes-panel "Add rate limiting middleware" ~/project
+PANEL_AGENT=claude dokima "Add rate limiting middleware" ~/project
 ```
 
 **Model mapping with Claude Code:**
@@ -161,7 +161,7 @@ PANEL_AGENT=claude hermes-panel "Add rate limiting middleware" ~/project
 
 **How nm works with Claude Code:** When `PANEL_AGENT=claude`, the `~/bin/nm` script delegates to Claude Code instead of Hermes. The adversarial review still uses a different model family (DeepSeek vs Claude).
 
-> **Current status:** Claude Code support is documented and the `PANEL_AGENT` env var is reserved. The agent provider abstraction in the panel script is the next implementation milestone. See [the issue tracker](https://github.com/siongsheng/hermes-panel/issues) for progress.
+> **Current status:** Claude Code support is documented and the `PANEL_AGENT` env var is reserved. The agent provider abstraction in the panel script is the next implementation milestone. See [the issue tracker](https://github.com/siongsheng/dokima/issues) for progress.
 
 ---
 
@@ -217,10 +217,10 @@ Verify the pipeline works with a trivial feature:
 cd ~/your-project
 
 # Quick test: add a comment to a file
-hermes-panel "Add a JSDoc comment to the main function" .
+dokima "Add a JSDoc comment to the main function" .
 
 # Force all phases (for testing)
-PANEL_FORCE_FULL=1 hermes-panel "Add a health check endpoint" .
+PANEL_FORCE_FULL=1 dokima "Add a health check endpoint" .
 ```
 
 **Expected output:**
@@ -254,7 +254,7 @@ hermes cron create \
   --name "panel-daily-feature"
 ```
 
-> When run from cron, the panel uses non-interactive mode. Human Gate auto-skips. If the strategist needs clarification, panel exits code 2 and saves questions to `/tmp/hermes-panel-interview.json`. The orchestrator must pick these up and re-run with `--answers`.
+> When run from cron, the panel uses non-interactive mode. Human Gate auto-skips. If the strategist needs clarification, panel exits code 2 and saves questions to `/tmp/dokima-interview.json`. The orchestrator must pick these up and re-run with `--answers`.
 
 ---
 
@@ -273,16 +273,16 @@ hermes cron create \
 
 ```bash
 # High-quality spec for complex features
-PANEL_REASONING=high hermes-panel "Add OAuth2 integration" ~/project
+PANEL_REASONING=high dokima "Add OAuth2 integration" ~/project
 
 # Force all stages even for low-risk changes
-PANEL_FORCE_FULL=1 hermes-panel "Add unit test for helper" ~/project
+PANEL_FORCE_FULL=1 dokima "Add unit test for helper" ~/project
 
 # Sequential mode (simpler debugging)
-PANEL_PARALLEL=0 hermes-panel "Refactor database layer" ~/project
+PANEL_PARALLEL=0 dokima "Refactor database layer" ~/project
 
 # Skip auto-fix (human reviews all findings)
-PANEL_SKIP_AUTOFIX=1 hermes-panel "Refactor auth middleware" ~/project
+PANEL_SKIP_AUTOFIX=1 dokima "Refactor auth middleware" ~/project
 ```
 
 ---
@@ -291,11 +291,11 @@ PANEL_SKIP_AUTOFIX=1 hermes-panel "Refactor auth middleware" ~/project
 
 When the strategist can't proceed with high confidence, it enters interview mode:
 
-1. Panel exits with code 2, saves questions to `/tmp/hermes-panel-interview.json`
+1. Panel exits with code 2, saves questions to `/tmp/dokima-interview.json`
 2. Orchestrator (you or a cron handler) reads the JSON
 3. Presents questions to the user, collects answers
 4. Writes answers back to the JSON file
-5. Re-runs: `hermes-panel --answers /tmp/hermes-panel-interview.json "feature" ~/project`
+5. Re-runs: `dokima --answers /tmp/dokima-interview.json "feature" ~/project`
 
 **Interview JSON format:**
 ```json
@@ -365,7 +365,7 @@ Ensure `git remote get-url origin` returns a valid GitHub URL. The panel support
 Both `GH_TOKEN` and `GITHUB_TOKEN` must be set. `gh` CLI checks `GITHUB_TOKEN` first. Verify `~/.hermes/shared.env` has both. Token needs `repo` scope.
 
 ### "Strategist produces zero-byte spec"
-Interview mode triggered but `--answers` was not provided. Check `/tmp/hermes-panel-interview.json` for questions. Re-run with `--answers`.
+Interview mode triggered but `--answers` was not provided. Check `/tmp/dokima-interview.json` for questions. Re-run with `--answers`.
 
 ### "Coder times out with no branch"
 The coder profile may be hitting API rate limits or the feature is too large. Try:
@@ -377,4 +377,4 @@ The coder profile may be hitting API rate limits or the feature is too large. Tr
 nm requires a different model family from the coder. If coder uses DeepSeek, configure an Anthropic or OpenAI model in the profile nm uses. Check `~/bin/nm` script and ensure the second model provider has a valid API key.
 
 ### "Verification fails after 2 retries"
-The coder pushed broken code. Check the test/build failure output in the panel log (`/tmp/hermes-panel-output.txt`). Fix manually, then re-run with the same feature description.
+The coder pushed broken code. Check the test/build failure output in the panel log (`/tmp/dokima-output.txt`). Fix manually, then re-run with the same feature description.

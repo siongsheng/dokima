@@ -1,4 +1,4 @@
-# Hermes Panel — Spec
+# Dokima — Spec
 
 ## Mission
 
@@ -37,7 +37,7 @@ A lightweight, stateless Python script that routes feature development through a
 - [x] Tech Lead spec-compliance and architecture review
 - [x] Filtered auto-fix loopbacks (nm→coder, TL→coder) for objective issues only
 - [x] Pipeline halt + revert on unrecoverable failures
-- [x] Full output log to `/tmp/hermes-panel-output.txt`
+- [x] Full output log to `/tmp/dokima-output.txt`
 
 ### Parallel Execution
 - [x] DAG-based task scheduling with dependency resolution
@@ -73,7 +73,7 @@ A lightweight, stateless Python script that routes feature development through a
 
 | File | Purpose |
 |------|---------|
-| `hermes-panel` | Main script (single file, ~3300 lines) |
+| `dokima` | Main script (single file, ~3300 lines) |
 | `~/bin/nm` | Adversarial review companion script |
 | `~/bin/vet` | Shell verification companion script |
 | `docs/pipeline.md` | Full pipeline reference |
@@ -85,4 +85,4 @@ A lightweight, stateless Python script that routes feature development through a
 - No hardcoded 'master' branch — detected from `origin/HEAD`
 - No hardcoded model names in documentation — provider-agnostic
 - State is in the filesystem (specs, branches, worktrees, log files) — not in memory
-- Single-entry-point design: all orchestration flows through `hermes-panel`
+- Single-entry-point design: all orchestration flows through `dokima`
