@@ -72,8 +72,15 @@ def call_agent(port, system_prompt, user_prompt, model="deepseek-v4-pro", max_to
             "tokens": resp["usage"]["completion_tokens"]}
 
 def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None):
-    """Spawn a Hermes agent as a subprocess. Returns stdout or raises on failure."""
+    """Spawn a Hermes agent as a subprocess. Returns stdout or raises on failure.
+    If model is specified (e.g. 'deepseek-v4-pro'), passes -m/--provider to override the profile default."""
     cmd = [HERMES_BIN, "--profile", profile, "--yolo"]
+    if model:
+        if "/" in model:
+            provider, model_name = model.split("/", 1)
+            cmd.extend(["--provider", provider, "-m", model_name])
+        else:
+            cmd.extend(["-m", model])
     for s in skills:
         cmd.extend(["-s", s])
     cmd.extend(["chat", "-q", prompt])
@@ -2630,7 +2637,24 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
                 f'Report the PR URL.\n'
             )
 
-        coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"], coder_prompt, cwd=PROJECT_DIR)
+        # ── Model selection: upgrade to v4-pro for complex features ──
+        coder_model = None  # None = use profile default (v4-flash)
+        if mode == "fix":
+            coder_model = "deepseek-v4-pro"  # Fix mode always benefits from stronger reasoning
+        elif tasks_extract_path and os.path.exists(tasks_extract_path):
+            try:
+                with open(tasks_extract_path) as f:
+                    task_count = len(re.findall(r'^### Task \d+:', f.read(), re.MULTILINE))
+                if task_count >= 8:
+                    coder_model = "deepseek-v4-pro"
+                    print(f"  ⚡ {task_count} tasks → upgrading coder to v4-pro", flush=True)
+            except Exception:
+                pass
+
+        kwargs = {"cwd": PROJECT_DIR}
+        if coder_model:
+            kwargs["model"] = coder_model
+        coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"], coder_prompt, **kwargs)
         print(f"\n✓ Coder finished ({len(coder_output)} chars)", flush=True)
 
         # ── Coder clarification gate ──
@@ -3271,13 +3295,13 @@ def run_phase1_strategist(feature, user_answers_prefill):
 
     RULES: Every task MUST start with "### Task N:" and have ALL five fields. Parallelizable:yes only if touching DIFFERENT files from all other tasks. Non-DAG formats (bullet points, numbered lists, bold headers, plain paragraphs) are DISCARDED \u2192 feature runs SEQUENTIALLY (3\u00d7 slower). BEFORE SUBMITTING: search output for "### Task" \u2014 every task must match.
 
-    CODER CONSTRAINTS (2026-06-20 \u2014 the coder uses deepseek-v4-flash, not v4-pro):
-    - Output token limit: ~8K tokens. Each task must produce \u2264200 lines of new code. If a task would produce more, split it.
-    - Max iterations: 50 tool turns. The coder WILL fail if a task exceeds this. Scope tasks for completion within 50 turns.
-    - Prefer MORE granular tasks (10-15 small) over FEWER large tasks (3-5 big). The panel auto-parallelizes up to 5 coders per wave.
+    CODER CONSTRAINTS (2026-06-26 — the panel auto-upgrades to v4-pro for ≥8 tasks or --fix mode):
+    - v4-flash (default): aim for 5-8 tasks of ~100-300 lines each. The coder handles moderate complexity well.
+    - v4-pro (≥8 tasks): can handle larger tasks — design for 4-8 tasks of up to 500 lines each.
+    - Prefer medium-sized tasks (5-10) — fewer TDD cycles = faster pipeline. Only go granular (12+) when files collide.
     - File collision rule: tasks touching the SAME file must be sequential (different waves). Design files so tasks touch different files.
-    - If the feature would need >20 tasks, add a "## Panel Split Recommendation" section suggesting how to split across multiple panel passes.
-    - Each task = one 5-15min RED\u2192GREEN TDD cycle. One function/component per task. No monolithic prompts.
+    - If the feature would need >12 tasks, add a "## Panel Split Recommendation" section suggesting how to split across multiple panel passes.
+    - Each task = one RED→GREEN TDD cycle. One function/component per task. No monolithic prompts.
 
     CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who may copy-paste. Write NO implementation code (function bodies, SQL, HTML, CSS, shell commands). Allowed: pseudo-code, Mermaid diagrams, function SIGNATURES only, route definitions, data structure definitions (field names + types, no impl). Describe WHAT and WHY \u2014 the coder decides HOW."""
 
