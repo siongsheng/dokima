@@ -2024,11 +2024,12 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
 
 def extract_file_paths(text):
     """Extract file paths from blocker descriptions or task lists.
-    Matches backtick-quoted paths like `src/app/layout.tsx:29-33` or
-    `src/components/Sidebar.tsx`, stripping line numbers.
+    Matches:
+    - Backtick-quoted paths like `src/app/layout.tsx:29-33`
+    - **Files:** lines in task extracts: **Files:** path/to/file1, path/to/file2
     Returns sorted unique list of relative paths."""
     paths = set()
-    # Pattern: backtick-quoted paths with optional line numbers
+    # Pattern 1: backtick-quoted paths with optional line numbers
     for match in re.finditer(r'`([^`]+\.[a-z]{2,6}(?::\d+(?:-\d+)?)?)`', text):
         raw = match.group(1)
         # Strip line numbers
@@ -2041,6 +2042,13 @@ def extract_file_paths(text):
         if '/' in path:
             if not path.startswith('http') and not path.startswith('git '):
                 paths.add(path)
+    # Pattern 2: **Files:** lines in task extracts (unquoted, comma-separated)
+    for match in re.finditer(r'\*\*Files:\*\*\s+(.+)', text):
+        files_line = match.group(1)
+        for part in re.split(r'[,;]\s*', files_line):
+            part = part.strip()
+            if '/' in part and not part.startswith('http') and not part.startswith('git '):
+                paths.add(part)
     return sorted(paths)
 
 
