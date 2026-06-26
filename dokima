@@ -2114,7 +2114,7 @@ def generate_codebase_map(project_dir, full=False):
         except Exception:
             pass
 
-    # Build directory tree and analyze changed files
+    # Build directory tree — depth-first, insert parent headers as we go
     source_exts = {'.py', '.ts', '.tsx', '.js', '.jsx', '.rs', '.go', '.css', '.scss',
                    '.md', '.mdx', '.json', '.yaml', '.yml', '.toml', '.sh', '.bash'}
     skip_dirs = {'node_modules', '.git', '__pycache__', '.venv', 'venv', 'target',
@@ -2124,18 +2124,36 @@ def generate_codebase_map(project_dir, full=False):
     changed = False
     new_cache = {}
     analyzed_files = 0
+    seen_dirs = set()
+    last_dir = None
 
     for dirpath, dirnames, filenames in os.walk(project_dir):
-        dirnames[:] = [d for d in dirnames if d not in skip_dirs and not d.startswith('.')]
+        dirnames[:] = sorted([d for d in dirnames if d not in skip_dirs and not d.startswith('.')])
         rel_dir = os.path.relpath(dirpath, project_dir)
         if rel_dir == '.':
             rel_dir = ''
 
-        for fname in sorted(filenames):
-            if not any(fname.endswith(ext) for ext in source_exts):
-                continue
-            fpath = os.path.join(dirpath, fname)
+        source_files = sorted([f for f in filenames if any(f.endswith(ext) for ext in source_exts)])
+        if not source_files:
+            continue
+
+        # Insert ALL missing ancestor directory headers
+        if rel_dir:
+            parts = rel_dir.split(os.sep)
+            for i in range(len(parts)):
+                ancestor = os.sep.join(parts[:i+1])
+                if ancestor not in seen_dirs:
+                    seen_dirs.add(ancestor)
+                    a_indent = "│   " * i
+                    a_name = parts[i]
+                    tree_lines.append(f"{a_indent}├── {a_name}/")
+
+        d_depth = rel_dir.count(os.sep) if rel_dir else 0
+        d_indent = "│   " * d_depth if d_depth > 0 else ""
+
+        for j, fname in enumerate(source_files):
             rel_path = os.path.join(rel_dir, fname) if rel_dir else fname
+            fpath = os.path.join(dirpath, fname)
 
             # Compute hash
             try:
@@ -2147,13 +2165,10 @@ def generate_codebase_map(project_dir, full=False):
 
             entry = cache.get(rel_path, {})
             old_hash = entry.get("hash", "")
-
             description = ""
             if old_hash == fhash and not full:
-                # Unchanged — reuse cached description
                 description = entry.get("desc", "")
             else:
-                # Changed or new — analyze
                 try:
                     with open(fpath, errors='replace') as f:
                         content = f.read()
@@ -2164,9 +2179,10 @@ def generate_codebase_map(project_dir, full=False):
 
             new_cache[rel_path] = {"hash": fhash, "desc": description}
 
-            # Tree entry
-            indent = "  " * rel_path.count(os.sep)
-            tree_lines.append(f"{indent}{fname}")
+            is_last = (j == len(source_files) - 1)
+            branch = "└── " if is_last else "├── "
+            prefix = f"{d_indent}│   " if d_depth > 0 else ""
+            tree_lines.append(f"{prefix}{branch}{fname}")
             if description:
                 tree_lines[-1] += f"  — {description}"
 
