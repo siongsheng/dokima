@@ -3329,17 +3329,19 @@ def run_phase1_strategist(feature, user_answers_prefill):
     if not re.search(r'### Task \d+:', strat_output):
         print("  ⚠ No DAG-format tasks (### Task N:) found — re-prompting strategist...", flush=True)
         dag_correction = (
-            "── FORMAT CORRECTION REQUIRED ──\n"
-            "Your previous output did not contain any `### Task N:` headers.\n"
-            "The panel DAG parser requires EXACTLY this format (three hashes, not four):\n\n"
-            "### Task 1: Brief description\n"
-            "**Files:** path/to/file1, path/to/file2\n"
-            "**Dependencies:** [none]\n"
-            "**Parallelizable:** yes or no\n"
-            "**Description:** What this task accomplishes.\n\n"
-            "Output your ENTIRE spec again, replacing any prose task descriptions\n"
-            "with proper ### Task N: format as specified in Section 8.\n"
-            "Do NOT use #### (four hashes), bullet points, or numbered lists for tasks."
+            f"── FORMAT CORRECTION REQUIRED ──\n"
+            f"You were writing a spec for feature: {feature}\n"
+            f"Project: {PROJECT_DIR}\n\n"
+            f"Your previous output did not contain any `### Task N:` headers.\n"
+            f"The panel DAG parser requires EXACTLY this format (three hashes, not four):\n\n"
+            f"### Task 1: Brief description\n"
+            f"**Files:** path/to/file1, path/to/file2\n"
+            f"**Dependencies:** [none]\n"
+            f"**Parallelizable:** yes or no\n"
+            f"**Description:** What this task accomplishes.\n\n"
+            f"Re-output your ENTIRE spec for {feature} with proper ### Task N: format.\n"
+            f"Do NOT write a spec for a different feature. Do NOT search other projects.\n"
+            f"Do NOT use #### (four hashes), bullet points, or numbered lists for tasks."
         )
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
                                    dag_correction, timeout=300, cwd=PROJECT_DIR)
