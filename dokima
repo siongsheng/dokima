@@ -3306,7 +3306,28 @@ def run_phase1_strategist(feature, user_answers_prefill):
     CRITICAL: You are a DESIGNER, not a coder. Output goes to a frontend coder who may copy-paste. Write NO implementation code (function bodies, SQL, HTML, CSS, shell commands). Allowed: pseudo-code, Mermaid diagrams, function SIGNATURES only, route definitions, data structure definitions (field names + types, no impl). Describe WHAT and WHY \u2014 the coder decides HOW."""
 
     strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
-    print(f"\n\u2713 Strategist finished ({len(strat_output)} chars)", flush=True)
+    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
+
+    # ── DAG format enforcement ──
+    if not re.search(r'### Task \d+:', strat_output):
+        print("  ⚠ No DAG-format tasks (### Task N:) found — re-prompting strategist...", flush=True)
+        dag_correction = (
+            "── FORMAT CORRECTION REQUIRED ──\n"
+            "Your previous output did not contain any `### Task N:` headers.\n"
+            "The panel DAG parser requires EXACTLY this format (three hashes, not four):\n\n"
+            "### Task 1: Brief description\n"
+            "**Files:** path/to/file1, path/to/file2\n"
+            "**Dependencies:** [none]\n"
+            "**Parallelizable:** yes or no\n"
+            "**Description:** What this task accomplishes.\n\n"
+            "Output your ENTIRE spec again, replacing any prose task descriptions\n"
+            "with proper ### Task N: format as specified in Section 8.\n"
+            "Do NOT use #### (four hashes), bullet points, or numbered lists for tasks."
+        )
+        strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
+                                   dag_correction, timeout=300, cwd=PROJECT_DIR)
+        print(f"  ✓ Strategist re-run finished ({len(strat_output)} chars)", flush=True)
+
     if _orig_reasoning and os.path.exists(_strat_config):
         with open(_strat_config, "w") as f:
             f.write(_orig_yaml)
