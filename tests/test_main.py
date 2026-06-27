@@ -20,6 +20,20 @@ def test_repo_fixture_creates_valid_git_repo(test_repo):
     assert r2.returncode == 0 and r2.stdout.strip(), "Repo should have at least one commit"
 
 
+def test_orchestrator_fixture_creates_instance(orchestrator):
+    """orchestrator fixture creates an Orchestrator with mock I/O."""
+    assert orchestrator is not None
+    assert orchestrator.project_dir is not None
+    assert orchestrator.feature == "Test pipeline feature"
+
+
+def test_orchestrator_fixture_mock_safe_run(orchestrator):
+    """orchestrator fixture's mock_safe_run returns pre-configured responses."""
+    result = orchestrator.safe_run_fn("echo hello", cwd="/tmp", timeout=10)
+    # Default mock should return success
+    assert result is not None
+
+
 
 def test_orchestrator_constructable(panel):
     """Orchestrator can be constructed with default dependencies."""
