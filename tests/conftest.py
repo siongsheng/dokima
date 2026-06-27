@@ -146,3 +146,74 @@ def test_subtract():
     subprocess.run(["git", "commit", "-m", "initial"], cwd=tmpdir_path, capture_output=True)
 
     return tmpdir_path
+
+
+class MockSafeRunResult:
+    """Result from mock_safe_run, mimicking subprocess.CompletedProcess."""
+    def __init__(self, stdout="", stderr="", returncode=0):
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+    def __repr__(self):
+        return f"MockSafeRunResult(rc={self.returncode}, stdout={self.stdout[:50]})"
+
+
+@pytest.fixture
+def mock_safe_run():
+    """Factory fixture for mock_safe_run. Returns configured responses by command prefix."""
+    _responses = {}
+
+    def _set(cmd_prefix, stdout="", stderr="", returncode=0):
+        _responses[cmd_prefix] = MockSafeRunResult(stdout, stderr, returncode)
+
+    def _run(cmd, cwd="/tmp", timeout=300):
+        for prefix, result in _responses.items():
+            if cmd.startswith(prefix):
+                return result
+        return MockSafeRunResult()
+
+    _run.set = _set  # Attach setter for convenience
+    _run.responses = _responses
+    return _run
+
+
+@pytest.fixture
+def mock_gh():
+    """Factory fixture for gh CLI mock. Returns JSON for gh commands."""
+    _responses = {}
+
+    def _set(cmd_prefix, json_output):
+        _responses[cmd_prefix] = json_output
+
+    def _run(*args, **kwargs):
+        cmd = " ".join(str(a) for a in args)
+        for prefix, output in _responses.items():
+            if cmd.startswith(prefix):
+                return output
+        return '{"number": 0}'
+
+    _run.set = _set
+    return _run
+
+
+@pytest.fixture
+def orchestrator(panel, test_repo, mock_safe_run, mock_gh):
+    """Construct an Orchestrator with mock I/O for integration testing."""
+    import io
+
+    cleanup_called = []
+    orch = panel.Orchestrator(
+        project_dir=test_repo,
+        feature="Test pipeline feature",
+        stdin=io.StringIO(),
+        lock_fn=lambda: (True, -1),
+        safe_run_fn=mock_safe_run,
+        gh_cli_fn=mock_gh,
+        cleanup_lock_fn=lambda: cleanup_called.append(True),
+        is_next=True,
+        skip_auto_archive=True,
+        skip_human_gate=True,
+    )
+    orch._cleanup_called = cleanup_called
+    return orch
