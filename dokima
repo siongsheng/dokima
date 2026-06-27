@@ -2980,6 +2980,12 @@ RED: Write tests → {TEST_CMD} must FAIL → git add <test files only> && git c
 GREEN: Write minimum code → {TEST_CMD} must PASS → {BUILD_CMD} must succeed → git add <impl files only> && git commit -m "feat: <summary>"
 CRITICAL: Two distinct commits, RED before GREEN, different timestamps. NEVER bundle. No task numbers in commit messages.
 BEFORE PUSHING: After ALL tasks done, check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README for <feature>\". Then run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only git push when clean.
+
+CRITICAL RULES:
+- ONLY modify files listed in the current task's **Files:** field. DO NOT delete, rename, or touch any other files — even if they look stale, unused, or mergeable.
+- DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
+- DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.
+- If a pre-existing test fails, report it — do NOT fix it unless the task explicitly says to.
 Report: both commit hashes, files changed, test results, lint status, branch name.
 """
 
@@ -3488,12 +3494,17 @@ Report: what you fixed, commit hash."""
     verdict = "TIMED_OUT" if "[TIMEOUT:" in tl_output and "VERDICT:" not in tl_output.upper() else "UNKNOWN"
     if verdict != "TIMED_OUT":
         tl_upper = tl_output.upper()
-        if "VERDICT: APPROVED" in tl_upper:
-            verdict = "APPROVED"
-        elif "VERDICT: BLOCKED" in tl_upper:
-            verdict = "BLOCKED"
-        elif "VERDICT: CHANGES REQUESTED" in tl_upper:
-            verdict = "CHANGES REQUESTED"
+        # Use last VERDICT line — TL may quote earlier verdicts (from nm),
+        # but the TL's own verdict is always the last one in the output.
+        all_verdicts = re.findall(r'VERDICT:\s*(APPROVED|BLOCKED|CHANGES\s+REQUESTED)', tl_upper)
+        if all_verdicts:
+            last = all_verdicts[-1].strip()
+            if "CHANGES" in last:
+                verdict = "CHANGES REQUESTED"
+            elif "BLOCKED" in last:
+                verdict = "BLOCKED"
+            elif "APPROVED" in last:
+                verdict = "APPROVED"
 
     # ── Inject TL review into PR body ──
     if pr_url and verdict not in ("SKIPPED", "UNKNOWN", "TIMED_OUT"):
@@ -3590,10 +3601,17 @@ def run_phase1_strategist(feature, user_answers_prefill):
     # the strategist must validate and refine it, not replace it.
     _spec_slug = slugify(feature)
     _standard_spec = os.path.join(PROJECT_DIR, "specs", f"{_spec_slug}-spec.md")
+    _subdir_spec = os.path.join(PROJECT_DIR, "specs", _spec_slug, "plan.md")
     _refine_note = ""
+    # Check both conventions: specs/<slug>-spec.md (panel-generated) and specs/<slug>/plan.md (human-written)
+    _found_spec = None
     if os.path.exists(_standard_spec):
-        _spec_size = os.path.getsize(_standard_spec)
-        _refine_note = f"""CRITICAL: A spec already exists at {_standard_spec} ({_spec_size} bytes).
+        _found_spec = _standard_spec
+    elif os.path.exists(_subdir_spec):
+        _found_spec = _subdir_spec
+    if _found_spec:
+        _spec_size = os.path.getsize(_found_spec)
+        _refine_note = f"""CRITICAL: A spec already exists at {_found_spec} ({_spec_size} bytes).
 This spec was written by a human or a prior pipeline run. IT IS THE AUTHORITATIVE SOURCE.
 
 Your job is to VALIDATE, ENHANCE, and FORMAT — NOT rewrite from scratch:
@@ -3711,7 +3729,9 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     # ── DAG format enforcement ──
     orig_strat_output = strat_output  # save in case re-prompt produces garbage
-    if not re.search(r'### Task \d+:', strat_output):
+    # Check DAG on extracted agent messages, not raw output (which has <thinking> blocks)
+    agent_text_for_dag = extract_agent_messages(strat_output)
+    if not re.search(r'### Task \d+:', agent_text_for_dag):
         print("  ⚠ No DAG-format tasks (### Task N:) found — re-prompting strategist...", flush=True)
         # Truncate first output to keep re-prompt tokens reasonable (first 4K chars)
         truncated = strat_output[:4096] + ("...[truncated]" if len(strat_output) > 4096 else "")
@@ -3738,6 +3758,10 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
                                    dag_correction, timeout=600, cwd=PROJECT_DIR)
         print(f"  ✓ Strategist re-run finished ({len(strat_output)} chars)", flush=True)
+        # Verify re-prompt output
+        agent_text_recheck = extract_agent_messages(strat_output)
+        if not re.search(r'### Task \d+:', agent_text_recheck):
+            print("  ⚠ Re-prompt also lacks DAG format — proceeding with degraded (sequential) mode", flush=True)
 
     if _orig_reasoning and os.path.exists(_strat_config):
         with open(_strat_config, "w") as f:

@@ -92,7 +92,7 @@ def test_blocked_next_not_done(panel, tmpdir_path):
         f.write("# Specs Status\n\n## Active\n\n## Archived\n")
 
     continue_loop = True
-    result_continue, result_stop = panel.run_post_pipeline(
+    result_continue = panel.run_post_pipeline(
         "F004: blocked-next", True, False, continue_loop,
         "https://github.com/x/y/pull/44", "BLOCKED", "LOW",
         "feat/f004-blocked-next", roadmap_dir,
@@ -123,7 +123,7 @@ def test_blocked_continuous_not_done(panel, tmpdir_path):
         f.write("# Specs Status\n\n## Active\n\n## Archived\n")
 
     continue_loop = True
-    result_continue, result_stop = panel.run_post_pipeline(
+    result_continue = panel.run_post_pipeline(
         "F005: blocked-continuous", True, True, continue_loop,
         "https://github.com/x/y/pull/45", "BLOCKED", "LOW",
         "feat/f005-blocked-continuous", roadmap_dir,
@@ -156,7 +156,7 @@ def test_approved_next_done(panel, tmpdir_path):
         f.write("# Specs Status\n\n## Active\n\n## Archived\n")
 
     continue_loop = True
-    result_continue, result_stop = panel.run_post_pipeline(
+    result_continue = panel.run_post_pipeline(
         "F006: approved-next", True, False, continue_loop,
         "https://github.com/x/y/pull/46", "APPROVED", "LOW",
         "feat/f006-approved-next", roadmap_dir,
@@ -186,7 +186,7 @@ def test_changes_requested(panel, tmpdir_path):
         f.write("# Specs Status\n\n## Active\n\n## Archived\n")
 
     continue_loop = True
-    result_continue, result_stop = panel.run_post_pipeline(
+    result_continue = panel.run_post_pipeline(
         "F007: changes-requested", True, False, continue_loop,
         "https://github.com/x/y/pull/47", "CHANGES_REQUESTED", "LOW",
         "feat/f007-changes-requested", roadmap_dir,
