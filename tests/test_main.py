@@ -1,9 +1,24 @@
 """Tests for main() and Orchestrator class."""
 import io
 import os
-import sys
-import tempfile
 import pytest
+
+
+def test_repo_fixture_creates_valid_git_repo(test_repo):
+    """test_repo fixture creates a valid git repo with AGENTS.md."""
+    agents_path = os.path.join(test_repo, "AGENTS.md")
+    assert os.path.exists(agents_path), "AGENTS.md should exist"
+    with open(agents_path) as f:
+        content = f.read()
+    assert "test" in content.lower() or "pytest" in content.lower()
+    # Verify it's a git repo
+    from subprocess import run, PIPE
+    r = run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True, cwd=test_repo)
+    assert r.returncode == 0, f"Not a git repo: {r.stderr}"
+    # Should have initial commit
+    r2 = run(["git", "log", "--oneline", "-1"], capture_output=True, text=True, cwd=test_repo)
+    assert r2.returncode == 0 and r2.stdout.strip(), "Repo should have at least one commit"
+
 
 
 def test_orchestrator_constructable(panel):
