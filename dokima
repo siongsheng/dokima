@@ -3772,12 +3772,12 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     # ── Interview gate ──
     agent_text_pre = extract_agent_messages(strat_output)
     interview_mode = "DECISION: INTERVIEW MODE" in agent_text_pre
-    has_clarifications = bool(re.search(r'CLARIFICATION\s+\d+:', agent_text_pre))
+    has_clarifications = bool(re.search(r'^\s*CLARIFICATION\s+\d+:', agent_text_pre, re.MULTILINE))
     if (interview_mode or has_clarifications) and not user_answers_prefill:
         if not sys.stdin.isatty():
             clarification_blocks = []
-            pattern = r'(CLARIFICATION\s+\d+:.*?)(?=\n\s*CLARIFICATION\s+\d+|\n\s*\n\s*(?:DECISION|IMPACT|CONFIDENCE|### Task|SPEC COMPLETE|Ready for)|\Z)'
-            for match in re.finditer(pattern, agent_text_pre, re.DOTALL):
+            pattern = r'(^\s*CLARIFICATION\s+\d+:.*?)(?=\n\s*CLARIFICATION\s+\d+|\n\s*\n\s*(?:DECISION|IMPACT|CONFIDENCE|### Task|SPEC COMPLETE|Ready for)|\Z)'
+            for match in re.finditer(pattern, agent_text_pre, re.DOTALL | re.MULTILINE):
                 block = match.group(1).strip()
                 if len(block) > 10:
                     clarification_blocks.append(block)
