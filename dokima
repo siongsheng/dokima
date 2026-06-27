@@ -4303,6 +4303,50 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     return 0
 
 
+class Orchestrator:
+    """Orchestrates the dokima pipeline with injectable dependencies."""
+
+    def __init__(self, project_dir, feature, stdin=None,
+                 lock_fn=None, safe_run_fn=None, gh_cli_fn=None,
+                 cleanup_lock_fn=None,
+                 is_next=False, is_continuous=False, is_fix=False,
+                 is_interactive=False, fix_all=False, skip_autofix=False,
+                 force_full=False, skip_auto_archive=False,
+                 skip_human_gate=False, max_parallel_override=None,
+                 user_answers_prefill=None, base_branch_override=None):
+        self.project_dir = project_dir
+        self.feature = feature
+        self.stdin = stdin or sys.stdin
+        self.lock_fn = lock_fn
+        self.safe_run_fn = safe_run_fn
+        self.gh_cli_fn = gh_cli_fn
+        self.cleanup_lock_fn = cleanup_lock_fn
+        self.is_next = is_next
+        self.is_continuous = is_continuous
+        self.is_fix = is_fix
+        self.is_interactive = is_interactive
+        self.fix_all = fix_all
+        self.skip_autofix = skip_autofix
+        self.force_full = force_full
+        self.skip_auto_archive = skip_auto_archive
+        self.skip_human_gate = skip_human_gate
+        self.max_parallel_override = max_parallel_override
+        self.user_answers_prefill = user_answers_prefill
+        self.base_branch_override = base_branch_override
+
+    def run(self):
+        """Run the pipeline. Calls cleanup_lock on completion."""
+        try:
+            self._run_internal()
+        finally:
+            if self.cleanup_lock_fn:
+                self.cleanup_lock_fn()
+
+    def _run_internal(self):
+        """Internal pipeline dispatch (placeholder — subclasses override for testing)."""
+        pass
+
+
 # ── main ──
 
 def main():
