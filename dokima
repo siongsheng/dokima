@@ -752,6 +752,7 @@ HELP_TEXT = """Dokima — Multi-Agent Orchestration Engine
 COMMANDS:
   dokima "Feature description" [dir]     Run full pipeline for a feature
   dokima init "description" [dir]        Project discovery & constitution
+  dokima --add "Feature" [--priority=P1] [dir]  Add feature to roadmap (auto-priority, auto-deps)
   dokima --next [dir]                    Build next feature from roadmap
   dokima --continuous [dir]              Full sprint: build + auto-merge + loop
   dokima --fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
@@ -778,6 +779,7 @@ FLAGS:
 
 EXAMPLES:
   dokima init "trading dashboard" ~/huat
+  dokima --add "Dark mode toggle" ~/huat
   dokima --next ~/huat
   dokima --continuous ~/huat
   dokima --fix ~/huat
@@ -1625,6 +1627,124 @@ def handle_list_crons():
         if slug not in shown:
             print(f"{slug:<30} {'manual':<18} RUNNING (PID {pid})")
     sys.exit(0)
+
+
+def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
+    """Add a feature to roadmap.md with auto-determined priority, dependencies,
+    and section placement. Uses keyword heuristics to decide where the new
+    feature belongs in the roadmap structure."""
+
+    roadmap_path = os.path.join(project_dir, "specs", "roadmap.md")
+    if not os.path.exists(roadmap_path):
+        print("ERROR: No roadmap.md found. Run 'dokima init' first.")
+        sys.exit(1)
+
+    with open(roadmap_path) as f:
+        content = f.read()
+
+    # Find highest existing F-number
+    existing_ids = re.findall(r'^###\s+(F\d{3}):', content, re.MULTILINE)
+    next_num = 1
+    if existing_ids:
+        nums = [int(fid[1:]) for fid in existing_ids]
+        next_num = max(nums) + 1
+    new_fid = f"F{next_num:03d}"
+
+    # Determine priority from keywords
+    desc_lower = feature_desc.lower()
+    priority = priority_hint or ""
+    if not priority:
+        p0_words = ["security", "crash", "data loss", "injection", "vulnerability",
+                    "critical", "blocker", "broken pipeline", "silent failure"]
+        p3_words = ["someday", "icebox", "maybe", "future", "post-stable", "nice to have"]
+        p2_words = ["docs", "documentation", "readme", "portability", "installer",
+                    "quickstart", "template", "config", "guide"]
+        if any(w in desc_lower for w in p0_words):
+            priority = "P0"
+        elif any(w in desc_lower for w in p3_words):
+            priority = "P3"
+        elif any(w in desc_lower for w in p2_words):
+            priority = "P2"
+        else:
+            priority = "P1"
+
+    # Determine dependencies from keyword overlap with existing features
+    existing_features = {}
+    for m in re.finditer(r'^###\s+(F\d{3}):\s*(.+?)$\n(.*?)(?=^###\s+F\d{3}:|^##\s|\Z)',
+                         content, re.MULTILINE | re.DOTALL):
+        fid = m.group(1)
+        ftitle = m.group(2).strip()
+        fbody = m.group(3)
+        existing_features[fid] = {"title": ftitle, "body": fbody}
+
+    # Find section headers
+    sections = []
+    section_pattern = re.compile(r'^##\s+(.+?)$', re.MULTILINE)
+    for sm in section_pattern.finditer(content):
+        sec_start = sm.start()
+        sec_title = sm.group(1).strip()
+        next_sec = section_pattern.search(content, sm.end())
+        sec_end = next_sec.start() if next_sec else len(content)
+        sections.append({"title": sec_title, "start": sec_start, "end": sec_end})
+
+    # Decide section: match priority band
+    target_section = None
+    priority_band = {"P0": "Phase 1", "P1": "Phase 2", "P2": "Phase 3", "P3": "Icebox"}
+    band_key = priority_band.get(priority, "Phase 2")
+    for sec in sections:
+        if sec["title"].startswith(band_key) or band_key.lower() in sec["title"].lower():
+            target_section = sec
+            break
+    if not target_section:
+        target_section = sections[-1] if sections else None
+
+    # Find dependencies based on keyword overlap (min 4-char words)
+    deps = []
+    desc_words = set(re.findall(r'\w{4,}', desc_lower))
+    for fid, finfo in existing_features.items():
+        ftitle_words = set(re.findall(r'\w{4,}', finfo["title"].lower()))
+        overlap = desc_words & ftitle_words
+        if len(overlap) >= 2:
+            status_m = re.search(r'\*\*Status:\*\*\s*\[x\]', finfo["body"])
+            if not status_m:  # Only depend on not-done features
+                deps.append(fid)
+    deps_str = ", ".join(deps[:3]) if deps else "None"
+
+    # Build feature block
+    feature_block = f"""
+### {new_fid}: {feature_desc}
+**Priority:** {priority}
+**Dependencies:** {deps_str}
+**Status:** [ ] Pending
+**User Story:** As a user, I can {feature_desc.lower().strip('.')}.
+"""
+
+    # Insert into roadmap
+    if target_section:
+        insert_pos = target_section["end"]
+        last_feat = None
+        for fm in re.finditer(r'^###\s+F\d{3}:', content[target_section["start"]:target_section["end"]],
+                              re.MULTILINE):
+            last_feat = fm
+        if last_feat:
+            feat_start = target_section["start"] + last_feat.start()
+            next_block = re.search(r'^###\s+F\d{3}:|^##\s', content[feat_start + 1:], re.MULTILINE)
+            if next_block:
+                insert_pos = feat_start + 1 + next_block.start()
+            else:
+                insert_pos = target_section["end"]
+        new_content = content[:insert_pos] + feature_block + "\n" + content[insert_pos:]
+    else:
+        new_content = content + feature_block
+
+    with open(roadmap_path, "w") as f:
+        f.write(new_content)
+
+    print(f"  ✓ {new_fid} added to roadmap — {priority}, deps: {deps_str}")
+    print(f"    Title: {feature_desc}")
+    phase_map = {"P0": "Phase 1", "P1": "Phase 2", "P2": "Phase 3", "P3": "Icebox"}
+    print(f"    Section: {phase_map.get(priority, 'Phase 2')}")
+    return new_fid
 
 
 def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -> str | None:
@@ -4092,6 +4212,8 @@ def main():
     is_fix = False
     is_map = False
     map_full = False
+    is_add = False
+    add_priority = None
     # --fix mode toggles (flags with env var fallbacks)
     fix_all = False
     skip_autofix = False
@@ -4144,6 +4266,15 @@ def main():
         if arg == "--map-full":
             is_map = True
             map_full = True
+            continue
+        if arg == "--add":
+            is_add = True
+            continue
+        if arg.startswith("--priority="):
+            add_priority = arg.split("=", 1)[1].upper()
+            if add_priority not in ("P0", "P1", "P2", "P3"):
+                print(f"  ⚠ Invalid --priority value: {add_priority} (use P0, P1, P2, or P3)", flush=True)
+                add_priority = None
             continue
         if arg == "--fix-all":
             fix_all = True
@@ -4262,6 +4393,15 @@ def main():
         show_help()
     if is_kill:
         handle_kill(PROJECT_DIR)
+    if is_add:
+        add_feature = " ".join(filtered_argv) if filtered_argv else ""
+        if not add_feature:
+            print("ERROR: --add requires a feature description.")
+            print("Usage: dokima --add 'Feature description' [--priority=P0] [dir]")
+            sys.exit(1)
+        run_add_to_roadmap(add_feature, PROJECT_DIR, priority_hint=add_priority)
+        print("\n  Roadmap updated. Run 'dokima --next' to build the next feature.")
+        sys.exit(0)
     if is_stop:
         handle_stop(PROJECT_DIR)
     if is_status:
