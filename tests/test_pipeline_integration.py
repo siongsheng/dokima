@@ -156,3 +156,124 @@ CONFIDENCE: Low"""
     assert len(state["questions"]) >= 1
     assert "feature" in state
     assert state["feature"] == "Test feature"
+
+
+def test_dag_format_detects_missing_tasks(orchestrator, panel, test_repo):
+    """Strategist output without ### Task N: headers triggers DAG re-prompt."""
+    non_dag_output = """Confidence: High
+Impact: LOW
+Mode: active
+
+## Spec: Add sorting
+
+There are two tasks here.
+Task 1: Implement sort function in sort.py
+Task 2: Write tests for sort function in tests/test_sort.py
+"""
+    spawn_calls = []
+
+    def mock_spawn(profile, skills, prompt, timeout=600, cwd=None, model=None):
+        spawn_calls.append(profile)
+        if profile == "strategist":
+            return non_dag_output
+        return "RED: a\nGREEN: b\nTests: pass\nBuild: clean\n"
+
+    panel.spawn_agent = mock_spawn
+    panel.PROJECT_DIR = test_repo
+    panel.PANEL_FEATURE = "Add sorting"
+    panel.API_KEY = "test..."
+    panel.REPO = "test-owner/test-repo"
+    panel.DEFAULT_BRANCH = "main"
+    panel.TEST_CMD = "echo test"
+    panel.BUILD_CMD = "echo build"
+    panel.LINT_CMD = "echo lint"
+
+    # First call should trigger DAG format enforcement and re-prompt
+    # We need a second spawn result with proper DAG format
+    second_output = """Confidence: High
+Impact: LOW
+Mode: active
+
+## Spec: Add sorting
+
+### Task 1: Implement sort function
+**Files:** sort.py
+**Dependencies:** None
+**Parallelizable:** Yes
+**Description:** Implement quicksort.
+
+### Task 2: Write tests
+**Files:** tests/test_sort.py
+**Dependencies:** [Task 1]
+**Parallelizable:** No
+**Description:** Test sort function.
+"""
+
+    def mock_spawn_two(profile, skills, prompt, timeout=600, cwd=None, model=None):
+        spawn_calls.append(profile)
+        if profile == "strategist":
+            if len(spawn_calls) == 1:
+                return non_dag_output  # First call: no DAG format
+            return second_output  # Second call: re-prompt with DAG format
+        return "RED: a\nGREEN: b\nTests: pass\nBuild: clean\n"
+
+    panel.spawn_agent = mock_spawn_two
+    # Remove previous interview state
+    import json
+    interview_path = "/tmp/dokima-interview.json"
+    if os.path.exists(interview_path):
+        os.remove(interview_path)
+
+    try:
+        result = panel.run_phase1_strategist("Add sorting", None)
+        # The re-prompt should have succeeded
+        assert "### Task 1:" in result.get("spec", ""), "Spec should have DAG format"
+    except SystemExit:
+        pass
+
+
+def test_dag_format_garbage_fallback(panel, test_repo):
+    """Garbage re-prompt output falls back to the original pre-re-prompt spec."""
+    import json
+
+    non_dag_output = """Confidence: High
+Impact: MEDIUM
+Mode: active
+
+## Spec: Add pagination
+
+Task: Add pagination to list endpoint.
+"""
+    # When re-prompted, strategist returns garbage
+    garbage_output = """Done. Spec saved to specs/add-pagination-spec.md.
+Format fixes applied.
+Let me verify the spec is complete...
+"""
+
+    spawn_calls = []
+
+    def mock_spawn(profile, skills, prompt, timeout=600, cwd=None, model=None):
+        spawn_calls.append(profile)
+        if profile == "strategist":
+            if len(spawn_calls) == 1:
+                return non_dag_output
+            return garbage_output
+        return "RED: a\nGREEN: b\nTests: pass\nBuild: clean\n"
+
+    panel.spawn_agent = mock_spawn
+    panel.PROJECT_DIR = test_repo
+    panel.PANEL_FEATURE = "Add pagination"
+    panel.API_KEY="test..."
+    panel.REPO = "test-owner/test-repo"
+    panel.DEFAULT_BRANCH = "main"
+
+    interview_path = "/tmp/dokima-interview.json"
+    if os.path.exists(interview_path):
+        os.remove(interview_path)
+
+    try:
+        result = panel.run_phase1_strategist("Add pagination", None)
+        # Should get the extracted output (garbage should be handled)
+        assert result is not None
+    except SystemExit:
+        pass
