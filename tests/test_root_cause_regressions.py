@@ -441,3 +441,99 @@ class TestDeepSeekTaskFormat:
         body = "**Files:** tests/a.py\n**Dependencies:** [Task 1]\n**Parallelizable:** yes\n**Description:** Do it.\n"
         files_m = re.search(r'^\s*(?:\*\*)?Files?:?(?:\*\*)?\s*(.+)', body, re.MULTILINE)
         assert files_m is not None and files_m.group(1).strip() == "tests/a.py"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Bug 7: False-positive interview mode — spec prose mentions "CLARIFICATION 1:"
+# ═══════════════════════════════════════════════════════════════════
+
+# Real strategist output from 2026-06-28 that triggered false positive.
+# The spec describes interview mode testing and includes "CLARIFICATION 1:"
+# in test plan documentation — NOT an actual clarification request.
+SPEC_WITH_CLARIFICATION_IN_PROSE = """
+    Phase 1 — Interview Mode:
+    - Happy path: CLARIFICATION 1: ... in agent_text → interview_mode=True → exit(2).
+    - Edge cases: "CLARIFICATION:" without number → still detected.
+    - Failure modes: stdin is TTY but PANEL_SKIP_HUMAN_GATE=1 → interview gate skipped.
+
+    Task 1: Phase 1 — Strategist produces valid spec
+    Files: tests/test_main_integration.py
+    Dependencies: none
+    Parallelizable: yes
+    Description: Test the strategist phase.
+"""
+
+REAL_CLARIFICATION_OUTPUT = """
+DECISION: INTERVIEW MODE
+
+CLARIFICATION 1: Should this feature support both sync and async APIs?
+Assumption: Users only need sync APIs for now.
+Impact if wrong: We'd build the wrong interface and need to refactor.
+
+CLARIFICATION 2: Should the validation happen client-side or server-side?
+Assumption: Client-side is sufficient for this feature.
+Impact if wrong: We'd miss server-side validation entirely.
+"""
+
+
+class TestInterviewModeFalsePositive:
+    """Line 3772-3775: Interview mode detection matches CLARIFICATION
+    references in spec prose, falsely triggering interview mode."""
+
+    def test_clarification_in_prose_should_not_trigger(self):
+        """GREEN: 'CLARIFICATION 1:' inside spec documentation/test plan
+        should NOT trigger interview mode. Only line-start matches count."""
+        agent_text = SPEC_WITH_CLARIFICATION_IN_PROSE
+
+        # Old buggy regex (without ^ anchor)
+        old_has = bool(re.search(r'CLARIFICATION\s+\d+:', agent_text))
+        # New fixed regex (anchored to line start)
+        new_has = bool(re.search(r'^\s*CLARIFICATION\s+\d+:', agent_text, re.MULTILINE))
+
+        # The old regex would trigger — proving the bug existed
+        assert old_has is True, "Sanity: old regex should match the prose"
+        # The new regex should NOT trigger
+        assert new_has is False, (
+            f"FAIL: Anchored regex still matches 'CLARIFICATION 1:' in prose. "
+            f"The spec documentation mentions CLARIFICATION for test descriptions, "
+            f"not as an actual interview request. Fix: anchor to line start."
+        )
+
+    def test_real_clarification_should_still_trigger(self):
+        """A real CLARIFICATION at line start must still trigger interview mode."""
+        agent_text = REAL_CLARIFICATION_OUTPUT
+        has_clarifications = bool(re.search(
+            r'^\s*CLARIFICATION\s+\d+:', agent_text, re.MULTILINE
+        ))
+        assert has_clarifications is True, (
+            "FAIL: Real CLARIFICATION at line start not detected. "
+            "The fix must not break genuine interview mode."
+        )
+
+    def test_no_clarification_in_normal_spec(self):
+        """A normal spec with no CLARIFICATION references should pass through."""
+        normal_spec = STANDARD_TASK_FORMAT  # from Bug 6 test data
+        has_clarifications = bool(re.search(
+            r'^\s*CLARIFICATION\s+\d+:', normal_spec, re.MULTILINE
+        ))
+        assert has_clarifications is False, (
+            "FAIL: Normal spec falsely detected as interview mode."
+        )
+
+    def test_production_code_interview_detection(self, panel):
+        """Verify actual production code uses anchored regex (line 3775)."""
+        import inspect
+        source = inspect.getsource(panel.run_phase1_strategist)
+        # The fixed code should have the anchored pattern
+        has_anchored = "r'^\\s*CLARIFICATION" in source
+        has_unanchored_only = (
+            "r'CLARIFICATION\\s+\\d+:'" in source and
+            "r'^\\s*CLARIFICATION" not in source
+        )
+        assert has_anchored, (
+            "FAIL: Production code still uses unanchored CLARIFICATION regex. "
+            "Line 3775 should be: re.search(r'^\\s*CLARIFICATION\\s+\\d+:', ...)"
+        )
+        assert not has_unanchored_only, (
+            "FAIL: Only unanchored pattern found — false positives will occur."
+        )
