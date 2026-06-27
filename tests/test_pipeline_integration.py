@@ -111,3 +111,48 @@ def test_mock_gh_simulates_pr_list(mock_gh):
     result = mock_gh("pr", "list", "--repo", "owner/repo", "--head", "feat/test")
     assert "number" in result
     assert "1" in result
+
+
+def test_interview_mode_saves_state_file(panel, tmpdir_path):
+    """Interview mode saves state to /tmp/dokima-interview.json when stdin not a TTY."""
+    import json
+
+    strat_output = """DECISION: INTERVIEW MODE
+CLARIFICATION 1: What database should we use?
+CLARIFICATION 2: Should we support mobile?
+
+IMPACT: Medium
+CONFIDENCE: Low"""
+
+    spawn_calls = []
+
+    def mock_spawn(profile, skills, prompt, timeout=600, cwd=None, model=None):
+        spawn_calls.append(profile)
+        return strat_output
+
+    panel.spawn_agent = mock_spawn
+    panel.PROJECT_DIR = tmpdir_path
+    panel.PANEL_FEATURE = "Test feature"
+    panel.API_KEY = "test-api-key"
+    panel.REPO = "test-owner/test-repo"
+    panel.DEFAULT_BRANCH = "main"
+
+    # Remove any prior interview state file
+    interview_path = "/tmp/dokima-interview.json"
+    if os.path.exists(interview_path):
+        os.remove(interview_path)
+
+    # Call run_phase1_strategist — should exit with code 2
+    try:
+        panel.run_phase1_strategist("Test feature", None)
+    except SystemExit as e:
+        assert e.code == 2, f"Expected exit code 2, got {e.code}"
+
+    # Verify interview state file was created
+    assert os.path.exists(interview_path), "Interview state file should exist"
+    with open(interview_path) as f:
+        state = json.load(f)
+    assert "questions" in state
+    assert len(state["questions"]) >= 1
+    assert "feature" in state
+    assert state["feature"] == "Test feature"

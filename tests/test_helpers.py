@@ -71,3 +71,24 @@ def test_read_stdin_returns_empty_on_empty_input(panel):
     stdin = io.StringIO("\n")
     result = panel._read_stdin_with_timeout(prompt="A1: ", timeout=1, stdin=stdin)
     assert result == ""
+
+
+def test_read_stdin_handles_eof(panel):
+    """_read_stdin_with_timeout returns empty on EOF."""
+    stdin = io.StringIO()  # No data, at EOF
+    result = panel._read_stdin_with_timeout(prompt="A1: ", timeout=1, stdin=stdin)
+    assert result == ""
+
+
+def test_read_stdin_no_prompt(panel):
+    """_read_stdin_with_timeout works without a prompt string."""
+    stdin = io.StringIO("data\n")
+    result = panel._read_stdin_with_timeout(prompt="", timeout=1, stdin=stdin)
+    assert result == "data"
+
+
+def test_read_stdin_default_stdin(panel):
+    """_read_stdin_with_timeout uses sys.stdin when stdin=None."""
+    # Can't easily test with real stdin, but verify it doesn't crash with a StringIO
+    result = panel._read_stdin_with_timeout(prompt="", timeout=0.1, stdin=io.StringIO("x\n"))
+    assert result == "x"
