@@ -60,3 +60,54 @@ Mode: active
     # The test just verifies strategist is called as expected
     assert callable(panel.run_pipeline)
     assert callable(panel.run_phase1_strategist)
+
+
+def test_vet_phase_function_exists(panel):
+    """Phase 3: Vet (validate) function exists and is callable."""
+    assert callable(panel.run_phase3_vet)
+
+
+def test_nm_phase_function_exists(panel):
+    """Phase 4: nm (adversarial review) function exists and is callable."""
+    assert callable(panel.run_phase4_nm)
+
+
+def test_tl_phase_function_exists(panel):
+    """Phase 5: Tech Lead review function exists and is callable."""
+    assert callable(panel.run_phase5_tech_lead)
+
+
+def test_post_pipeline_function_exists(panel):
+    """Post-pipeline function exists and is callable."""
+    assert callable(panel.run_post_pipeline)
+
+
+def test_mock_safe_run_simulates_vet_pass(mock_safe_run):
+    """mock_safe_run can simulate vet phase passing (returncode=0)."""
+    mock_safe_run.set("python3", stdout="All tests passed!", returncode=0)
+    result = mock_safe_run("python3 -m pytest tests/", cwd="/tmp", timeout=120)
+    assert result.returncode == 0
+    assert "All tests passed" in result.stdout
+
+
+def test_mock_safe_run_simulates_vet_fail(mock_safe_run):
+    """mock_safe_run can simulate vet phase failing (returncode=1)."""
+    mock_safe_run.set("python3", stdout="FAILED tests/test_main.py::test_foo", returncode=1)
+    result = mock_safe_run("python3 -m pytest", cwd="/tmp", timeout=120)
+    assert result.returncode == 1
+    assert "FAILED" in result.stdout
+
+
+def test_mock_gh_simulates_pr_creation(mock_gh):
+    """mock_gh can simulate PR creation returning a URL."""
+    mock_gh.set("pr create", "https://github.com/owner/repo/pull/42")
+    result = mock_gh("pr", "create", "--repo", "owner/repo", "--title", "test")
+    assert "pull/42" in result
+
+
+def test_mock_gh_simulates_pr_list(mock_gh):
+    """mock_gh can simulate PR listing returning JSON."""
+    mock_gh.set("pr list", '[{"number": 1, "title": "Test"}]')
+    result = mock_gh("pr", "list", "--repo", "owner/repo", "--head", "feat/test")
+    assert "number" in result
+    assert "1" in result
