@@ -21,6 +21,40 @@ max_parallel_override = None  # set from --max-parallel=N flag in main()
 
 # ── helpers ──────────────────────────────────────
 
+def _read_stdin_with_timeout(prompt="", timeout=60, stdin=None):
+    """Read a line from stdin with a timeout. Returns stripped line, or "" on timeout/EOF.
+
+    Args:
+        prompt: Optional prompt string to print before reading.
+        timeout: Seconds to wait for input before returning empty.
+        stdin: Stream to read from (default: sys.stdin). Must be a file-like object.
+    """
+    import select as _select
+    import io as _io
+    if stdin is None:
+        stdin = sys.stdin
+    if prompt:
+        print(prompt, end="", flush=True)
+    try:
+        # Check if stdin has a real fd; fall back to direct read for StringIO etc.
+        try:
+            stdin.fileno()
+        except (_io.UnsupportedOperation, AttributeError):
+            line = stdin.readline()
+            if not line:
+                return ""
+            return line.strip()
+        ready, _, _ = _select.select([stdin], [], [], timeout)
+        if not ready:
+            return ""
+        line = stdin.readline()
+        if not line:
+            return ""
+        return line.strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
 def load_key():
     env_path = os.path.join(PROFILES, "work", ".env")
     if not os.path.exists(env_path):
