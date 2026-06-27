@@ -3425,7 +3425,9 @@ def run_phase1_strategist(feature, user_answers_prefill):
     - v4-pro (≥8 tasks): 4-8 tasks of up to 500 lines each.
     - Tasks touching the SAME file must be sequential (different waves).
 
-    CRITICAL: You are a DESIGNER, not a coder. Write NO implementation code. Describe WHAT and WHY — the coder decides HOW."""
+    CRITICAL: You are a DESIGNER, not a coder. Write NO implementation code. Describe WHAT and WHY — the coder decides HOW.
+
+    OUTPUT FORMAT: Output the complete spec in your message. Do NOT use write_file to save it to a file — the panel extracts your message as the spec. Do NOT summarize — every section must be present in full."""
 
     strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
     print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
@@ -3573,6 +3575,25 @@ def run_phase1_strategist(feature, user_answers_prefill):
         spec = strat_output
     spec = clean_spec_content(spec)
     print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
+
+    # Fallback: if chat spec is suspiciously short, look for write_file output
+    if len(spec) < 500 and len(strat_output) > 2000:
+        wf_matches = re.findall(
+            r'(?:write_file|wrote to)\s+(\S+spec\S*\.md)',
+            strat_output, re.IGNORECASE)
+        for wf_path in wf_matches:
+            if os.path.exists(wf_path):
+                try:
+                    with open(wf_path) as wf:
+                        wf_content = wf.read()
+                    if len(wf_content) > len(spec):
+                        spec = wf_content
+                        print(f"  ⚡ Recovered spec from write_file: {wf_path} ({len(spec)} chars)", flush=True)
+                        # Clean the recovered spec too
+                        spec = clean_spec_content(spec)
+                except Exception:
+                    pass
+                break  # Use the first valid one found
 
     spec_dir = os.path.join(PROJECT_DIR, "specs")
     os.makedirs(spec_dir, exist_ok=True)
