@@ -1,6 +1,9 @@
 """Tests for additional helpers."""
+import io
 import os
 import pytest
+import select
+
 
 def test_make_status_entry_pending(panel):
     result = panel._make_status_entry("F001", "Login", "pending", branch="feat/login")
@@ -8,6 +11,7 @@ def test_make_status_entry_pending(panel):
     assert "Login" in result
     assert "pending" in result
     assert "feat/login" in result
+
 
 def test_make_status_entry_done_with_pr(panel):
     result = panel._make_status_entry("F001", "Login", "done",
@@ -17,6 +21,7 @@ def test_make_status_entry_done_with_pr(panel):
     assert "github.com/x/y/pull/1" in result
     assert "[panel]" in result
 
+
 def test_make_status_entry_in_progress(panel):
     result = panel._make_status_entry("F002", "Dashboard", "in_progress",
                                        timestamp="2024-06-01 12:00",
@@ -25,6 +30,7 @@ def test_make_status_entry_in_progress(panel):
     assert "Dashboard" in result
     assert "in progress" in result
     assert "2024-06-01 12:00" in result
+
 
 def test_commit_roadmap_update_dry(panel, tmpdir_path):
     """Test commit_roadmap_update structure — will fail without git, but shouldn't crash."""
@@ -36,9 +42,32 @@ def test_commit_roadmap_update_dry(panel, tmpdir_path):
     # Just verify the function exists and accepts args
     assert callable(panel.commit_roadmap_update)
 
+
 def test_auto_repair_status_empty(panel, tmpdir_path):
     roadmap_path = os.path.join(tmpdir_path, "roadmap.md")
     with open(roadmap_path, "w") as f:
         f.write("# Roadmap\n")
     result = panel.auto_repair_status([], roadmap_path)
     assert result == 0
+
+
+def test_read_stdin_returns_input_when_available(panel):
+    """_read_stdin_with_timeout returns input when data is available."""
+    stdin = io.StringIO("hello\n")
+    result = panel._read_stdin_with_timeout(prompt="A1: ", timeout=1, stdin=stdin)
+    assert result == "hello"
+
+
+def test_read_stdin_returns_empty_on_timeout(panel):
+    """_read_stdin_with_timeout returns empty string on timeout."""
+    # Use os.devnull which reports no ready data via select.select
+    with open(os.devnull) as f:
+        result = panel._read_stdin_with_timeout(prompt="A1: ", timeout=0.1, stdin=f)
+    assert result == ""
+
+
+def test_read_stdin_returns_empty_on_empty_input(panel):
+    """_read_stdin_with_timeout returns empty string when user presses Enter."""
+    stdin = io.StringIO("\n")
+    result = panel._read_stdin_with_timeout(prompt="A1: ", timeout=1, stdin=stdin)
+    assert result == ""
