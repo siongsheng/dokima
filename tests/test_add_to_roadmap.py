@@ -234,3 +234,99 @@ class TestRunAddToRoadmap:
         panel.run_add_to_roadmap("New thing", tmpdir_path)
         content = _read_roadmap(tmpdir_path)
         assert "### F013: New thing" in content
+
+    # ── Execution priority ordering tests ──
+
+    def test_test_feature_inserted_before_security(self, panel, tmpdir_path):
+        """P0 test (score 10) inserted before P0 security (score 40)."""
+        content = """# Roadmap
+
+## Phase 1: Core
+
+### F001: Security Hardening
+**Priority:** P0
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I am secure.
+"""
+        _setup_roadmap(tmpdir_path, content)
+        panel.run_add_to_roadmap("Pipeline integration test for critical failures", tmpdir_path)
+        content = _read_roadmap(tmpdir_path)
+        # F002 (tests, score 10) should appear BEFORE F001 (security, score 40)
+        f002_pos = content.index("### F002: Pipeline integration test for critical failures")
+        f001_pos = content.index("### F001: Security Hardening")
+        assert f002_pos < f001_pos, (
+            f"Test feature (score 10) should be before security (score 40). "
+            f"Got F002 at {f002_pos}, F001 at {f001_pos}"
+        )
+
+    def test_resilience_inserted_before_features(self, panel, tmpdir_path):
+        """P1 resilience (score 130) inserted before P1 feature (score 150)."""
+        content = """# Roadmap
+
+## Phase 2: Features
+
+### F001: User Dashboard
+**Priority:** P1
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I see my dashboard.
+"""
+        _setup_roadmap(tmpdir_path, content)
+        panel.run_add_to_roadmap("Model provider fallback and recovery", tmpdir_path)
+        content = _read_roadmap(tmpdir_path)
+        f002_pos = content.index("### F002: Model provider fallback and recovery")
+        f001_pos = content.index("### F001: User Dashboard")
+        assert f002_pos < f001_pos, (
+            f"Resilience (score 130) should be before feature (score 150). "
+            f"Got F002 at {f002_pos}, F001 at {f001_pos}"
+        )
+
+    def test_multiple_adds_maintain_order_within_section(self, panel, tmpdir_path):
+        """Within same section+P-level, features maintain execution-priority order."""
+        _setup_roadmap(tmpdir_path, ROADMAP_EMPTY)
+        # All P0 → all go to Phase 1
+        panel.run_add_to_roadmap("Add dark mode toggle for blockers", tmpdir_path)   # score 50 (feature)
+        panel.run_add_to_roadmap("Fix crash on login", tmpdir_path)                   # score 20 (critical)
+        panel.run_add_to_roadmap("Pipeline test harness for crash detection", tmpdir_path)  # score 10 (tests)
+        panel.run_add_to_roadmap("Security audit", tmpdir_path)                      # score 40 (security)
+        content = _read_roadmap(tmpdir_path)
+
+        # Extract F-numbers in file order
+        fids_in_order = re.findall(r'^### (F\d{3}):', content, re.MULTILINE)
+        # F001 was "Add dark mode", F002 was "Fix crash"
+        # F003 was "Pipeline test", F004 was "Security audit"
+        # All P0: scores = 50, 20, 10, 40
+        # Expected: F003 (10) < F002 (20) < F004 (40) < F001 (50)
+        f003_idx = fids_in_order.index("F003") if "F003" in fids_in_order else -1
+        f002_idx = fids_in_order.index("F002") if "F002" in fids_in_order else -1
+        f004_idx = fids_in_order.index("F004") if "F004" in fids_in_order else -1
+        f001_idx = fids_in_order.index("F001") if "F001" in fids_in_order else -1
+        assert f003_idx < f002_idx < f004_idx < f001_idx, (
+            f"Expected: F003 (tests,10) < F002 (critical,20) < F004 (security,40) < F001 (feature,50). "
+            f"Got: {fids_in_order}"
+        )
+
+    def test_p0_security_comes_before_p0_features(self, panel, tmpdir_path):
+        """P0 security (score 40) before P0 feature (score 50) within same section."""
+        content = """# Roadmap
+
+## Phase 1: Core
+
+### F001: Dark mode support
+**Priority:** P0
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I want dark mode.
+"""
+        _setup_roadmap(tmpdir_path, content)
+        # "SQL injection fix" → P0 security, score 40
+        panel.run_add_to_roadmap("SQL injection fix for login", tmpdir_path)
+        content = _read_roadmap(tmpdir_path)
+        f002_pos = content.index("### F002: SQL injection fix for login")
+        f001_pos = content.index("### F001: Dark mode support")
+        # Security (40) should be before feature (50)
+        assert f002_pos < f001_pos, (
+            f"Security (score 40) should execute before feature (score 50). "
+            f"Got F002 at {f002_pos}, F001 at {f001_pos}"
+        )

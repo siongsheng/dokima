@@ -1665,9 +1665,9 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
         if any(w in fd for w in ("test", "integration test", "edge case", "quality gate",
                                   "deterministic", "ci ", "pipeline test", "spec test")):
             domain = 10  # Infrastructure/tests — needed first
-        elif any(w in fd for w in ("broken", "blocker", "critical bug", "dead code",
-                                    "cosmetic", "defeated", "wrong command", "hardcode",
-                                    "same model", "fake", "fictional")):
+        elif any(w in fd for w in ("broken", "dead code", "cosmetic", "defeated",
+                                    "wrong command", "hardcode", "same model", "fake",
+                                    "fictional", "crash", "silent fail", "bug")):
             domain = 20  # Critical bugs/blockers — broken today
         elif any(w in fd for w in ("fallback", "recovery", "resume", "retry",
                                     "timeout", "lock file", "error handl")):
@@ -1756,10 +1756,11 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
             fid = fm.group(1)
             ftitle = fm.group(2).strip()
             abs_start = sec_start + fm.start()
-            # Find end of this feature's block
+            # Find end of this feature's block (skip past own header, find next ### or ##)
+            # Start search at abs_start+4 to skip past "### " of current feature header
             next_feat = re.search(r'^###\s+F\d{3}:|^##\s',
-                                  content[abs_start + 1:sec_end], re.MULTILINE)
-            feat_end = (abs_start + 1 + next_feat.start()
+                                  content[abs_start + 4:sec_end], re.MULTILINE)
+            feat_end = (abs_start + 4 + next_feat.start()
                        if next_feat else sec_end)
             # Determine this feature's priority from its body
             feat_body = content[abs_start:feat_end]
@@ -1776,8 +1777,8 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
         if sec_title.startswith(band_key) or band_key.lower() in sec_title.lower():
             target_section = sec_title
             break
-    if not target_section:
-        target_section = list(section_features.keys())[-1] if section_features else None
+    # Only use fallback if there are sections AND one of them matches band_key.
+    # Otherwise trigger new section creation.
 
     # Insert at execution-priority position
     if target_section and target_section in section_features:
@@ -1802,7 +1803,18 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
                     break
         new_content = content[:insert_pos] + feature_block + "\n" + content[insert_pos:]
     else:
-        new_content = content + feature_block
+        # No matching section found — create section header automatically
+        phase_names = {"P0": "Phase 1: Core Stability & Test Coverage",
+                       "P1": "Phase 2: Pipeline Intelligence",
+                       "P2": "Phase 3: Distribution & Portability",
+                       "P3": "Icebox (Post-Stable)"}
+        section_name = phase_names.get(priority, "Phase 2: Features")
+        # If this is the first feature in the file, add a title too
+        if not content.strip():
+            section_header = f"# Roadmap\n\n## {section_name}\n\n"
+        else:
+            section_header = f"\n## {section_name}\n\n"
+        new_content = content + section_header + feature_block + "\n"
 
     with open(roadmap_path, "w") as f:
         f.write(new_content)
