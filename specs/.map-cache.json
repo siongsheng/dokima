@@ -8,8 +8,12 @@
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
-    "hash": "f1eb0723512622b9bc55280001e7bbc1",
+    "hash": "f2a1d64ab72dba2ca8a6b838e94ce4fa",
     "desc": "Dokima"
+  },
+  "install.sh": {
+    "hash": "e4e5f7bccc855f364b6d29c2bb5cf391",
+    "desc": "Dokima Installer \u2014 one-command setup"
   },
   "docs/pipeline.md": {
     "hash": "50595743d76b954c390e95e6fd3da97c",
@@ -154,6 +158,10 @@
   "tests/test_helpers.py": {
     "hash": "1c8913a5ebbbe7b55c962d72595fb802",
     "desc": "Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_auto_repair_status_empty"
+  },
+  "tests/test_installer.py": {
+    "hash": "45fb799caccd3fbe0bc702ecde8ef0df",
+    "desc": "Exports: _make_fake_cmd, _make_fake_hermes, _make_git_repo"
   },
   "tests/test_lock_paths.py": {
     "hash": "272d96d5dce93d1a74102762e70a9cc0",

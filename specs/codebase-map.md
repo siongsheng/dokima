@@ -1,11 +1,12 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-06-29 01:30:44 (incremental | 60 files)
+## Generated: 2026-06-29 02:15:44 (incremental | 62 files)
 
 ## Tree
 ├── AGENTS.md  — Dokima — Multi-Agent Orchestration Engine
 ├── MAINTAINERS.md  — Dokima — Maintainer's Reference
-└── README.md  — Dokima
+├── README.md  — Dokima
+└── install.sh  — Dokima Installer — one-command setup
 ├── docs/
 ├── pipeline.md  — Dokima — Pipeline Reference
 └── setup.md  — Dokima — Deployment & Setup Guide
@@ -52,6 +53,7 @@
 ├── test_functions_unit.py  — Exports: TestSafeRun, TestGit, TestHaltAndRevert
 ├── test_help_text.py  — Exports: test_help_text_documents_panel_max_parallel
 ├── test_helpers.py  — Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_auto_repair_status_empty
+├── test_installer.py  — Exports: _make_fake_cmd, _make_fake_hermes, _make_git_repo
 ├── test_lock_paths.py  — Exports: test_explicit_project_dir_lock, test_explicit_project_dir_stop, test_implicit_from_global, test_trailing_slash_normalized, test_no_project_dir_no_arg
 ├── test_main_integration.py  — Exports: _make_safe_run_result, _setup_test_project, _mock_spawn
 ├── test_pick_next.py  — Exports: make_feat, test_empty_list, test_all_done, test_single_pending_no_deps, test_p0_beats_p1
