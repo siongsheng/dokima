@@ -8,7 +8,7 @@
 
 ## Model Compatibility
 
-Dokima is developed and tested against **DeepSeek** models (v4-pro, v4-flash). The parser compensates for known DeepSeek output quirks:
+Dokima is developed and tested against **DeepSeek** models (v4-pro). The parser compensates for known DeepSeek output quirks:
 
 | Quirk | Parser Behavior |
 |-------|----------------|
@@ -26,7 +26,7 @@ The nm (adversarial reviewer) MUST use a different model **family** than the cod
 
 | Profile | Primary Model | Provider |
 |---------|-------------|----------|
-| Coder | deepseek-v4-flash | DeepSeek |
+| Coder | deepseek-v4-pro | DeepSeek |
 | nm | qwen/qwen3-coder-next | OpenRouter |
 | nm (fallback) | gemini-2.5-flash | Google |
 

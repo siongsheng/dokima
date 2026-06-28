@@ -89,7 +89,7 @@ Implements the spec on a `feat/<slug>` branch with TDD (RED→GREEN two-commit d
 
 - Panel schedules coders in waves based on the dependency DAG — independent tasks run in parallel (up to 5 worktrees), dependent tasks queue behind.
 - Each coder gets 1-2 small tasks per wave.
-- Uses `deepseek-v4-flash` (3.1× cheaper than v4-pro) with `ai-coding-best-practices-lite` skill.
+- Uses `deepseek-v4-pro` with `ai-coding-best-practices-lite` skill. v4-pro follows file hints and codebase map instructions, avoiding 12+ min startup delays on focused changes.
 - Before push: runs lint + full test suite. Fixes failures in-session.
 - At `depth=vet`: creates PR directly. Otherwise pushes branch for downstream phases.
 
@@ -254,7 +254,7 @@ On failure, the strategist gets **one re-prompt** with the failure list. If the 
 |-------------|-----------|---------|
 | Spec noise extraction | Strip session transcript (prompt echo, tool calls) from strategist output | Significantly smaller |
 | Task-extract for coder | Generate `specs/<feature>-tasks.md` — coder reads condensed task breakdown | Substantially smaller read |
-| Coder flash model | `deepseek-v4-flash` instead of v4-pro for implementation | Flash-tier pricing |
+| Coder pro model | `deepseek-v4-pro` for instruction-following implementation | Pro-tier pricing |
 | Phase 3 pure shell (vet) | No AI agent — `git checkout`, test, build | Zero AI tokens |
 | Phase 4 fresh nm session | Different model family catches bias-blind spots | One additional model call |
 | Lite skills | Compressed skill files vs full equivalents | ~84% smaller files |

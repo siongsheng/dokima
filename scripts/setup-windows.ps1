@@ -91,7 +91,7 @@ Write-Step "Provider Configuration"
 
 # Provider catalog
 $providers = @{
-    deepseek   = @{ Label = "DeepSeek";                  KeyEnv = "DEEPSEEK_API_KEY";    SModel = "deepseek-v4-pro";      CModel = "deepseek-v4-flash";       TModel = "deepseek-v4-pro" }
+    deepseek   = @{ Label = "DeepSeek";                  KeyEnv = "DEEPSEEK_API_KEY";    SModel = "deepseek-v4-pro";      CModel = "deepseek-v4-pro";       TModel = "deepseek-v4-pro" }
     anthropic  = @{ Label = "Anthropic";                 KeyEnv = "ANTHROPIC_API_KEY";   SModel = "claude-opus-4-20250514"; CModel = "claude-sonnet-4-20250514"; TModel = "claude-opus-4-20250514" }
     openai     = @{ Label = "OpenAI";                    KeyEnv = "OPENAI_API_KEY";      SModel = "gpt-5";                  CModel = "gpt-4o";                   TModel = "gpt-5" }
     openrouter = @{ Label = "OpenRouter (multi-provider)"; KeyEnv = "OPENROUTER_API_KEY"; SModel = "deepseek/deepseek-chat";  CModel = "anthropic/claude-sonnet-4";  TModel = "deepseek/deepseek-chat" }

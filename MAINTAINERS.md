@@ -78,7 +78,7 @@ otherwise → single_session
 | Profile | Primary Model | Provider | Family |
 |---------|---------------|----------|--------|
 | Strategist | deepseek-v4-pro | DeepSeek | DeepSeek |
-| Coder | deepseek-v4-flash | DeepSeek | DeepSeek |
+| Coder | deepseek-v4-pro | DeepSeek | DeepSeek |
 | nm | qwen/qwen3-coder-next | OpenRouter | Qwen |
 | nm (fallback) | gemini-2.5-flash | Google | Google |
 | Tech Lead | deepseek-v4-pro | DeepSeek | DeepSeek |
@@ -92,7 +92,7 @@ Profile `.env` files REPLACE (don't merge with) `~/.hermes/shared.env` — copy 
 
 ## DeepSeek Model Quirks
 
-DeepSeek models (v4-pro, v4-flash) have consistent output quirks that the parser handles:
+DeepSeek models (v4-pro) have consistent output quirks that the parser handles:
 
 | Quirk | Expected | DeepSeek Output | Parsed As |
 |-------|----------|-----------------|-----------|

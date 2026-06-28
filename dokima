@@ -3531,7 +3531,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
             )
 
         # ── Model selection: upgrade to v4-pro for complex features ──
-        coder_model = None  # None = use profile default (v4-flash)
+        coder_model = None  # None = use profile default (v4-pro)
         if mode == "fix":
             coder_model = "deepseek-v4-pro"  # Fix mode always benefits from stronger reasoning
         elif tasks_extract_path and os.path.exists(tasks_extract_path):
@@ -4667,9 +4667,9 @@ Output NOTHING ELSE."""
         if f"({marker}" in spec or f"confidence: {marker}" in spec.lower() or f"Confidence: {marker}" in spec:
             confidence = marker
             break
-    impact = "HIGH"
+    impact = "MEDIUM"
     for marker in ["HIGH", "MEDIUM", "LOW"]:
-        if f"impact: {marker}" in spec.lower() or f"Impact: {marker}" in spec:
+        if re.search(r'impact:\s*' + re.escape(marker) + r'\b', spec, re.IGNORECASE):
             impact = marker
             break
     depth_matrix = {

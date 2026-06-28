@@ -8,7 +8,7 @@ Bring the multi-agent panel to a new repository or a fresh machine. One-time set
 
 ```
 Human Gate ──▶ Strategist ──▶ Coder ──▶ vet ──▶ nm ──▶ Tech Lead
-  (you)         v4-pro      v4-flash   shell   fresh    v4-pro
+  (you)         v4-pro      v4-pro   shell   fresh    v4-pro
                  58%          8%        0%      15%      19%
                                      │       │
                                      │       └─ different model family
@@ -72,7 +72,7 @@ hermes --profile strategist config set agent.max_turns 150
 hermes --profile strategist config set agent.reasoning_effort high
 hermes --profile strategist config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
 
-hermes --profile coder config set model.default deepseek-v4-flash
+hermes --profile coder config set model.default deepseek-v4-pro
 hermes --profile coder config set model.provider deepseek
 hermes --profile coder config set agent.max_turns 150
 hermes --profile coder config set terminal.env_passthrough '[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]'
@@ -85,7 +85,7 @@ hermes --profile tech-lead config set terminal.env_passthrough '[GH_TOKEN, GITHU
 
 > **Provider-agnostic:** Replace `deepseek-v4-pro` / `deepseek` with any model and provider. The panel works with Anthropic, OpenAI, DeepSeek, or OpenRouter. Just set the matching API key in `~/.hermes/shared.env`.
 
-> **Why v4-flash for coder?** 3.1× cheaper than v4-pro. The coder does mechanical TDD work — flash handles this reliably.
+> **Why v4-pro for coder?** v4-flash (3.1× cheaper) ignored file hints and read entire codebases for small changes — false economy. v4-pro follows instructions, cutting total pipeline time by 50%+ despite higher per-token cost.
 
 ### 2.3 Deploy the panel skills
 
@@ -339,7 +339,7 @@ Only HIGH confidence + LOW impact skips adversarial review. `PANEL_FORCE_FULL=1`
 |-------------|---------|
 | Spec noise extraction | Significantly smaller spec (strips transcript noise) |
 | Task-extract for coder | Coder reads condensed task breakdown, not the full spec |
-| Coder v4-flash model | Flash model for implementation tasks |
+| Coder v4-pro model | Pro model for focused, instruction-following implementation |
 | Phase 3 pure shell (vet) | Zero AI tokens |
 | Lite skills | Compressed skill files (~84% smaller than full equivalents) |
 | Different model family (nm) | Catches bias-blind spots — costs tokens but prevents bugs |

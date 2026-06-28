@@ -88,7 +88,7 @@ declare -A PROVIDER_LABEL PROVIDER_KEY_ENV PROVIDER_S_MODEL PROVIDER_C_MODEL PRO
 PROVIDER_LABEL[deepseek]="DeepSeek"
 PROVIDER_KEY_ENV[deepseek]="DEEPSEEK_API_KEY"
 PROVIDER_S_MODEL[deepseek]="deepseek-v4-pro"
-PROVIDER_C_MODEL[deepseek]="deepseek-v4-flash"
+PROVIDER_C_MODEL[deepseek]="deepseek-v4-pro"
 PROVIDER_T_MODEL[deepseek]="deepseek-v4-pro"
 
 PROVIDER_LABEL[anthropic]="Anthropic"
