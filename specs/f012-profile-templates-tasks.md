@@ -1,41 +1,33 @@
-# Task Breakdown: F012: Profile Templates
+# F012: Profile Templates — Task Breakdown
 
-### Task 1: Rename existing dokima init to dokima discover
-**Files:** dokima
-**Dependencies:** [none]
-**Description:** Rename existing dokima init to dokima discover
+## Task 1: `ensure_profiles()` function
+**Description:** Add `ensure_profiles()` to dokima that creates missing agent profiles via `hermes profile create` and configures sensible defaults.
+**Files:** `dokima`
+**Tests:** `tests/test_profile_templates.py` — test that missing profiles are created, existing profiles skipped, idempotency, non-TTY fallback.
+**Acceptance Criteria:**
+- On first run: creates profiles `strategist`, `coder`, `tech-lead`, `nm` if missing
+- Configures each with model/provider/turns/env_passthrough
+- Strategist gets `agent.reasoning_effort: high`
+- On re-run: skips existing profiles with "already exists" message
+- When `not sys.stdin.isatty()`: runs non-interactively with defaults
 
-### Task 2: Implement init_profiles() core function in dokima
-**Files:** dokima
-**Dependencies:** 1
-**Description:** Implement init_profiles() core function in dokima
+## Task 2: `deploy_profile_skills()` function
+**Description:** Add `deploy_profile_skills()` that copies skills from `dokima/skills/` to appropriate profile and global skill directories.
+**Files:** `dokima`
+**Tests:** `tests/test_profile_templates.py` — test skill deployment to correct dirs, idempotency, missing source skill handling.
+**Acceptance Criteria:**
+- Copies `spec-strategist-lite` and `ponytail-guard` to strategist profile skills
+- Copies `ai-coding-best-practices-lite` to coder profile skills
+- Copies `adversarial-review-lite` and `ponytail-guard` to tech-lead profile skills
+- Copies `no-mistakes` to global `~/.hermes/skills/software-development/`
+- On re-run: skips existing skill directories
+- Warns if source skill directory missing
 
-### Task 3: Wire dokima init (profile mode) into CLI dispatch
-**Files:** dokima
-**Dependencies:** 2
-**Description:** Wire dokima init (profile mode) into CLI dispatch
-
-### Task 4: Update install.sh to call dokima init
-**Files:** install.sh
-**Dependencies:** 3
-**Description:** Update install.sh to call dokima init
-
-### Task 5: Slim down setup-linux.sh profile section
-**Files:** scripts/setup-linux.sh
-**Dependencies:** 3
-**Description:** Slim down setup-linux.sh profile section
-
-### Task 6: Write unit tests for init_profiles()
-**Files:** tests/test_init_profiles.py
-**Dependencies:** 2
-**Description:** Write unit tests for init_profiles()
-
-### Task 7: Update installer tests for new profile behavior
-**Files:** tests/test_installer.py
-**Dependencies:** 4
-**Description:** Update installer tests for new profile behavior
-
-### Task 8: Update README with new init/discover commands
-**Files:** README.md
-**Dependencies:** 3
-**Description:** Update README with new init/discover commands
+## Task 3: Integrate into `run_init()`
+**Description:** Call `ensure_profiles()` and `deploy_profile_skills()` from `run_init()` before strategist spawn.
+**Files:** `dokima`
+**Tests:** Update existing init tests or integration test.
+**Acceptance Criteria:**
+- `dokima init "description"` creates profiles before strategist phase
+- Profile/skill creation output appears before "Phase: Strategist (init)"
+- Does not block init if profile creation fails (warns, continues)
