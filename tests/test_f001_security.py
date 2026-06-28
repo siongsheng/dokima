@@ -52,6 +52,19 @@ class TestPromptSanitizer:
         result = module._sanitize_prompt(text)
         assert result == text
 
+    def test_preserves_inline_code_without_spaces(self):
+        """Inline code like `--help-json` is legitimate Markdown, not shell injection."""
+        module = _load_panel()
+        result = module._sanitize_prompt("dokima --help-json outputs structured JSON")
+        assert "--help-json" in result
+
+    def test_preserves_backtick_flag_in_feature_title(self):
+        """Regression: F020 title `--help-json` in backticks must survive sanitization."""
+        module = _load_panel()
+        result = module._sanitize_prompt("F020: Structured CLI Output (`--help-json`)")
+        assert "`--help-json`" in result
+        assert "Structured CLI Output" in result
+
     def test_handles_empty_string(self):
         module = _load_panel()
         assert module._sanitize_prompt("") == ""

@@ -36,8 +36,11 @@ def _sanitize_prompt(text):
     original = text
     # Strip SYSTEM: / OVERRIDE: prefix injection (case-insensitive, word-boundary)
     text = re.sub(r'\b(?:SYSTEM|OVERRIDE)\s*:\s*', '', text, count=0, flags=re.IGNORECASE)
-    # Strip backtick-escaped shell commands (e.g. `rm -rf /`)
-    text = re.sub(r'`[^`]+`', '', text)
+    # Strip backtick content that looks like a shell command (has spaces, pipes,
+    # redirects, or starts with $ for expansion). Single-word inline code like
+    # `--help-json` or `config.yaml` is legitimate Markdown — don't strip it.
+    SHELL_PATTERN = r'[\s|&;<>$]'
+    text = re.sub(r'`[^`]*' + SHELL_PATTERN + r'[^`]*`', '', text)
     # Strip markdown code blocks (```cmd``` or ```\ncmd\n```) containing dangerous patterns
     text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     # Collapse multiple spaces
