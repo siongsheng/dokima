@@ -137,6 +137,7 @@ Every stage has a contract:
 - **Graceful degradation for coder and tech lead phases** — timeouts produce partial results, not failures (strategist short output aborts). Partial review > no review.
 - **ADR lifecycle** — strategist reads past architectural decisions before designing. Panel creates new ADRs from decision tables. TL checks spec against existing ADRs. Powered by [adr-tools](https://github.com/npryce/adr-tools).
 - **Auto-archive specs** — panel detects merged PRs at startup and archives completed specs to `specs/archive/`. Keeps `specs/STATUS.md` current. Skip with `PANEL_SKIP_AUTO_ARCHIVE=1`.
+- **Error recovery & resume** — if the pipeline crashes mid-run, `--resume` re-starts from the last completed phase instead of restarting from scratch. Checkpoints saved after each phase preserve partial state (spec file, branch, task extract, PR URL). `--no-resume` ignores any existing checkpoint. Env vars: `PANEL_RESUME=1`, `PANEL_NO_RESUME=1`.
 - **--fix mode** — `dokima --fix [project_dir]` detects the most recent BLOCKED PR, extracts blocker descriptions from the TL review section, feeds them to the coder as a targeted fix task, and runs vet→nm→TL verification. Full pipeline always runs (fixes are high-risk). `PANEL_FIX_ALL=1` includes SHOULD FIX items. `PANEL_SKIP_HUMAN_GATE=1` auto-proceeds. Does NOT re-run the strategist or create new branches.
 
 ## When NOT to Use
