@@ -502,3 +502,62 @@ class TestTechLeadPaths:
         panel = _load()
         project_dir = _setup(tmpdir, panel)
         self._run_pipeline(panel, project_dir, TL_CHANGES_REQUESTED)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# nm fallback — model provider is down
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestNmFallback:
+    def test_nm_provider_down_fallback_fires(self, tmpdir):
+        """nm provider down → fallback model fires via call_agent."""
+        panel = _load()
+        project_dir = _setup(tmpdir, panel)
+        _spawn_calls.clear()
+
+        def mock_spawn(profile, skills, prompt, timeout=600, cwd=None):
+            _spawn_calls.append(profile)
+            if profile == "strategist":
+                return "Confidence: High\nImpact: MEDIUM\n\nFeature spec."
+            if profile == "coder":
+                return "RED: a1b2\nGREEN: c3d4\nTests: 5 pass, 0 fail\nBuild: clean"
+            return "Mock"
+
+        def mock_safe_run(cmd, cwd=None, timeout=None):
+            """Return failure for nm command, success for everything else."""
+            if "nm" in cmd:
+                return type("R", (), {"returncode": 1, "stdout": "",
+                                      "stderr": "Provider unavailable"})()
+            return type("R", (), {"returncode": 0, "stdout": "ok",
+                                  "stderr": ""})()
+
+        old = sys.argv
+        old_environ = os.environ.copy()
+        try:
+            sys.argv = ["dokima", "--next", project_dir]
+            os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
+            panel.spawn_agent = mock_spawn
+            with patch("dokima.call_agent",
+                       return_value={"content": "Fallback review: OK",
+                                     "tokens": 1}) as mock_call, \
+                 patch.object(panel, "_set_gh_token"), \
+                 patch.object(panel, "git", return_value=("", "", 0)), \
+                 patch.object(panel, "gh", return_value=("", "", 0)), \
+                 patch.object(panel, "load_key", return_value="fk"), \
+                 patch.object(panel, "load_github_token", return_value="ft"), \
+                 patch.object(panel, "detect_repo", return_value="t/t"), \
+                 patch.object(panel, "_safe_run",
+                              side_effect=mock_safe_run), \
+                 patch.object(panel, "subprocess"), \
+                 patch("time.sleep"):
+                try:
+                    panel.main()
+                except SystemExit:
+                    pass
+            # Verify fallback was triggered
+            assert mock_call.called, \
+                "call_agent should have been called as nm fallback"
+        finally:
+            sys.argv = old
+            os.environ.clear()
+            os.environ.update(old_environ)
