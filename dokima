@@ -2512,6 +2512,17 @@ def run_init(description, project_dir):
     print(f"GitHub:     {repo if has_remote else 'not configured'}")
     print()
 
+    # ── Ensure profiles and skills are set up (F012) ──
+    try:
+        ensure_profiles()
+    except Exception as e:
+        print(f"  WARNING: Profile setup failed: {e}", flush=True)
+
+    try:
+        deploy_profile_skills()
+    except Exception as e:
+        print(f"  WARNING: Skill deployment failed: {e}", flush=True)
+
     # ── Bump max_turns for init ──
     strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
     orig_yaml = None
