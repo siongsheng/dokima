@@ -83,6 +83,12 @@ class TestDetectProviderFailure:
             "def handle_error(): pass"
         )
 
+    def test_file_not_found_error_not_false_positive(self):
+        """'Error: file not found' is a legitimate code error, not provider failure."""
+        assert not self.panel._detect_provider_failure(
+            "Error: file not found: /path/to/config.json"
+        )
+
     def test_normal_agent_response(self):
         assert not self.panel._detect_provider_failure(
             "[strategist] Here is the spec for F005."
