@@ -81,7 +81,7 @@
 ### F022: Modular Architecture
 **Priority:** P1
 **Dependencies:** F010, F023
-**Status:** [~] In Progress
+**Status:** [x] Done Progress
 **User Story:** As a contributor, the 5,400-line monolith is split into modules (agent.py, pipeline.py, roadmap.py, tasks.py, utils.py) with clear interfaces — agents can read and modify one module without loading the entire codebase. Same behavior, same tests, smaller context windows.
 
 ### F020: Structured CLI Output (`--help-json`)
