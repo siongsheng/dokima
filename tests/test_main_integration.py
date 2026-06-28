@@ -13,6 +13,15 @@ os.environ.setdefault("PANEL_MAX_RETRIES", "0")
 os.environ.setdefault("PANEL_SKIP_HUMAN_GATE", "1")
 
 
+def _make_safe_run_result(returncode=0, stdout=""):
+    """Create a mock subprocess.CompletedProcess for _safe_run patches."""
+    import subprocess as _sp
+    result = _sp.CompletedProcess(args=[], returncode=returncode)
+    result.stdout = stdout
+    result.stderr = ""
+    return result
+
+
 def _setup_test_project(panel, tmpdir):
     import subprocess
     project_dir = os.path.join(str(tmpdir), "test-project")
@@ -51,6 +60,8 @@ def _patch_and_run(panel, mock_lock=True):
         patch.object(panel, "load_github_token", return_value="ft"),
         patch.object(panel, "detect_repo", return_value="t/t"),
         patch("time.sleep"),  # skip retry/backoff delays
+        # Mock _safe_run so vet/nm don't execute real shell commands
+        patch.object(panel, "_safe_run", return_value=_make_safe_run_result(0, "mock ok")),
     ]
     if mock_lock:
         patches.append(patch.object(panel, "acquire_lock", return_value=(True, None)))

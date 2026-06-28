@@ -97,6 +97,15 @@ README: No change needed.
 _spawn_calls = []  # type: ignore[var-annotated]
 
 
+def _make_safe_run_result(returncode=0, stdout=""):
+    """Create a mock subprocess.CompletedProcess for _safe_run patches."""
+    import subprocess as _sp
+    result = _sp.CompletedProcess(args=[], returncode=returncode)
+    result.stdout = stdout
+    result.stderr = ""
+    return result
+
+
 def _mock_capturing_spawn(profile, skills, prompt, timeout=600, cwd=None, model=None):
     """Record all spawn_agent calls and return realistic strategist output."""
     _spawn_calls.append({"profile": profile, "skills": skills,
@@ -118,6 +127,8 @@ def _patch_and_run(panel, mock_lock=True):
         patch.object(panel, "load_github_token", return_value="ft"),
         patch.object(panel, "detect_repo", return_value="t/t"),
         patch("time.sleep"),
+        # Mock _safe_run so vet/nm don't execute real shell commands
+        patch.object(panel, "_safe_run", return_value=_make_safe_run_result(0, "mock ok")),
     ]
     if mock_lock:
         patches.append(patch.object(panel, "acquire_lock", return_value=(True, None)))
@@ -133,7 +144,6 @@ def _patch_and_run(panel, mock_lock=True):
             pass
 
 
-@pytest.mark.skip(reason="Hangs: panel.main() blocks in coder phase — needs deeper mocking")
 class TestStrategistCoderHandoff:
 
     def test_strategist_output_flows_to_coder(self, tmpdir):
