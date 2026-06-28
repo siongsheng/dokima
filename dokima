@@ -3848,6 +3848,12 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     agent_text_pre = extract_agent_messages(strat_output)
     interview_mode = "DECISION: INTERVIEW MODE" in agent_text_pre
     has_clarifications = bool(re.search(r'^\s*CLARIFICATION\s+\d+:', agent_text_pre, re.MULTILINE))
+    # Guard: if output has task headers, it's a full spec, not an interview request.
+    # F003 and similar features that TEST interview mode include the string
+    # "DECISION: INTERVIEW MODE" in their task descriptions/prose → false positive.
+    has_tasks = bool(re.search(r'^\s*(?:###\s*)?Task\s*\d+:', agent_text_pre, re.MULTILINE))
+    if has_tasks and interview_mode:
+        interview_mode = False  # Spec prose, not a real interview request
     if (interview_mode or has_clarifications) and not user_answers_prefill:
         if not sys.stdin.isatty():
             clarification_blocks = []
