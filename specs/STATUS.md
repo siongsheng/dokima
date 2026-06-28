@@ -14,6 +14,7 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
+- **F023: Pipeline Self-Healing** — in progress since 2026-06-29 01:40, branch `feat/f023-pipeline-self-healing` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
