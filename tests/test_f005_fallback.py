@@ -94,6 +94,32 @@ class TestDetectProviderFailure:
             "[strategist] Here is the spec for F005."
         )
 
+    # False-positive boundary tests — substrings that should NOT match
+
+    def test_503_in_number_does_not_false_positive(self):
+        """Number containing '503' as substring (e.g., 15039) should not trigger."""
+        assert not self.panel._detect_provider_failure(
+            "15039 tests passed, 48 failed"
+        )
+
+    def test_503_in_port_number_does_not_false_positive(self):
+        """Port number containing 503 should not trigger."""
+        assert not self.panel._detect_provider_failure(
+            "Listening on port 25030"
+        )
+
+    def test_rate_as_word_in_non_limit_context_does_not_false_positive(self):
+        """The word 'rate' in normal context should not trigger 'rate limit' pattern."""
+        assert not self.panel._detect_provider_failure(
+            "The error rate decreased by 50% this sprint"
+        )
+
+    def test_model_as_topic_not_false_positive(self):
+        """'model' used as a topic word should not trigger if not followed by 'not found/available'."""
+        assert not self.panel._detect_provider_failure(
+            "The new model was deployed to production"
+        )
+
     # Edge cases
 
     def test_empty_string_returns_false(self):
@@ -207,3 +233,168 @@ class TestFallbackRetry:
 
         assert "some output" in result
         assert len(calls) == 1, f"Expected 1 Popen call, got {len(calls)}"
+
+    def test_fallback_passes_model_flags_correctly(self):
+        """Verify the fallback call includes --provider and -m from FALLBACK_MODEL."""
+        model = "openrouter/anthropic/claude-sonnet-4"
+        os.environ["PANEL_FALLBACK_MODEL"] = model
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return _MockProcess(
+                    stdout_lines=["Error output\n"],
+                    stderr_text="connection refused\n",
+                    returncode=1,
+                )
+            return _MockProcess(
+                stdout_lines=["ok\n"],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert len(calls) == 2, f"Expected 2 calls, got {len(calls)}"
+        fb_cmd = calls[1]
+        fb_cmd_str = " ".join(fb_cmd)
+        assert "--provider" in fb_cmd_str, f"Expected --provider in fallback cmd: {fb_cmd_str}"
+        assert "openrouter" in fb_cmd_str
+        assert "-m" in fb_cmd_str or "--model" in fb_cmd_str
+        assert "claude-sonnet-4" in fb_cmd_str
+
+
+# ── Task 6: No false-positive on legitimate output ────────────────────
+
+class TestFallbackNotFiredOnLegitimateOutput:
+    """spawn_agent does NOT trigger fallback on legitimate agent output
+    containing words that look like provider-failure substrings."""
+
+    def test_number_503_in_output_does_not_trigger_fallback(self):
+        """Output containing '503' embedded in a larger number should not trigger fallback."""
+        os.environ["PANEL_FALLBACK_MODEL"] = "deepseek-v4-pro"
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["15039 tests passed, 0 failed\n"],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "15039 tests passed" in result
+        assert len(calls) == 1, (
+            f"Expected 1 call (no fallback), got {len(calls)}. "
+            "Fallback incorrectly fired on legitimate output containing '503' as substring."
+        )
+
+    def test_app_error_nonzero_exit_does_not_trigger_fallback(self):
+        """Non-zero exit with app error in stderr should not trigger fallback."""
+        os.environ["PANEL_FALLBACK_MODEL"] = "deepseek-v4-pro"
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["Task failed: file not found\n"],
+                stderr_text="ModuleNotFoundError: No module named 'requests'\n",
+                returncode=2,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "Task failed: file not found" in result
+        assert len(calls) == 1, f"Expected 1 call (no fallback), got {len(calls)}"
+
+    def test_stderr_with_generic_error_does_not_trigger_fallback(self):
+        """Stderr with generic system errors should not trigger fallback."""
+        os.environ["PANEL_FALLBACK_MODEL"] = "deepseek-v4-pro"
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["Done\n"],
+                stderr_text="warning: deprecated function called\n",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "Done" in result
+        assert len(calls) == 1, f"Expected 1 call (no fallback), got {len(calls)}"
+
+    def test_model_discussion_does_not_trigger_fallback(self):
+        """Agent output discussing a model as a topic should not trigger fallback."""
+        os.environ["PANEL_FALLBACK_MODEL"] = "deepseek-v4-pro"
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["I recommend using the GPT-4 model for this task\n"],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "GPT-4 model" in result
+        assert len(calls) == 1, f"Expected 1 call (no fallback), got {len(calls)}"
+
+    def test_multi_line_agent_code_output_does_not_trigger_fallback(self):
+        """Multi-line legitimate code output should not trigger fallback."""
+        os.environ["PANEL_FALLBACK_MODEL"] = "deepseek-v4-pro"
+        try:
+            panel = _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=[
+                    "Here is the implementation:\n",
+                    "def hello():\n",
+                    "    print('Hello, world!')\n",
+                    "returncode: 0\n",
+                ],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "Hello, world!" in result
+        assert len(calls) == 1, f"Expected 1 call (no fallback), got {len(calls)}"
