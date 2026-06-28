@@ -269,6 +269,84 @@ class TestFallbackRetry:
         assert "-m" in fb_cmd_str or "--model" in fb_cmd_str
         assert "claude-sonnet-4" in fb_cmd_str
 
+    def test_double_failure_preserves_original_error(self):
+        """BLOCKER FIX: When fallback ALSO fails, original error is preserved, not discarded.
+
+        Current bug: result = "".join(fb_output) unconditionally replaces output.
+        If fallback fails too, the panel gets empty/garbled output instead of the
+        original error — strictly worse than no-fallback baseline.
+        """
+        panel = self._make_panel_with_fallback("gemini-2.5-flash")
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                # Primary: DeepSeek down
+                return _MockProcess(
+                    stdout_lines=["[strategist] Starting analysis...\n"],
+                    stderr_text="503 Service Unavailable\n",
+                    returncode=1,
+                )
+            # Fallback: Gemini also down
+            return _MockProcess(
+                stdout_lines=[""],
+                stderr_text="rate limit exceeded for model gemini-2.5-flash\n",
+                returncode=1,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert len(calls) == 2, f"Expected 2 Popen calls (primary + fallback), got {len(calls)}"
+        # Original error must be preserved — NOT replaced by empty/garbled fallback
+        assert "503 Service Unavailable" in result, (
+            f"Original error must be preserved when fallback also fails. "
+            f"Result: {result!r}"
+        )
+        assert len(result.strip()) > 0, (
+            f"Result must not be empty when both providers fail. "
+            f"Got: {result!r}"
+        )
+
+    def test_fallback_collects_stderr(self):
+        """BLOCKER FIX: Fallback path must collect stderr like the primary path does.
+
+        Primary path collects stderr at lines 232-238, appending `[stderr]` to output.
+        Fallback path must do the same so error diagnostics aren't silently discarded.
+        """
+        panel = self._make_panel_with_fallback("gemini-2.5-flash")
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return _MockProcess(
+                    stdout_lines=["[strategist] primary failed\n"],
+                    stderr_text="connection refused\n",
+                    returncode=1,
+                )
+            # Fallback succeeds but has stderr (e.g., deprecation warnings)
+            return _MockProcess(
+                stdout_lines=["[strategist] fallback result here\n"],
+                stderr_text="warning: API version deprecated, use v2\n",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert len(calls) == 2, f"Expected 2 Popen calls (primary + fallback), got {len(calls)}"
+        # Fallback stderr must be included in result
+        assert "[stderr]" in result, (
+            f"Fallback stderr must be collected and marked with [stderr]. "
+            f"Result: {result!r}"
+        )
+        assert "API version deprecated" in result, (
+            f"Fallback stderr content must appear in result. "
+            f"Result: {result!r}"
+        )
+
 
 # ── Task 6: No false-positive on legitimate output ────────────────────
 
