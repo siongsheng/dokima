@@ -4265,65 +4265,76 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     nm_output = ""
     tl_output = ""
 
-    # Parallel coders
-    if parallel_enabled and depth in ("coder", "vet+nm", "full"):
-        print("\n── Parallel Coders (PANEL_PARALLEL=1) ──", flush=True)
-        dag = TaskDAG()
-        feature_slug = slugify(feature)
-        dag.parse(spec, feature_slug)
-        if not dag.tasks:
-            print("  ⚠ No tasks found in strategist output — falling back to sequential coder", flush=True)
-            parallel_enabled = False
-        else:
-            print(f"  Parsed {len(dag.tasks)} tasks from spec", flush=True)
-            waves = dag.compute_waves()
-            print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
-            all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
-            if not all_ok:
-                print("\n  ⚠ Some tasks failed — checking if feature is still viable", flush=True)
-                completed = [t for t in dag.tasks.values() if t.status == "completed"]
-                if not completed:
-                    halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch)
-                    coder_failed = True
-                    pr_url = None
-                    verdict = "CODER_FAILED"
-                else:
-                    print(f"  {len(completed)}/{len(dag.tasks)} tasks completed — proceeding with partial results", flush=True)
-                    if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
-                        halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
-                        coder_failed = True
-                        verdict = "CODER_FAILED"
+    # ── DAG parse + execution mode ──
+    dag = TaskDAG()
+    feature_slug = slugify(feature)
+    dag.parse(spec, feature_slug)
+
+    # Determine execution mode from DAG (with env override)
+    force_mode = os.environ.get("PANEL_FORCE_EXECUTION_MODE", "")
+    if force_mode:
+        exec_mode = force_mode
+    elif not parallel_enabled:
+        exec_mode = "single_session"
+    else:
+        exec_mode = dag.compute_execution_mode()
+
+    if not dag.tasks:
+        print("  ⚠ No tasks found in strategist output — falling back to sequential coder", flush=True)
+        exec_mode = "single_session"
+
+    # Parallel coders (per_task_spawn)
+    if exec_mode == "per_task_spawn":
+        print("\n── Parallel Coders (data-driven) ──", flush=True)
+        print(f"  Parsed {len(dag.tasks)} tasks from spec", flush=True)
+        waves = dag.compute_waves()
+        print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
+        all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
+        if not all_ok:
+            print("\n  ⚠ Some tasks failed — checking if feature is still viable", flush=True)
+            completed = [t for t in dag.tasks.values() if t.status == "completed"]
+            if not completed:
+                halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch)
+                coder_failed = True
+                pr_url = None
+                verdict = "CODER_FAILED"
             else:
+                print(f"  {len(completed)}/{len(dag.tasks)} tasks completed — proceeding with partial results", flush=True)
                 if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
                     halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
                     coder_failed = True
                     verdict = "CODER_FAILED"
+        else:
+            if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
+                halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                coder_failed = True
+                verdict = "CODER_FAILED"
 
-            if not coder_failed and depth == "vet":
-                print("\n── Creating PR (depth=coder) ──", flush=True)
-                pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
-                pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
-                stdout, _, rc = gh("pr", "create", "--repo", REPO,
-                                   "--base", DEFAULT_BRANCH, "--head", branch,
-                                   "--title", f"feat: {feature}",
-                                   "--body", pr_body)
-                if rc == 0:
-                    pr_url = stdout.strip().split()[-1]
-                    print(f"  PR created: {pr_url}", flush=True)
-                else:
-                    print(f"  ⚠ PR creation failed: unknown", flush=True)
+        if not coder_failed and depth == "vet":
+            print("\n── Creating PR (depth=coder) ──", flush=True)
+            pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+            pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
+            stdout, _, rc = gh("pr", "create", "--repo", REPO,
+                               "--base", DEFAULT_BRANCH, "--head", branch,
+                               "--title", f"feat: {feature}",
+                               "--body", pr_body)
+            if rc == 0:
+                pr_url = stdout.strip().split()[-1]
+                print(f"  PR created: {pr_url}", flush=True)
+            else:
+                print(f"  ⚠ PR creation failed: unknown", flush=True)
 
-            if depth == "vet" and not coder_failed:
-                print("\n── Phase 3: vet — SKIPPED (depth=vet, parallel) ──", flush=True)
-                print("── Phase 4+5: nm+TL — SKIPPED (depth=vet) ──", flush=True)
-                verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
-                continue_loop = run_post_pipeline(feature, is_next, is_continuous, True, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
-                if not continue_loop:
-                    return 0
+        if depth == "vet" and not coder_failed:
+            print("\n── Phase 3: vet — SKIPPED (depth=vet, parallel) ──", flush=True)
+            print("── Phase 4+5: nm+TL — SKIPPED (depth=vet) ──", flush=True)
+            verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
+            continue_loop = run_post_pipeline(feature, is_next, is_continuous, True, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
+            if not continue_loop:
                 return 0
+            return 0
 
-    # Sequential coder path
-    if not coder_failed and not (parallel_enabled and depth in ("coder", "vet+nm", "full")):
+    # Sequential / single_session coder path
+    if exec_mode == "single_session" and not coder_failed:
         coder_result = run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next)
         coder_failed = coder_result["coder_failed"]
         pr_url = coder_result["pr_url"]
