@@ -81,6 +81,32 @@ if $WITH_PROFILES; then
     done
 fi
 
+# ── 6. PATH Detection ────────────────────────────────────────────────
+case ":$PATH:" in
+    *:"$BIN_DIR":*) ;;
+    *)
+        # Detect shell config file
+        SHELL_RC=""
+        case "$(basename "${SHELL:-/bin/bash}")" in
+            zsh) SHELL_RC="$HOME/.zshrc" ;;
+            *)   SHELL_RC="$HOME/.bashrc" ;;
+        esac
+
+        # Check if already in the config file (idempotency)
+        if [ -f "$SHELL_RC" ] && grep -q "# dokima installer" "$SHELL_RC" 2>/dev/null; then
+            log "PATH entry already in $SHELL_RC"
+        else
+            echo "" >> "$SHELL_RC"
+            echo "# dokima installer — add ~/.local/bin to PATH" >> "$SHELL_RC"
+            echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
+            log "Added PATH entry to $SHELL_RC"
+        fi
+
+        echo ""
+        echo "  To activate now, run: source $SHELL_RC"
+        ;;
+esac
+
 # ── Done ─────────────────────────────────────────────────────────────
 echo ""
 echo "  Dokima installed: $BIN_DIR/dokima"
