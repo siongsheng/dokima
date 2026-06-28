@@ -2335,6 +2335,87 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
 
 # ── init ──────────────────────────────────────────
 
+# ── Profile configuration defaults (F012) ──
+_PROFILE_CONFIGS = {
+    "strategist": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "agent.reasoning_effort": "high",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "coder": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "tech-lead": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "nm": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+}
+_PROFILE_ORDER = ["strategist", "coder", "tech-lead", "nm"]
+
+
+def ensure_profiles():
+    """Create agent profiles (strategist, coder, tech-lead, nm) if they don't exist.
+    Configures sensible defaults: model, provider, max_turns, env_passthrough.
+    Strategist also gets agent.reasoning_effort=high.
+    Idempotent — skips profiles that already exist.
+    Non-interactive safe — works without a TTY."""
+    for name in _PROFILE_ORDER:
+        profile_dir = os.path.join(PROFILES, name)
+
+        # Check if profile already exists
+        if os.path.isdir(profile_dir):
+            print(f"  Profile '{name}' already exists — skipping", flush=True)
+            continue
+
+        # Create the profile
+        print(f"  Creating profile: {name}", flush=True)
+        try:
+            result = subprocess.run(
+                [HERMES_BIN, "profile", "create", name],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True, timeout=30
+            )
+            if result.returncode != 0:
+                print(f"  WARNING: Failed to create profile '{name}': {result.stderr.strip()[:200]}", flush=True)
+                continue
+        except Exception as e:
+            print(f"  WARNING: Failed to create profile '{name}': {e}", flush=True)
+            continue
+
+        # Apply configuration
+        config = _PROFILE_CONFIGS.get(name, {})
+        for key, value in config.items():
+            try:
+                subprocess.run(
+                    [HERMES_BIN, "--profile", name, "config", "set", key, value],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    universal_newlines=True, timeout=30
+                )
+            except Exception as e:
+                print(f"  WARNING: Failed to set {key} for '{name}': {e}", flush=True)
+
+        print(f"  Profile '{name}' configured", flush=True)
+
+    # Verify profiles exist after creation (for idempotency check on re-run)
+    missing_after = [n for n in _PROFILE_ORDER
+                     if not os.path.isdir(os.path.join(PROFILES, n))]
+    if missing_after:
+        print(f"  WARNING: Profiles still missing after creation attempt: {', '.join(missing_after)}", flush=True)
+
+
 def run_init(description, project_dir):
     """Discovery & constitution phase. Strategist produces spec-kit docs, no pipeline."""
     global API_KEY, PROJECT_DIR, REPO
