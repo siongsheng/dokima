@@ -292,25 +292,27 @@ README: No change needed.
 **Description:** Add tests for changes.
 """
 
-# Strategist spec that produces a DAG with 2 tasks, one non-parallelizable.
-# compute_execution_mode() → "per_task_spawn" (non-parallelizable task present)
-STRAT_SPEC_PER_TASK_SPAWN = """# Test Feature: Refactor
+# Strategist spec that produces a DAG: 4 parallelizable tasks, 4 distinct files (>3).
+# compute_execution_mode() → "per_task_spawn" (all parallel, files > 3)
+STRAT_SPEC_PER_TASK_SPAWN = """# Test Feature: Multi-module feature
 
 ## Decision Table
 
-SINGLE APPROACH: Refactor existing code with parallel tests.
+SINGLE APPROACH: Add new endpoints across 4 independent modules.
 
 ## Impact
 
-Refactoring — changes core module interfaces.
+New functionality — adds API endpoints.
 
 ## What Changed
 
-- src/core.py: refactored
-- src/tests.py: updated tests
+- src/api.py: new endpoint
+- src/models.py: new model
+- src/views.py: new view
+- src/utils.py: helper function
 
 ### Confidence: High
-### Impact: MEDIUM
+### Impact: LOW
 
 ## API/Interface Proposal
 
@@ -326,17 +328,29 @@ README: No change needed.
 
 ## Task Breakdown
 
-### Task 1: Refactor core module
-**Files:** src/core.py
+### Task 1: Add API endpoint
+**Files:** src/api.py
 **Dependencies:** [none]
-**Parallelizable:** no
-**Description:** Refactor module interfaces.
-
-### Task 2: Update tests
-**Files:** src/tests.py
-**Dependencies:** [Task 1]
 **Parallelizable:** yes
-**Description:** Update tests for refactored interfaces.
+**Description:** Add new endpoint handler.
+
+### Task 2: Add model
+**Files:** src/models.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Add new database model.
+
+### Task 3: Add view
+**Files:** src/views.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Add new view template.
+
+### Task 4: Add utility
+**Files:** src/utils.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Add helper function.
 """
 
 

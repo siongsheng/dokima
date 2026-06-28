@@ -826,7 +826,9 @@ class TaskDAG:
 
         Returns 'single_session' or 'per_task_spawn' based on task count,
         distinct file count, and parallelizability.
-        """
+
+        single_session: one coder, sequential (safe for shared-file tasks).
+        per_task_spawn: parallel task branches (only when all parallelizable)."""
         tasks = list(self.tasks.values())
         all_files: set[str] = set()
         all_parallelizable = True
@@ -837,20 +839,14 @@ class TaskDAG:
                 all_parallelizable = False
 
         # --- per_task_spawn triggers ---
-        # Any task is non-parallelizable (refactor, same-file dependency)
-        if not all_parallelizable:
+        # Only spawn parallel when it's SAFE: all tasks parallelizable AND
+        # the feature is too large for one coder session.
+        if all_parallelizable and (len(tasks) > 10 or len(all_files) > 3):
             return "per_task_spawn"
 
-        # Too many tasks for one coder context window
-        if len(tasks) > 10:
-            return "per_task_spawn"
-
-        # Too many distinct files for one coder to hold
-        if len(all_files) > 3:
-            return "per_task_spawn"
-
-        # --- single_session triggers ---
-        # Every task is parallelizable, ≤10 tasks, ≤3 files → batch
+        # --- single_session triggers (safe default) ---
+        # Any non-parallelizable task → shared files → must run sequentially.
+        # Small features (≤10 tasks, ≤3 files) → single coder session.
         return "single_session"
 
 

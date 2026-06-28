@@ -148,14 +148,14 @@ class TestExecutionModeDispatch:
             "single_session DAG should NOT route to run_parallel_coders"
 
     def test_per_task_spawn_routes_to_parallel_coders(self, panel):
-        """Non-parallelizable task → per_task_spawn → run_parallel_coders called."""
+        """4 parallelizable tasks, 4 distinct files (>3) → per_task_spawn → run_parallel_coders."""
         _reset_called()
         panel.run_phase2_coder = _mock_run_phase2_coder
         panel.run_parallel_coders = _mock_run_parallel_coders
         panel.halt_and_revert = _mock_halt_and_revert
         panel.merge_worktree_branches = _mock_merge_worktree_branches
 
-        # A DAG with a non-parallelizable task → per_task_spawn
+        # All parallelizable, 4 distinct files (>3 threshold) → per_task_spawn
         spec = """# Test Feature
 
 ## Impact
@@ -169,17 +169,29 @@ Test impact.
 
 ## Task Breakdown
 
-### Task 1: Refactor
-**Files:** core.py
-**Dependencies:** [none]
-**Parallelizable:** no
-**Description:** Refactor core module.
-
-### Task 2: Update tests
-**Files:** test_core.py
+### Task 1: Module A
+**Files:** a.py
 **Dependencies:** [none]
 **Parallelizable:** yes
-**Description:** Update tests for refactor.
+**Description:** Touch module A.
+
+### Task 2: Module B
+**Files:** b.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Touch module B.
+
+### Task 3: Module C
+**Files:** c.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Touch module C.
+
+### Task 4: Module D
+**Files:** d.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Touch module D.
 """
         strat = _make_strat_result(panel, parallel_enabled=True, spec_has_tasks=True)
         strat["spec"] = spec
