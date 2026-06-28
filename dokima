@@ -40,7 +40,7 @@ def _read_stdin_with_timeout(prompt="", timeout=60, stdin=None):
         if not line:
             return ("", False)
         return (line.strip(), False)
-    except (EOFError, KeyboardInterrupt):
+    except (EOFError, KeyboardInterrupt, OSError):
         return ("", False)
 
 
