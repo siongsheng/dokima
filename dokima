@@ -2335,6 +2335,128 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
 
 # ── init ──────────────────────────────────────────
 
+# ── Profile configuration defaults (F012) ──
+_PROFILE_CONFIGS = {
+    "strategist": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "agent.reasoning_effort": "high",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "coder": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "tech-lead": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+    "nm": {
+        "model.default": "deepseek-v4-pro",
+        "model.provider": "deepseek",
+        "agent.max_turns": "150",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+    },
+}
+_PROFILE_ORDER = ["strategist", "coder", "tech-lead", "nm"]
+
+
+def ensure_profiles():
+    """Create agent profiles (strategist, coder, tech-lead, nm) if they don't exist.
+    Configures sensible defaults: model, provider, max_turns, env_passthrough.
+    Strategist also gets agent.reasoning_effort=high.
+    Idempotent — skips profiles that already exist.
+    Non-interactive safe — works without a TTY."""
+    for name in _PROFILE_ORDER:
+        profile_dir = os.path.join(PROFILES, name)
+
+        # Check if profile already exists
+        if os.path.isdir(profile_dir):
+            print(f"  Profile '{name}' already exists — skipping", flush=True)
+            continue
+
+        # Create the profile
+        print(f"  Creating profile: {name}", flush=True)
+        try:
+            result = subprocess.run(
+                [HERMES_BIN, "profile", "create", name],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True, timeout=30
+            )
+            if result.returncode != 0:
+                print(f"  WARNING: Failed to create profile '{name}': {result.stderr.strip()[:200]}", flush=True)
+                continue
+        except Exception as e:
+            print(f"  WARNING: Failed to create profile '{name}': {e}", flush=True)
+            continue
+
+        # Apply configuration
+        config = _PROFILE_CONFIGS.get(name, {})
+        for key, value in config.items():
+            try:
+                subprocess.run(
+                    [HERMES_BIN, "--profile", name, "config", "set", key, value],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    universal_newlines=True, timeout=30
+                )
+            except Exception as e:
+                print(f"  WARNING: Failed to set {key} for '{name}': {e}", flush=True)
+
+        print(f"  Profile '{name}' configured", flush=True)
+
+    # Verify profiles exist after creation (for idempotency check on re-run)
+    missing_after = [n for n in _PROFILE_ORDER
+                     if not os.path.isdir(os.path.join(PROFILES, n))]
+    if missing_after:
+        print(f"  WARNING: Profiles still missing after creation attempt: {', '.join(missing_after)}", flush=True)
+
+
+def deploy_profile_skills():
+    """Deploy panel skills from PANEL_DIR/skills/ to profile skill directories.
+    Idempotent — skips existing skill directories.
+    nm's 'no-mistakes' skill goes to the global skills dir (~/.hermes/skills/)."""
+    import shutil
+
+    skills_dir = os.path.join(PANEL_DIR, "skills")
+    software_dev = "software-development"
+
+    # (profile, skill, is_global) — is_global=True deploys to HERMES/skills/
+    _SKILL_MAPPINGS = [
+        ("strategist", "spec-strategist-lite", False),
+        ("strategist", "ponytail-guard", False),
+        ("coder", "ai-coding-best-practices-lite", False),
+        ("tech-lead", "adversarial-review-lite", False),
+        ("tech-lead", "ponytail-guard", False),
+        ("nm", "no-mistakes", True),
+    ]
+
+    for profile, skill, is_global in _SKILL_MAPPINGS:
+        src = os.path.join(skills_dir, skill)
+
+        if is_global:
+            dest_parent = os.path.join(HERMES, "skills", software_dev)
+        else:
+            dest_parent = os.path.join(PROFILES, profile, "skills", software_dev)
+        dest = os.path.join(dest_parent, skill)
+
+        if not os.path.isdir(src):
+            print(f"  WARNING: Source skill not found: {skill} — skipping", flush=True)
+            continue
+
+        if os.path.isdir(dest):
+            print(f"  Skill '{skill}' already deployed for {profile} — skipping", flush=True)
+            continue
+
+        os.makedirs(dest_parent, exist_ok=True)
+        shutil.copytree(src, dest)
+        print(f"  Deployed skill '{skill}' → {profile}", flush=True)
+
+
 def run_init(description, project_dir):
     """Discovery & constitution phase. Strategist produces spec-kit docs, no pipeline."""
     global API_KEY, PROJECT_DIR, REPO
@@ -2389,6 +2511,17 @@ def run_init(description, project_dir):
     print(f"Git:        {'initialized' if has_git else 'not found'}")
     print(f"GitHub:     {repo if has_remote else 'not configured'}")
     print()
+
+    # ── Ensure profiles and skills are set up (F012) ──
+    try:
+        ensure_profiles()
+    except Exception as e:
+        print(f"  WARNING: Profile setup failed: {e}", flush=True)
+
+    try:
+        deploy_profile_skills()
+    except Exception as e:
+        print(f"  WARNING: Skill deployment failed: {e}", flush=True)
 
     # ── Bump max_turns for init ──
     strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
