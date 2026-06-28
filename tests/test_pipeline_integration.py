@@ -235,3 +235,345 @@ class TestStrategistCoderHandoff:
 
         finally:
             sys.argv = old
+
+
+# ── F019: Data-driven execution mode — integration tests ─────────
+
+# Strategist spec that produces a DAG with 3 parallel tasks, 2 distinct files.
+# compute_execution_mode() → "single_session" (≤10 tasks, ≤3 files, all parallel)
+STRAT_SPEC_SINGLE_SESSION = """# Test Feature: Batch
+
+## Decision Table
+
+SINGLE APPROACH: Batch feature with small additive tasks.
+
+## Impact
+
+Small additive change — no refactoring needed.
+
+## What Changed
+
+- src/a.py: minor changes
+- src/b.py: minor changes
+
+### Confidence: High
+### Impact: LOW
+
+## API/Interface Proposal
+
+N/A — internal change only.
+
+## Security Considerations
+
+N/A.
+
+## Documentation Impact
+
+README: No change needed.
+
+## Task Breakdown
+
+### Task 1: Update module A
+**Files:** src/a.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Small change to module A.
+
+### Task 2: Update module B
+**Files:** src/b.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Small change to module B.
+
+### Task 3: Add tests
+**Files:** src/a.py
+**Dependencies:** [none]
+**Parallelizable:** yes
+**Description:** Add tests for changes.
+"""
+
+# Strategist spec that produces a DAG with 2 tasks, one non-parallelizable.
+# compute_execution_mode() → "per_task_spawn" (non-parallelizable task present)
+STRAT_SPEC_PER_TASK_SPAWN = """# Test Feature: Refactor
+
+## Decision Table
+
+SINGLE APPROACH: Refactor existing code with parallel tests.
+
+## Impact
+
+Refactoring — changes core module interfaces.
+
+## What Changed
+
+- src/core.py: refactored
+- src/tests.py: updated tests
+
+### Confidence: High
+### Impact: MEDIUM
+
+## API/Interface Proposal
+
+N/A — internal only.
+
+## Security Considerations
+
+N/A.
+
+## Documentation Impact
+
+README: No change needed.
+
+## Task Breakdown
+
+### Task 1: Refactor core module
+**Files:** src/core.py
+**Dependencies:** [none]
+**Parallelizable:** no
+**Description:** Refactor module interfaces.
+
+### Task 2: Update tests
+**Files:** src/tests.py
+**Dependencies:** [Task 1]
+**Parallelizable:** yes
+**Description:** Update tests for refactored interfaces.
+"""
+
+
+class TestModeDrivenDispatch:
+    """Integration tests for mode-driven dispatch routing (F019).
+
+    Pipeline auto-routes to batch coder (run_phase2_coder) or parallel coders
+    (run_parallel_coders) based on dag.compute_execution_mode(). The env var
+    PANEL_FORCE_EXECUTION_MODE overrides the computed mode for testing.
+    """
+
+    def test_single_session_dag_routes_to_run_phase2_coder(self, tmpdir):
+        """DAG computing single_session → run_phase2_coder called (not parallel).
+
+        3 parallel tasks, 2 distinct files → single_session → batch coder.
+        """
+        panel = _load()
+        project_dir = _setup_test_project(panel, str(tmpdir))
+        old = sys.argv
+        old_mode = os.environ.pop("PANEL_FORCE_EXECUTION_MODE", None)
+        old_parallel = os.environ.get("PANEL_PARALLEL")
+        os.environ["PANEL_PARALLEL"] = "1"
+        try:
+            _spawn_calls.clear()
+            sys.argv = ["dokima", "--next", project_dir]
+
+            # Return the single_session spec from spawn_agent
+            def _mock_spawn_single(profile, skills, prompt, timeout=600, cwd=None, model=None):
+                _spawn_calls.append({"profile": profile, "skills": skills,
+                                     "prompt": prompt, "timeout": timeout, "cwd": cwd})
+                return STRAT_SPEC_SINGLE_SESSION
+
+            panel.spawn_agent = _mock_spawn_single
+
+            # Record which coder function is called
+            coder_func_calls = []  # type: ignore[var-annotated]
+
+            def _mock_run_phase2(*args, **kwargs):
+                coder_func_calls.append("run_phase2_coder")
+                return {"coder_failed": False, "pr_url": None, "verdict": "APPROVED"}
+
+            def _mock_run_parallel(*args, **kwargs):
+                coder_func_calls.append("run_parallel_coders")
+                return True
+
+            patches = [
+                patch.object(panel, "call_agent", return_value={"content": "M", "tokens": 1}),
+                patch.object(panel, "_set_gh_token"),
+                patch.object(panel, "git", return_value=("", "", 0)),
+                patch.object(panel, "gh", return_value=("", "", 0)),
+                patch.object(panel, "load_key", return_value="fk"),
+                patch.object(panel, "load_github_token", return_value="ft"),
+                patch.object(panel, "detect_repo", return_value="t/t"),
+                patch.object(panel, "acquire_lock", return_value=(True, None)),
+                patch.object(panel, "_cleanup_lock"),
+                patch.object(panel, "_safe_run", return_value=_make_safe_run_result(0, "mock ok")),
+                patch.object(panel, "merge_worktree_branches", return_value=True),
+                patch.object(panel, "_supplement_pr_sections", return_value="test pr"),
+                patch("time.sleep"),
+                # Replace the actual coder functions with mocks
+                patch.object(panel, "run_phase2_coder", side_effect=_mock_run_phase2),
+                patch.object(panel, "run_parallel_coders", side_effect=_mock_run_parallel),
+            ]
+
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                for p in patches:
+                    stack.enter_context(p)
+                try:
+                    panel.main()
+                except SystemExit:
+                    pass
+
+            # Verify: single_session DAG should call run_phase2_coder, not run_parallel_coders
+            assert "run_phase2_coder" in coder_func_calls, \
+                f"Expected run_phase2_coder to be called, got calls: {coder_func_calls}"
+            assert "run_parallel_coders" not in coder_func_calls, \
+                f"run_parallel_coders should NOT be called for single_session DAG, got: {coder_func_calls}"
+
+        finally:
+            sys.argv = old
+            if old_mode is not None:
+                os.environ["PANEL_FORCE_EXECUTION_MODE"] = old_mode
+            elif "PANEL_FORCE_EXECUTION_MODE" in os.environ:
+                del os.environ["PANEL_FORCE_EXECUTION_MODE"]
+            if old_parallel is None:
+                os.environ.pop("PANEL_PARALLEL", None)
+            else:
+                os.environ["PANEL_PARALLEL"] = old_parallel
+
+    def test_per_task_spawn_dag_routes_to_run_parallel_coders(self, tmpdir):
+        """DAG computing per_task_spawn → run_parallel_coders called (not batch).
+
+        Non-parallelizable task → per_task_spawn → parallel coders.
+        """
+        panel = _load()
+        project_dir = _setup_test_project(panel, str(tmpdir))
+        old = sys.argv
+        old_mode = os.environ.pop("PANEL_FORCE_EXECUTION_MODE", None)
+        old_parallel = os.environ.get("PANEL_PARALLEL")
+        os.environ["PANEL_PARALLEL"] = "1"
+        try:
+            _spawn_calls.clear()
+            sys.argv = ["dokima", "--next", project_dir]
+
+            def _mock_spawn_parallel(profile, skills, prompt, timeout=600, cwd=None, model=None):
+                _spawn_calls.append({"profile": profile, "skills": skills,
+                                     "prompt": prompt, "timeout": timeout, "cwd": cwd})
+                return STRAT_SPEC_PER_TASK_SPAWN
+
+            panel.spawn_agent = _mock_spawn_parallel
+
+            coder_func_calls = []  # type: ignore[var-annotated]
+
+            def _mock_run_phase2(*args, **kwargs):
+                coder_func_calls.append("run_phase2_coder")
+                return {"coder_failed": False, "pr_url": None, "verdict": "APPROVED"}
+
+            def _mock_run_parallel(*args, **kwargs):
+                coder_func_calls.append("run_parallel_coders")
+                return True
+
+            patches = [
+                patch.object(panel, "call_agent", return_value={"content": "M", "tokens": 1}),
+                patch.object(panel, "_set_gh_token"),
+                patch.object(panel, "git", return_value=("", "", 0)),
+                patch.object(panel, "gh", return_value=("", "", 0)),
+                patch.object(panel, "load_key", return_value="fk"),
+                patch.object(panel, "load_github_token", return_value="ft"),
+                patch.object(panel, "detect_repo", return_value="t/t"),
+                patch.object(panel, "acquire_lock", return_value=(True, None)),
+                patch.object(panel, "_cleanup_lock"),
+                patch.object(panel, "_safe_run", return_value=_make_safe_run_result(0, "mock ok")),
+                patch.object(panel, "merge_worktree_branches", return_value=True),
+                patch.object(panel, "_supplement_pr_sections", return_value="test pr"),
+                patch("time.sleep"),
+                patch.object(panel, "run_phase2_coder", side_effect=_mock_run_phase2),
+                patch.object(panel, "run_parallel_coders", side_effect=_mock_run_parallel),
+            ]
+
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                for p in patches:
+                    stack.enter_context(p)
+                try:
+                    panel.main()
+                except SystemExit:
+                    pass
+
+            # Verify: per_task_spawn DAG should call run_parallel_coders
+            assert "run_parallel_coders" in coder_func_calls, \
+                f"Expected run_parallel_coders to be called, got calls: {coder_func_calls}"
+
+        finally:
+            sys.argv = old
+            if old_mode is not None:
+                os.environ["PANEL_FORCE_EXECUTION_MODE"] = old_mode
+            elif "PANEL_FORCE_EXECUTION_MODE" in os.environ:
+                del os.environ["PANEL_FORCE_EXECUTION_MODE"]
+            if old_parallel is None:
+                os.environ.pop("PANEL_PARALLEL", None)
+            else:
+                os.environ["PANEL_PARALLEL"] = old_parallel
+
+    def test_panel_force_execution_mode_override(self, tmpdir):
+        """PANEL_FORCE_EXECUTION_MODE overrides computed mode.
+
+        Set force mode to single_session with a per_task_spawn DAG
+        → run_phase2_coder should be called despite non-parallelizable task.
+        """
+        panel = _load()
+        project_dir = _setup_test_project(panel, str(tmpdir))
+        old = sys.argv
+        old_mode = os.environ.pop("PANEL_FORCE_EXECUTION_MODE", None)
+        old_parallel = os.environ.get("PANEL_PARALLEL")
+        os.environ["PANEL_PARALLEL"] = "1"
+        os.environ["PANEL_FORCE_EXECUTION_MODE"] = "single_session"
+        try:
+            _spawn_calls.clear()
+            sys.argv = ["dokima", "--next", project_dir]
+
+            def _mock_spawn_per(profile, skills, prompt, timeout=600, cwd=None, model=None):
+                _spawn_calls.append({"profile": profile, "skills": skills,
+                                     "prompt": prompt, "timeout": timeout, "cwd": cwd})
+                return STRAT_SPEC_PER_TASK_SPAWN
+
+            panel.spawn_agent = _mock_spawn_per
+
+            coder_func_calls = []  # type: ignore[var-annotated]
+
+            def _mock_run_phase2(*args, **kwargs):
+                coder_func_calls.append("run_phase2_coder")
+                return {"coder_failed": False, "pr_url": None, "verdict": "APPROVED"}
+
+            def _mock_run_parallel(*args, **kwargs):
+                coder_func_calls.append("run_parallel_coders")
+                return True
+
+            patches = [
+                patch.object(panel, "call_agent", return_value={"content": "M", "tokens": 1}),
+                patch.object(panel, "_set_gh_token"),
+                patch.object(panel, "git", return_value=("", "", 0)),
+                patch.object(panel, "gh", return_value=("", "", 0)),
+                patch.object(panel, "load_key", return_value="fk"),
+                patch.object(panel, "load_github_token", return_value="ft"),
+                patch.object(panel, "detect_repo", return_value="t/t"),
+                patch.object(panel, "acquire_lock", return_value=(True, None)),
+                patch.object(panel, "_cleanup_lock"),
+                patch.object(panel, "_safe_run", return_value=_make_safe_run_result(0, "mock ok")),
+                patch.object(panel, "merge_worktree_branches", return_value=True),
+                patch.object(panel, "_supplement_pr_sections", return_value="test pr"),
+                patch("time.sleep"),
+                patch.object(panel, "run_phase2_coder", side_effect=_mock_run_phase2),
+                patch.object(panel, "run_parallel_coders", side_effect=_mock_run_parallel),
+            ]
+
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                for p in patches:
+                    stack.enter_context(p)
+                try:
+                    panel.main()
+                except SystemExit:
+                    pass
+
+            # Verify: force single_session → run_phase2_coder called despite per_task_spawn spec
+            assert "run_phase2_coder" in coder_func_calls, \
+                f"Expected run_phase2_coder (forced), got calls: {coder_func_calls}"
+            assert "run_parallel_coders" not in coder_func_calls, \
+                f"run_parallel_coders should NOT be called when force=single_session, got: {coder_func_calls}"
+
+        finally:
+            sys.argv = old
+            os.environ.pop("PANEL_FORCE_EXECUTION_MODE", None)
+            if old_mode is not None:
+                os.environ["PANEL_FORCE_EXECUTION_MODE"] = old_mode
+            if old_parallel is None:
+                os.environ.pop("PANEL_PARALLEL", None)
+            else:
+                os.environ["PANEL_PARALLEL"] = old_parallel
