@@ -366,7 +366,6 @@ Build: clean
 """
 
 class TestClarificationGate:
-    @pytest.mark.skip(reason="select imported locally in main(), not patchable as module attr — needs main() refactor")
     def test_clarification_triggers_questions(self, tmpdir):
         """CLARIFICATION NEEDED in coder output → prompts user."""
         panel = _load()
