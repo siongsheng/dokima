@@ -3,6 +3,7 @@ import sys
 import os
 import types
 import io
+import subprocess
 
 
 PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dokima"))
@@ -92,22 +93,22 @@ class TestRedactSecrets:
 
     def test_redact_strips_gh_token_from_output(self):
         import os
-        os.environ["GH_TOKEN"] = "ghp_testtoken123"
+        os.environ["GH_TOKEN"] = "***"
         module = _load_panel()
         try:
-            result = module._redact_secrets("Token is ghp_testtoken123 here")
-            assert "ghp_testtoken123" not in result
+            result = module._redact_secrets("Token is *** here")
+            assert "***" not in result
             assert "[REDACTED]" in result
         finally:
             os.environ.pop("GH_TOKEN", None)
 
     def test_redact_strips_api_key_from_output(self):
         import os
-        os.environ["API_SERVER_KEY"] = "sk-secret-api-key-12345"
+        os.environ["API_SERVER_KEY"] = "sk-sec...2345"
         module = _load_panel()
         try:
-            result = module._redact_secrets("Key is sk-secret-api-key-12345 here")
-            assert "sk-secret-api-key-12345" not in result
+            result = module._redact_secrets("Key is sk-sec...2345 here")
+            assert "sk-sec...2345" not in result
             assert "[REDACTED]" in result
         finally:
             os.environ.pop("API_SERVER_KEY", None)
@@ -167,8 +168,9 @@ class TestFilePermissions:
         with open(test_file, "w") as f:
             f.write("test")
         os.chmod(test_file, 0o600)
-        mode = os.stat(test_file).st_mode & 0o777
-        assert mode == 0o600
+        mode_result = os.stat(test_file).st_mode
+        bits = mode_result & 0o777
+        assert bits == 0o600
 
     def test_created_log_file_has_restrictive_permissions(self, tmpdir):
         """Verify writing to log file sets 0o600."""
@@ -177,5 +179,36 @@ class TestFilePermissions:
         with open(test_file, "w") as f:
             f.write("test log")
         os.chmod(test_file, 0o600)
-        mode = os.stat(test_file).st_mode & 0o777
-        assert mode == 0o600
+        mode_result = os.stat(test_file).st_mode
+        bits = mode_result & 0o777
+        assert bits == 0o600
+
+
+class TestProjectDirValidation:
+    """Task 4: PROJECT_DIR must be a real git repo."""
+
+    def test_valid_project_dir_accepted(self, tmpdir):
+        """A real git repo directory should be accepted."""
+        module = _load_panel()
+        project_dir = str(tmpdir)
+        subprocess.run(["git", "init", project_dir],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        assert module._validate_project_dir(project_dir) is True
+
+    def test_invalid_project_dir_rejected(self, tmpdir):
+        """A directory without .git should be rejected."""
+        module = _load_panel()
+        project_dir = str(tmpdir)
+        assert module._validate_project_dir(project_dir) is False
+
+    def test_nonexistent_path_rejected(self):
+        module = _load_panel()
+        assert module._validate_project_dir("/nonexistent/path") is False
+
+    def test_file_path_rejected(self, tmpdir):
+        """A file path (not a directory) should be rejected."""
+        module = _load_panel()
+        test_file = os.path.join(str(tmpdir), "a_file.txt")
+        with open(test_file, "w") as f:
+            f.write("not a dir")
+        assert module._validate_project_dir(test_file) is False
