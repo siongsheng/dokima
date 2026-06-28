@@ -19,6 +19,29 @@ FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
 SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 max_parallel_override = None  # set from --max-parallel=N flag in main()
 
+# ── security helpers ─────────────────────────────
+
+def _sanitize_prompt(text):
+    """Strip known injection patterns from user-supplied text before it enters agent prompts.
+    Strips backtick-escaped shell commands, markdown code blocks with dangerous commands,
+    and SYSTEM:/OVERRIDE: prefix injection attempts. Logs a warning on any strip."""
+    if not text:
+        return text
+    original = text
+    # Strip SYSTEM: / OVERRIDE: prefix injection (case-insensitive, word-boundary)
+    text = re.sub(r'\b(?:SYSTEM|OVERRIDE)\s*:\s*', '', text, count=0, flags=re.IGNORECASE)
+    # Strip backtick-escaped shell commands (e.g. `rm -rf /`)
+    text = re.sub(r'`[^`]+`', '', text)
+    # Strip markdown code blocks (```cmd``` or ```\ncmd\n```) containing dangerous patterns
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # Collapse multiple spaces
+    text = re.sub(r' +', ' ', text).strip()
+    if text != original:
+        stripped = original[:80].strip()
+        print(f"  WARNING: Sanitized prompt injection from feature text: {stripped!r}", file=sys.stderr, flush=True)
+    return text
+
+
 # ── helpers ──────────────────────────────────────
 
 def load_key():
@@ -4390,6 +4413,9 @@ Output NOTHING ELSE."""
 def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO
+
+    # Sanitize feature description before it enters any agent prompt
+    feature = _sanitize_prompt(feature)
 
     strat_result = run_phase1_strategist(feature, user_answers_prefill)
     spec = strat_result["spec"]
