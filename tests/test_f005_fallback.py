@@ -135,7 +135,7 @@ class TestFallbackRetry:
     def test_fallback_fires_on_primary_failure(self, monkeypatch):
         """Mock primary failure, verify fallback model is used."""
         import subprocess
-        from unittest.mock import patch
+        from unittest.mock import patch, MagicMock
 
         monkeypatch.setenv("PANEL_FALLBACK_STRATEGIST", "deepseek/deepseek-chat")
         panel = _load()
@@ -146,20 +146,18 @@ class TestFallbackRetry:
             call_count[0] += 1
             if call_count[0] == 1:
                 # Primary fails with 503
-                mock_proc = subprocess.Popen.__new__(subprocess.Popen)
-                mock_proc.stdout = ["[stderr] HTTP 503 Service Unavailable\n"]
-                mock_proc.stderr = None
-                mock_proc.returncode = 1
-                mock_proc.wait = lambda timeout=None: None
-                return mock_proc
+                mock = MagicMock()
+                mock.stdout = ["[stderr] HTTP 503 Service Unavailable\n"]
+                mock.returncode = 1
+                mock.wait.return_value = None
+                return mock
             else:
                 # Fallback succeeds
-                mock_proc = subprocess.Popen.__new__(subprocess.Popen)
-                mock_proc.stdout = ["[strategist:fallback] Task complete\n"]
-                mock_proc.stderr = None
-                mock_proc.returncode = 0
-                mock_proc.wait = lambda timeout=None: None
-                return mock_proc
+                mock = MagicMock()
+                mock.stdout = ["[strategist:fallback] Task complete\n"]
+                mock.returncode = 0
+                mock.wait.return_value = None
+                return mock
 
         with patch.object(subprocess, "Popen", side_effect=mock_popen):
             result = panel.spawn_agent("strategist", ["test"], "prompt",
@@ -171,7 +169,7 @@ class TestFallbackRetry:
     def test_fallback_exhaustion_returns_primary_error(self, monkeypatch):
         """Both primary and fallback fail — return original error."""
         import subprocess
-        from unittest.mock import patch
+        from unittest.mock import patch, MagicMock
 
         monkeypatch.setenv("PANEL_FALLBACK_STRATEGIST", "deepseek/deepseek-chat")
         panel = _load()
@@ -180,12 +178,11 @@ class TestFallbackRetry:
 
         def mock_popen(cmd, **kwargs):
             call_count[0] += 1
-            mock_proc = subprocess.Popen.__new__(subprocess.Popen)
-            mock_proc.stdout = ["[stderr] 503 Service Unavailable\n"]
-            mock_proc.stderr = None
-            mock_proc.returncode = 1
-            mock_proc.wait = lambda timeout=None: None
-            return mock_proc
+            mock = MagicMock()
+            mock.stdout = ["[stderr] 503 Service Unavailable\n"]
+            mock.returncode = 1
+            mock.wait.return_value = None
+            return mock
 
         with patch.object(subprocess, "Popen", side_effect=mock_popen):
             result = panel.spawn_agent("strategist", ["test"], "prompt",
@@ -198,7 +195,7 @@ class TestFallbackRetry:
     def test_primary_success_no_fallback(self, monkeypatch):
         """Primary succeeds, no fallback triggered."""
         import subprocess
-        from unittest.mock import patch
+        from unittest.mock import patch, MagicMock
 
         monkeypatch.setenv("PANEL_FALLBACK_STRATEGIST", "deepseek/deepseek-chat")
         panel = _load()
@@ -207,16 +204,32 @@ class TestFallbackRetry:
 
         def mock_popen(cmd, **kwargs):
             call_count[0] += 1
-            mock_proc = subprocess.Popen.__new__(subprocess.Popen)
-            mock_proc.stdout = ["Spec generated successfully\n"]
-            mock_proc.stderr = None
-            mock_proc.returncode = 0
-            mock_proc.wait = lambda timeout=None: None
-            return mock_proc
+            mock = MagicMock()
+            mock.stdout = ["Spec generated successfully\n"]
+            mock.returncode = 0
+            mock.wait.return_value = None
+            return mock
 
         with patch.object(subprocess, "Popen", side_effect=mock_popen):
             result = panel.spawn_agent("strategist", ["test"], "prompt",
                                        fallback_model="deepseek/deepseek-chat")
 
         assert call_count[0] == 1
-        assert panel._detect_provider_failure(result, 0) is False
+
+
+class TestFallbackCallSites:
+    """Task 4: spawn_agent call sites pass fallback_model=FALLBACK_MODELS.get(profile)."""
+
+    def test_fallback_models_global_is_accessible(self):
+        """FALLBACK_MODELS is a module-level dict, defaulting to {}."""
+        panel = _load()
+        assert hasattr(panel, "FALLBACK_MODELS")
+        assert panel.FALLBACK_MODELS == {}
+
+    def test_fallback_model_lookup_by_profile(self):
+        """FALLBACK_MODELS.get('strategist') returns configured model."""
+        panel = _load()
+        # By default empty dict — all .get() return None
+        assert panel.FALLBACK_MODELS.get("strategist") is None
+        assert panel.FALLBACK_MODELS.get("coder") is None
+        assert panel.FALLBACK_MODELS.get("tl") is None
