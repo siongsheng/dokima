@@ -203,3 +203,120 @@ class TestEnsureProfiles:
                         if "env_passthrough" in str(c[0][0])
                         and "GH_TOKEN" in str(c[0][0])]
             assert len(env_calls) == 4
+
+
+class TestDeployProfileSkills:
+    """Tests for deploy_profile_skills() — copying skills to profile directories."""
+
+    def _setup_source_skills(self, tmpdir, panel_ref):
+        """Create a fake dokima skills directory with test skill dirs."""
+        skills_dir = os.path.join(tmpdir, "skills")
+        for skill in ["spec-strategist-lite", "ponytail-guard",
+                      "ai-coding-best-practices-lite", "adversarial-review-lite",
+                      "no-mistakes"]:
+            skill_dir = os.path.join(skills_dir, skill)
+            os.makedirs(skill_dir)
+            with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+                f.write(f"# {skill}\\n\\nTest skill content.\\n")
+        # Patch PANEL_DIR to point to our temp dir
+        panel_ref.PANEL_DIR = tmpdir
+        return skills_dir
+
+    def test_skills_deployed_to_correct_dirs(self, tmpdir):
+        """Skills are copied to the correct profile directories."""
+        import shutil
+        # Set up source
+        self._setup_source_skills(str(tmpdir), panel)
+
+        # Set up profile skill dirs
+        profiles_dir = os.path.join(str(tmpdir), "profiles")
+        for name in ["strategist", "coder", "tech-lead", "nm"]:
+            os.makedirs(os.path.join(profiles_dir, name, "skills", "software-development"),
+                       exist_ok=True)
+
+        hermes_dir = os.path.join(str(tmpdir), "skills", "software-development")
+        os.makedirs(hermes_dir, exist_ok=True)
+
+        # Patch the module's PROFILES and HERMES paths
+        with patch.object(panel, "PROFILES", profiles_dir), \
+             patch.object(panel, "HERMES", os.path.join(str(tmpdir))):
+            panel.deploy_profile_skills()
+
+            # Check strategist skills
+            strat_dir = os.path.join(profiles_dir, "strategist", "skills", "software-development")
+            assert os.path.isdir(os.path.join(strat_dir, "spec-strategist-lite"))
+            assert os.path.isdir(os.path.join(strat_dir, "ponytail-guard"))
+
+            # Check coder skills
+            coder_dir = os.path.join(profiles_dir, "coder", "skills", "software-development")
+            assert os.path.isdir(os.path.join(coder_dir, "ai-coding-best-practices-lite"))
+
+            # Check tech-lead skills
+            tl_dir = os.path.join(profiles_dir, "tech-lead", "skills", "software-development")
+            assert os.path.isdir(os.path.join(tl_dir, "adversarial-review-lite"))
+            assert os.path.isdir(os.path.join(tl_dir, "ponytail-guard"))
+
+            # Check nm skill in global dir
+            nm_dir = os.path.join(str(tmpdir), "skills", "software-development")
+            assert os.path.isdir(os.path.join(nm_dir, "no-mistakes"))
+
+    def test_idempotent_no_overwrite(self, tmpdir):
+        """Re-running deploy does not fail or overwrite existing skills."""
+        self._setup_source_skills(str(tmpdir), panel)
+
+        profiles_dir = os.path.join(str(tmpdir), "profiles")
+        for name in ["strategist", "coder", "tech-lead"]:
+            os.makedirs(os.path.join(profiles_dir, name, "skills", "software-development"),
+                       exist_ok=True)
+        hermes_dir = os.path.join(str(tmpdir), "skills", "software-development")
+        os.makedirs(hermes_dir, exist_ok=True)
+
+        with patch.object(panel, "PROFILES", profiles_dir), \
+             patch.object(panel, "HERMES", os.path.join(str(tmpdir))):
+            # First deploy
+            panel.deploy_profile_skills()
+            # Second deploy — should not crash
+            panel.deploy_profile_skills()
+
+            # Skills should still be there
+            strat_dir = os.path.join(profiles_dir, "strategist", "skills", "software-development")
+            assert os.path.isdir(os.path.join(strat_dir, "spec-strategist-lite"))
+
+    def test_missing_source_skill_warns(self, tmpdir):
+        """When a source skill is missing, it warns but does not crash."""
+        # Only create some skills, not all
+        skills_dir = os.path.join(str(tmpdir), "skills")
+        # Create only one skill — the rest are missing
+        os.makedirs(os.path.join(skills_dir, "spec-strategist-lite"))
+        with open(os.path.join(skills_dir, "spec-strategist-lite", "SKILL.md"), "w") as f:
+            f.write("# spec-strategist-lite\\n")
+        panel.PANEL_DIR = str(tmpdir)
+
+        profiles_dir = os.path.join(str(tmpdir), "profiles")
+        for name in ["strategist", "coder"]:
+            os.makedirs(os.path.join(profiles_dir, name, "skills", "software-development"),
+                       exist_ok=True)
+
+        with patch.object(panel, "PROFILES", profiles_dir), \
+             patch.object(panel, "HERMES", os.path.join(str(tmpdir))):
+            # Should not raise
+            panel.deploy_profile_skills()
+
+            # Existing skill should be deployed
+            strat_dir = os.path.join(profiles_dir, "strategist", "skills", "software-development")
+            assert os.path.isdir(os.path.join(strat_dir, "spec-strategist-lite"))
+
+    def test_no_profiles_dir_yet(self, tmpdir):
+        """When profile dirs don't exist, they are created automatically."""
+        self._setup_source_skills(str(tmpdir), panel)
+
+        profiles_dir = os.path.join(str(tmpdir), "profiles")
+        # Don't pre-create profile dirs — deploy should create them
+
+        with patch.object(panel, "PROFILES", profiles_dir), \
+             patch.object(panel, "HERMES", os.path.join(str(tmpdir))):
+            panel.deploy_profile_skills()
+
+            # Profile dirs should have been created
+            strat_dir = os.path.join(profiles_dir, "strategist", "skills", "software-development")
+            assert os.path.isdir(os.path.join(strat_dir, "spec-strategist-lite"))
