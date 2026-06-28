@@ -22,6 +22,7 @@ SKIP_AUTOFIX = False       # set from --skip-autofix flag or PANEL_SKIP_AUTOFIX 
 FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
 SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 max_parallel_override = None  # set from --max-parallel=N flag in main()
+FALLBACK_MODEL = os.environ.get("PANEL_FALLBACK_MODEL", "")  # model to retry with on provider failure
 
 # ── security helpers ─────────────────────────────
 
