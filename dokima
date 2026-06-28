@@ -1082,16 +1082,16 @@ def pick_next_feature(features: list) -> object:
                 if dep in dep_graph:
                     stack.append(dep)
 
-    # 2. Filter: only pending features
-    pending = [f for f in features if f.status == "pending"]
-    if not pending:
+    # 2. Filter: include pending and in_progress features (exclude done)
+    candidates = [f for f in features if f.status in ("pending", "in_progress")]
+    if not candidates:
         return None
 
     # 3. Filter: all dependencies are done
     done_ids = {f.id for f in features if f.status == "done"}
 
     unblocked = []
-    for f in pending:
+    for f in candidates:
         if all(dep in done_ids for dep in f.dependencies):
             unblocked.append(f)
         else:
@@ -1099,13 +1099,18 @@ def pick_next_feature(features: list) -> object:
             print(f"  {f.id} blocked — waiting on: {', '.join(missing)}")
 
     if not unblocked:
-        print("All pending features are blocked by incomplete dependencies.")
+        print("All pending/in-progress features are blocked by incomplete dependencies.")
         return None
 
     # 4. Sort: by execution priority (P0 first, then P1, P2, P3).
-    # Within same priority, file order — which is already execution-priority order.
+    #    Within same priority, in_progress beats pending, then by id.
     priority_order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-    unblocked.sort(key=lambda f: (priority_order.get(f.priority, 2), f.id))
+    status_order = {"in_progress": 0, "pending": 1}
+    unblocked.sort(key=lambda f: (
+        priority_order.get(f.priority, 2),
+        status_order.get(f.status, 1),
+        f.id
+    ))
 
     return unblocked[0]
 
