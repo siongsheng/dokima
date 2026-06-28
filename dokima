@@ -22,6 +22,7 @@ SKIP_AUTOFIX = False       # set from --skip-autofix flag or PANEL_SKIP_AUTOFIX 
 FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
 SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 max_parallel_override = None  # set from --max-parallel=N flag in main()
+FALLBACK_MODELS = {}           # populated from PANEL_FALLBACK_* env vars in main()
 
 # ── security helpers ─────────────────────────────
 
@@ -188,14 +189,14 @@ FALLBACK_MODEL_RE = re.compile(r'^[a-zA-Z0-9_./-]+$')
 
 
 def _load_fallback_config():
-    """Read PANEL_FALLBACK_STRATEGIST, PANEL_FALLBACK_CODER, PANEL_FALLBACK_TL
+    """Read PANEL_FALLBACK_STRATEGIST, PANEL_FALLBACK_CODER, PANEL_FALLBACK_TECH_LEAD
     from environment. Validates each with FALLBACK_MODEL_RE safe pattern.
-    Returns a dict keyed by profile name (strategist, coder, tl).
+    Returns a dict keyed by profile name (strategist, coder, tech-lead).
     Invalid or absent vars are skipped with a warning."""
     config = {}
     role_map = {"strategist": "PANEL_FALLBACK_STRATEGIST",
                 "coder": "PANEL_FALLBACK_CODER",
-                "tl": "PANEL_FALLBACK_TL"}
+                "tech-lead": "PANEL_FALLBACK_TECH_LEAD"}
     for role, env_var in role_map.items():
         val = os.environ.get(env_var, "")
         if not val:
@@ -1690,7 +1691,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
 """
                 try:
                     output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                                         coder_prompt, timeout=900, cwd=wt_path)
+                                         coder_prompt, timeout=900, cwd=wt_path, fallback_model=FALLBACK_MODELS.get("coder"))
                     task.status = "completed"
                     task.output = output
                     print(f"  ✅ Task {tid} completed ({len(output)} chars)", flush=True)
@@ -2448,7 +2449,8 @@ CRITICAL RULES:
         init_skills,
         strat_prompt,
         timeout=1200,  # 20 min for deep discovery
-        cwd=PROJECT_DIR
+        cwd=PROJECT_DIR,
+        fallback_model=FALLBACK_MODELS.get("strategist")
     )
 
     # ── Restore config ──
@@ -3372,7 +3374,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
         kwargs = {"cwd": PROJECT_DIR}
         if coder_model:
             kwargs["model"] = coder_model
-        coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"], coder_prompt, **kwargs)
+        coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"], coder_prompt, **kwargs, fallback_model=FALLBACK_MODELS.get("coder"))
         print(f"\n✓ Coder finished ({len(coder_output)} chars)", flush=True)
 
         # ── Coder clarification gate ──
@@ -3411,7 +3413,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
                 )
                 print(f"\n  ↻ Re-running coder with {len([a for a in user_answers if a])} answer(s)...", flush=True)
                 coder_output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                                           coder_prompt_refine, cwd=PROJECT_DIR)
+                                           coder_prompt_refine, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
                 print(f"  ✓ Coder re-run finished ({len(coder_output)} chars)", flush=True)
             else:
                 print("  → No answers provided — proceeding with original output", flush=True)
@@ -3572,7 +3574,7 @@ Do NOT change tests unless they are wrong. Do NOT change code outside this scope
 WORKING DIRECTORY: {PROJECT_DIR}. Do NOT cd to other directories.
 Report: what was broken, what you fixed, commit hash."""
             spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                        fix_prompt, cwd=PROJECT_DIR)
+                        fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
             print(f"  ✓ Coder fix attempt finished", flush=True)
         else:
             print(f"\n  🔴 BLOCKED — Verification failed after {MAX_VERIFY_RETRIES} retries", flush=True)
@@ -3713,7 +3715,7 @@ RULES:
 - Run {TEST_CMD} before pushing. Fix if it fails.
 Report: what you fixed, commit hash."""
         spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                    fix_prompt, cwd=PROJECT_DIR)
+                    fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
         print(f"  ✓ Coder fix finished", flush=True)
 
         # Re-vet after fix
@@ -3881,7 +3883,7 @@ RELEASE: NO
  Use YES + semver or NO for RELEASE.)
 RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed."""
     tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
-                            tl_prompt, cwd=PROJECT_DIR)
+                            tl_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("tech-lead"))
     print(f"\n✓ Tech Lead finished ({len(tl_output)} chars)", flush=True)
 
     # ── TL AUTO-FIX LOOPBACK ──
@@ -3931,7 +3933,7 @@ RULES:
 - Run {TEST_CMD} + {BUILD_CMD} before pushing. Fix if either fails.
 Report: what you fixed, commit hash."""
             spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                        fix_prompt, cwd=PROJECT_DIR)
+                        fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
             print(f"  ✓ Coder fix finished", flush=True)
 
             # Re-vet + re-TL
@@ -3941,7 +3943,7 @@ Report: what you fixed, commit hash."""
             if test_result.returncode == 0 and build_result.returncode == 0:
                 print("  ✓ Re-verify passed — re-running Tech Lead with fixes...", flush=True)
                 tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
-                                        tl_prompt, cwd=PROJECT_DIR)
+                                        tl_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("tech-lead"))
                 print(f"  ✓ Tech Lead re-run finished ({len(tl_output)} chars)", flush=True)
             else:
                 print("  ⚠ Re-verify failed after auto-fix — proceeding with original TL output", flush=True)
@@ -4171,7 +4173,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     OUTPUT FORMAT: Output the complete spec in your message. Do NOT use write_file to save it to a file — the panel extracts your message as the spec. Do NOT summarize — every section must be present in full."""
 
-    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
     print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
 
     # ── DAG format enforcement ──
@@ -4203,7 +4205,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             f"{truncated}"
         )
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
-                                   dag_correction, timeout=600, cwd=PROJECT_DIR)
+                                   dag_correction, timeout=600, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
         print(f"  ✓ Strategist re-run finished ({len(strat_output)} chars)", flush=True)
         # Verify re-prompt output
         agent_text_recheck = extract_agent_messages(strat_output)
@@ -4310,7 +4312,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             )
             strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
                                        strat_prompt + f"\n\nUSER CLARIFICATIONS:\n{clarif_context}\n\nTHEN \u2014 design the feature:",
-                                       timeout=300, cwd=PROJECT_DIR)
+                                       timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
             print(f"\n\u2713 Refined spec finished ({len(strat_output)} chars)", flush=True)
         else:
             print("\n  \u2713 No answers provided \u2014 proceeding with assumptions as-is.", flush=True)
@@ -4319,7 +4321,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
                 print("  The spec below is based on UNVERIFIED ASSUMPTIONS. Review carefully before proceeding.", flush=True)
                 print("  To answer later: re-run the panel with the same feature description.", flush=True)
                 print("\n  \u26a1 Running strategist with defaults (no user answers)...", flush=True)
-                strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR)
+                strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
                 print(f"\n\u2713 Default spec finished ({len(strat_output)} chars)", flush=True)
 
     # Strategist contingency
@@ -4354,7 +4356,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             f"{truncated}"
         )
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
-                                   quality_correction, timeout=600, cwd=PROJECT_DIR)
+                                   quality_correction, timeout=600, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
         print(f"  ✓ Strategist quality re-run finished ({len(strat_output)} chars)", flush=True)
         # Re-extract and re-verify after re-prompt
         spec = extract_agent_messages(strat_output, last_only=True)
@@ -4477,7 +4479,7 @@ If CONCERN: name the specific architectural risk (not generic "consider coupling
 If both PASS: say "Spec pre-review approved \u2014 no architectural concerns, test plan complete."
 
 Output NOTHING ELSE."""
-        review_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"], review_prompt, timeout=120, cwd=PROJECT_DIR)
+        review_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"], review_prompt, timeout=120, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("tech-lead"))
         review_text = extract_agent_messages(review_output)
         if len(review_text) < 20 and len(review_output) > 100:
             review_text = review_output
@@ -4800,7 +4802,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
 # ── main ──
 
 def main():
-    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override
+    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS
     import shutil
     if len(sys.argv) < 2:
         print("Usage: dokima [--next|--continuous|--fix] [--fix-all] [--skip-autofix] [--force-full] [--skip-auto-archive] [--skip-human-gate] [--max-parallel=N] [--interactive] [--answers <json>] 'Feature' [dir]")

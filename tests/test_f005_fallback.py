@@ -86,16 +86,16 @@ class TestFallbackConfig:
         """Valid provider/model format should be accepted."""
         monkeypatch.setenv("PANEL_FALLBACK_STRATEGIST", "openrouter/anthropic/claude-sonnet-4")
         monkeypatch.setenv("PANEL_FALLBACK_CODER", "deepseek/deepseek-chat")
-        monkeypatch.setenv("PANEL_FALLBACK_TL", "openai/gpt-4o")
+        monkeypatch.setenv("PANEL_FALLBACK_TECH_LEAD", "openai/gpt-4o")
         panel = _load()
         result = panel._load_fallback_config()
         assert result["strategist"] == "openrouter/anthropic/claude-sonnet-4"
         assert result["coder"] == "deepseek/deepseek-chat"
-        assert result["tl"] == "openai/gpt-4o"
+        assert result["tech-lead"] == "openai/gpt-4o"
 
     def test_fallback_config_absent_vars_skipped(self, monkeypatch):
         """Unset env vars should not appear in config."""
-        for var in ("PANEL_FALLBACK_STRATEGIST", "PANEL_FALLBACK_CODER", "PANEL_FALLBACK_TL"):
+        for var in ("PANEL_FALLBACK_STRATEGIST", "PANEL_FALLBACK_CODER", "PANEL_FALLBACK_TECH_LEAD"):
             monkeypatch.delenv(var, raising=False)
         panel = _load()
         result = panel._load_fallback_config()
@@ -105,12 +105,12 @@ class TestFallbackConfig:
         """Only set env vars should appear in config."""
         monkeypatch.setenv("PANEL_FALLBACK_CODER", "deepseek/deepseek-chat")
         monkeypatch.delenv("PANEL_FALLBACK_STRATEGIST", raising=False)
-        monkeypatch.delenv("PANEL_FALLBACK_TL", raising=False)
+        monkeypatch.delenv("PANEL_FALLBACK_TECH_LEAD", raising=False)
         panel = _load()
         result = panel._load_fallback_config()
         assert result.get("coder") == "deepseek/deepseek-chat"
         assert "strategist" not in result
-        assert "tl" not in result
+        assert "tech-lead" not in result
 
     def test_fallback_validation_rejects_empty_string(self, monkeypatch):
         """Empty string env var should be treated as absent."""
@@ -232,4 +232,4 @@ class TestFallbackCallSites:
         # By default empty dict — all .get() return None
         assert panel.FALLBACK_MODELS.get("strategist") is None
         assert panel.FALLBACK_MODELS.get("coder") is None
-        assert panel.FALLBACK_MODELS.get("tl") is None
+        assert panel.FALLBACK_MODELS.get("tech-lead") is None
