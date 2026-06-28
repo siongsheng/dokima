@@ -320,3 +320,80 @@ class TestDeployProfileSkills:
             # Profile dirs should have been created
             strat_dir = os.path.join(profiles_dir, "strategist", "skills", "software-development")
             assert os.path.isdir(os.path.join(strat_dir, "spec-strategist-lite"))
+
+
+class TestIntegrationRunInit:
+    """Integration tests — verify ensure_profiles + deploy_profile_skills
+    are called during run_init()."""
+
+    def test_init_calls_ensure_profiles(self):
+        """run_init() calls ensure_profiles() before strategist phase."""
+        # Use side_effect counters to verify call order
+        call_order = []
+
+        def mock_ensure():
+            call_order.append("ensure_profiles")
+
+        def mock_deploy():
+            call_order.append("deploy_profile_skills")
+
+        def mock_spawn(*args, **kwargs):
+            call_order.append("spawn_agent")
+            return "Mock output"
+
+        with patch.object(panel, "ensure_profiles", side_effect=mock_ensure), \
+             patch.object(panel, "deploy_profile_skills", side_effect=mock_deploy), \
+             patch.object(panel, "spawn_agent", side_effect=mock_spawn), \
+             patch.object(panel, "load_key", return_value="test-key"), \
+             patch.object(panel, "load_github_token", return_value="test-gh-token"), \
+             patch.object(panel, "detect_repo", return_value="test/test"), \
+             patch.object(subprocess, "run") as mock_run, \
+             patch.object(os.path, "isdir", return_value=True), \
+             patch.object(os.path, "exists", return_value=True):
+            mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
+
+            panel.run_init("test description", "/tmp/test-dir")
+
+            # Both should have been called
+            assert "ensure_profiles" in call_order
+            assert "deploy_profile_skills" in call_order
+
+            # Both should be called BEFORE spawn_agent
+            ensure_idx = call_order.index("ensure_profiles")
+            deploy_idx = call_order.index("deploy_profile_skills")
+            spawn_idx = call_order.index("spawn_agent")
+            assert ensure_idx < spawn_idx, "ensure_profiles must run before spawn_agent"
+            assert deploy_idx < spawn_idx, "deploy_profile_skills must run before spawn_agent"
+
+    def test_init_proceeds_when_ensure_fails(self):
+        """run_init() continues even if ensure_profiles raises an exception."""
+        call_order = []
+
+        def mock_ensure():
+            call_order.append("ensure_profiles")
+            raise RuntimeError("hermes not found")
+
+        def mock_deploy():
+            call_order.append("deploy_profile_skills")
+
+        def mock_spawn(*args, **kwargs):
+            call_order.append("spawn_agent")
+            return "Mock output"
+
+        with patch.object(panel, "ensure_profiles", side_effect=mock_ensure), \
+             patch.object(panel, "deploy_profile_skills", side_effect=mock_deploy), \
+             patch.object(panel, "spawn_agent", side_effect=mock_spawn), \
+             patch.object(panel, "load_key", return_value="test-key"), \
+             patch.object(panel, "load_github_token", return_value="test-gh-token"), \
+             patch.object(panel, "detect_repo", return_value="test/test"), \
+             patch.object(subprocess, "run") as mock_run, \
+             patch.object(os.path, "isdir", return_value=True), \
+             patch.object(os.path, "exists", return_value=True):
+            mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
+
+            # Should not raise — error is caught and logged
+            panel.run_init("test description", "/tmp/test-dir")
+
+            # deploy and spawn should still happen
+            assert "deploy_profile_skills" in call_order
+            assert "spawn_agent" in call_order
