@@ -172,11 +172,11 @@
     "desc": "Exports: _make_safe_run_result, _setup_test_project, _mock_spawn"
   },
   "tests/test_pick_next.py": {
-    "hash": "9bf22096e271589b296f5fe7eecd8406",
+    "hash": "81dd41d83ddbe306efc32eb8ea50f908",
     "desc": "Exports: make_feat, test_empty_list, test_all_done, test_single_pending_no_deps, test_p0_beats_p1"
   },
   "tests/test_pick_next_feature.py": {
-    "hash": "f6918bbc2a80e90d3302d522268476bb",
+    "hash": "413217b65f37a890050b14ae91abab2e",
     "desc": "Helper to build RoadmapFeature objects for testing"
   },
   "tests/test_pid_utils.py": {
