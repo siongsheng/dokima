@@ -8,7 +8,7 @@
     "desc": "Dokima"
   },
   "docs/pipeline.md": {
-    "hash": "78b6646fab904ea901fbcc08f441a006",
+    "hash": "81b3b4502ed36fe1f5bbaf709bfe040d",
     "desc": "Dokima \u2014 Pipeline Reference"
   },
   "docs/setup.md": {
@@ -107,9 +107,17 @@
     "hash": "4968e5a3dd91451aaf1c44a65b3c0314",
     "desc": ""
   },
+  "tests/test_f001_security.py": {
+    "hash": "a4b5f9e8a954aa2d66e7c9d75b4a1fac",
+    "desc": "Exports: _load_panel, TestPromptSanitizer"
+  },
   "tests/test_f002_closure.py": {
     "hash": "feb406edbc8ad345f623f4b2b1e8a751",
     "desc": "Exports: test_f002_marked_done_in_roadmap, test_f002_recorded_in_status"
+  },
+  "tests/test_f003_robustness.py": {
+    "hash": "14ccf0e5fe11acaf0edc91acabda3982",
+    "desc": "Exports: _make_result, TestRedOnlyCommits"
   },
   "tests/test_final_coverage.py": {
     "hash": "6a9ce7477d55adf6659a739eb25a0bf0",
@@ -147,6 +155,10 @@
     "hash": "9bf22096e271589b296f5fe7eecd8406",
     "desc": "Exports: make_feat, test_empty_list, test_all_done, test_single_pending_no_deps, test_p0_beats_p1"
   },
+  "tests/test_pick_next_feature.py": {
+    "hash": "f6918bbc2a80e90d3302d522268476bb",
+    "desc": "Helper to build RoadmapFeature objects for testing"
+  },
   "tests/test_pid_utils.py": {
     "hash": "22ceb743fa00b889f26245187e389989",
     "desc": "Exports: test_check_live_pid, test_check_dead_pid, test_check_non_numeric, test_check_empty_string, test_verify_owner_on_self"
@@ -178,6 +190,10 @@
   "tests/test_slugify.py": {
     "hash": "4408cde97f3a1c91cb556dca039bc4ae",
     "desc": "Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash"
+  },
+  "tests/test_spec_quality_gates.py": {
+    "hash": "c63dcde4bad605f25a7ba0215594be08",
+    "desc": "Sample well-formed spec with all required sections"
   },
   "tests/test_status_md.py": {
     "hash": "5cab1041379af41b43f058eb2d314d47",

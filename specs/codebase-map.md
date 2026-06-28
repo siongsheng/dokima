@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-06-28 12:11:06 (incremental | 52 files)
+## Generated: 2026-06-28 20:08:21 (incremental | 56 files)
 
 ## Tree
 ├── AGENTS.md  — Dokima — Multi-Agent Orchestration Engine
@@ -40,7 +40,9 @@
 ├── test_extract_agent.py  — Exports: test_hermes_box_format, test_no_box_markers_fallback, test_multiple_boxes, test_empty_box_skipped, test_partial_box_no_match
 ├── test_extract_file_paths.py  — Exports: TestExtractFilePathsBacktick
 ├── test_extract_pr.py
+├── test_f001_security.py  — Exports: _load_panel, TestPromptSanitizer
 ├── test_f002_closure.py  — Exports: test_f002_marked_done_in_roadmap, test_f002_recorded_in_status
+├── test_f003_robustness.py  — Exports: _make_result, TestRedOnlyCommits
 ├── test_final_coverage.py  — Exports: _setup
 ├── test_final_edge.py  — Exports: _setup
 ├── test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
@@ -50,6 +52,7 @@
 ├── test_lock_paths.py  — Exports: test_explicit_project_dir_lock, test_explicit_project_dir_stop, test_implicit_from_global, test_trailing_slash_normalized, test_no_project_dir_no_arg
 ├── test_main_integration.py  — Exports: _make_safe_run_result, _setup_test_project, _mock_spawn
 ├── test_pick_next.py  — Exports: make_feat, test_empty_list, test_all_done, test_single_pending_no_deps, test_p0_beats_p1
+├── test_pick_next_feature.py  — Helper to build RoadmapFeature objects for testing
 ├── test_pid_utils.py  — Exports: test_check_live_pid, test_check_dead_pid, test_check_non_numeric, test_check_empty_string, test_verify_owner_on_self
 ├── test_pipeline_integration.py  — Exports: _setup_test_project
 ├── test_rich_pipeline.py  — Exports: _setup_project
@@ -58,6 +61,7 @@
 ├── test_root_cause_regressions.py  — Exports: TestSpecPathDetection
 ├── test_safe_run.py  — Exports: test_simple_echo, test_command_fails, test_shell_metachar_not_injected, test_complex_command, test_unsplittable_falls_back_to_bash
 ├── test_slugify.py  — Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash
+├── test_spec_quality_gates.py  — Sample well-formed spec with all required sections
 ├── test_status_md.py  — Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated
 ├── test_task_dag.py  — Exports: panel, _make_dag, test_all_parallel_3tasks_2files_single_session, test_non_parallelizable_task_returns_per_task_spawn
 ├── test_triple_bug_fix.py  — ── Bug 1: Spec archive ──────────────────────────────────────
