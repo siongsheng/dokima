@@ -1,4 +1,4 @@
-"""Tests for _detect_provider_failure helper (F005: Model Family Fallback)."""
+"""Tests for _detect_provider_failure helper and fallback retry (F005: Model Family Fallback)."""
 import sys
 import os
 import types
@@ -236,4 +236,215 @@ class TestSpawnAgentFallbackRetry:
         assert "--provider" in fallback_cmd, f"Expected --provider in fallback cmd: {fallback_cmd}"
         assert "openrouter" in fallback_cmd
         assert "-m" in fallback_cmd or "--model" in fallback_cmd
-        assert "claude-sonnet-4" in fallback_cmd
+        # Model name after "/" split is "anthropic/claude-sonnet-4"
+        assert "anthropic/claude-sonnet-4" in fallback_cmd
+
+
+class TestFallbackEdgeCases:
+    """Task 5: Additional unit tests for fallback retry edge cases."""
+
+    def _make_mock_proc(self, lines, returncode=0, stderr=""):
+        """Create a mock Popen instance."""
+        class MockProc:
+            def __init__(self, lines, returncode, stderr):
+                self._lines = lines
+                self.returncode = returncode
+                self._stderr = stderr
+
+            @property
+            def stdout(self):
+                class StdoutIter:
+                    def __init__(self, lines):
+                        self._lines = lines
+                        self._idx = 0
+                    def __iter__(self):
+                        return self
+                    def __next__(self):
+                        if self._idx >= len(self._lines):
+                            raise StopIteration
+                        self._idx += 1
+                        return self._lines[self._idx - 1]
+                return StdoutIter(self._lines)
+
+            @property
+            def stderr(self):
+                class StderrReader:
+                    def __init__(self, text):
+                        self._text = text
+                    def read(self):
+                        return self._text
+                return StderrReader(self._stderr)
+
+            def wait(self, timeout=None):
+                return None
+
+            def kill(self):
+                pass
+
+            def terminate(self):
+                pass
+
+            def communicate(self, timeout=None):
+                return (None, self._stderr)
+
+        return MockProc(lines, returncode, stderr)
+
+    def test_double_fallback_returns_original_result(self):
+        """When fallback model ALSO fails with provider error, return first error without infinite recursion."""
+        import subprocess
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            # Always fail with provider error — both first attempt and fallback
+            return self._make_mock_proc(
+                ["Error output"],
+                returncode=1,
+                stderr="503 Service Unavailable\n"
+            )
+
+        module = _load_panel()
+        module.FALLBACK_MODEL = "openrouter/anthropic/claude-sonnet-4"
+        module.HERMES_BIN = "/usr/bin/hermes"
+
+        with unittest.mock.patch("subprocess.Popen", mock_popen):
+            result = module.spawn_agent("coder", ["test-skill"], "test prompt", timeout=30)
+
+        # Should NOT infinite-loop — return the first attempt output
+        assert "Error output" in result
+        # Should have exactly 2 calls (original + one fallback), not infinite
+        assert len(calls) == 2, f"Expected 2 calls max (no infinite recursion), got {len(calls)}"
+
+    def test_fallback_skipped_when_timed_out(self):
+        """When process timed out, no fallback attempt should occur."""
+        import subprocess
+        calls = []
+
+        original_wait = subprocess.Popen.wait
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            proc = self._make_mock_proc(
+                ["Partial output before timeout"],
+                returncode=1,
+                stderr="rate limit exceeded\n"
+            )
+            # Override wait to raise TimeoutExpired
+            original_wait_method = proc.wait
+            def timeout_wait(timeout=None):
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout or 30, output="Partial output before timeout")
+            proc.wait = timeout_wait
+            proc.returncode = 1
+            return proc
+
+        module = _load_panel()
+        module.FALLBACK_MODEL = "openrouter/anthropic/claude-sonnet-4"
+        module.HERMES_BIN = "/usr/bin/hermes"
+
+        with unittest.mock.patch("subprocess.Popen", mock_popen):
+            result = module.spawn_agent("coder", ["test-skill"], "test prompt", timeout=30)
+
+        assert "Partial output before timeout" in result
+        assert "[TIMEOUT" in result
+        # Should NOT have made a second call (fallback suppressed on timeout)
+        assert len(calls) == 1, f"Expected 1 call (no fallback on timeout), got {len(calls)}"
+
+    def test_fallback_model_name_only(self):
+        """When FALLBACK_MODEL has no '/', pass just '-m model' without '--provider'."""
+        import subprocess
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                proc = self._make_mock_proc(
+                    ["Error output"],
+                    returncode=1,
+                    stderr="connection refused\n"
+                )
+                proc.returncode = 1
+                return proc
+            return self._make_mock_proc(["ok\n"], returncode=0)
+
+        module = _load_panel()
+        module.FALLBACK_MODEL = "gpt-4"  # no "/" — model name only
+        module.HERMES_BIN = "/usr/bin/hermes"
+
+        with unittest.mock.patch("subprocess.Popen", mock_popen):
+            module.spawn_agent("coder", ["test-skill"], "test prompt", timeout=30)
+
+        assert len(calls) == 2, f"Expected 2 calls, got {len(calls)}"
+        fallback_cmd = calls[1]
+        # Should have -m but NOT --provider
+        assert "-m" in fallback_cmd
+        assert "gpt-4" in fallback_cmd
+        assert "--provider" not in fallback_cmd, f"Should not have --provider for model-only name: {fallback_cmd}"
+
+    def test_fallback_passes_cwd_correctly(self):
+        """cwd parameter is forwarded to the fallback spawn_agent call."""
+        import subprocess
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append((cmd, kwargs.get("cwd")))
+            if len(calls) == 1:
+                proc = self._make_mock_proc(
+                    ["Error output"],
+                    returncode=1,
+                    stderr="connection refused\n"
+                )
+                proc.returncode = 1
+                return proc
+            return self._make_mock_proc(["ok\n"], returncode=0)
+
+        module = _load_panel()
+        module.FALLBACK_MODEL = "openrouter/anthropic/claude-sonnet-4"
+        module.HERMES_BIN = "/usr/bin/hermes"
+
+        custom_cwd = "/tmp/custom-workdir"
+        with unittest.mock.patch("subprocess.Popen", mock_popen):
+            module.spawn_agent("coder", ["test-skill"], "test prompt", timeout=30, cwd=custom_cwd)
+
+        assert len(calls) == 2, f"Expected 2 calls, got {len(calls)}"
+        # Both calls should use the original cwd
+        assert calls[0][1] == custom_cwd, f"First call cwd mismatch: {calls[0][1]}"
+        assert calls[1][1] == custom_cwd, f"Fallback call cwd mismatch: {calls[1][1]}"
+
+    def test_fallback_triggers_on_each_failure_pattern(self):
+        """Each provider failure pattern should trigger a fallback retry."""
+        import subprocess
+
+        patterns = [
+            "rate limit hit",
+            "503 Service Unavailable",
+            "Service Unavailable Retry",
+            "provider.error: quota exceeded",
+            "model 'gpt-4' not found in catalog",
+            "model not available in region",
+            "connection refused by upstream",
+        ]
+
+        for idx, pattern in enumerate(patterns):
+            calls = []
+
+            def mock_popen(cmd, **kwargs):
+                calls.append(cmd)
+                if len(calls) == 1:
+                    proc = self._make_mock_proc(
+                        ["Error"],
+                        returncode=1,
+                        stderr=pattern + "\n"
+                    )
+                    proc.returncode = 1
+                    return proc
+                return self._make_mock_proc(["fallback ok\n"], returncode=0)
+
+            module = _load_panel()
+            module.FALLBACK_MODEL = "openrouter/anthropic/claude-sonnet-4"
+            module.HERMES_BIN = "/usr/bin/hermes"
+
+            with unittest.mock.patch("subprocess.Popen", mock_popen):
+                result = module.spawn_agent("coder", ["test-skill"], "test prompt", timeout=30)
+
+            assert "fallback ok" in result, f"Pattern '{pattern}' did not trigger fallback"
+            assert len(calls) == 2, f"Pattern '{pattern}': expected 2 calls, got {len(calls)}"
