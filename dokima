@@ -781,7 +781,7 @@ FLAGS:
   --force-full         Run all 5 phases regardless of depth gating
   --skip-auto-archive  Don't auto-archive merged specs
   --skip-human-gate    Skip Human Gate prompt (for automation)
-  --max-parallel=N     Max parallel coder agents (default: 5)
+  --max-parallel=N     Max parallel coder agents (env: PANEL_MAX_PARALLEL, default: 5)
   --base-branch <b>    Override default branch for PR base (default: detected from origin/HEAD)
 
   All flags also accept their legacy PANEL_* env var equivalents
