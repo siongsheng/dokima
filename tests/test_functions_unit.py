@@ -20,7 +20,6 @@ class TestSafeRun:
         assert result.returncode == 0
         assert "hello" in result.stdout
 
-    @pytest.mark.skip(reason="bash -lc fallback removed — shlex failure now raises; tested in test_safe_run.py")
     def test_nonexistent_command_falls_back_to_bash(self, panel):
         """shlex.split should fail, fallback to bash -lc."""
         result = panel._safe_run("nonexistent_command_xyz 2>&1", cwd="/tmp", timeout=5)
