@@ -43,9 +43,32 @@ else
     log "Linked dokima → $BIN_DIR/dokima"
 fi
 
+# ── 4. Symlink nm and vet ────────────────────────────────────────────
+for script in nm vet; do
+    src="$PANEL_DIR/bin/$script"
+    dest="$BIN_DIR/$script"
+    if [ -f "$src" ]; then
+        bash -n "$src" 2>/dev/null || warn "$script has syntax errors — symlinking anyway"
+        if [ -L "$dest" ] || [ -f "$dest" ]; then
+            log "$script already linked in $BIN_DIR"
+        else
+            ln -sf "$src" "$dest"
+            log "Linked $script → $dest"
+        fi
+    else
+        warn "$script not found in repo — skipping"
+    fi
+done
+
 # ── Done ─────────────────────────────────────────────────────────────
 echo ""
 echo "  Dokima installed: $BIN_DIR/dokima"
+if [ -f "$PANEL_DIR/bin/nm" ]; then
+    echo "  nm installed:     $BIN_DIR/nm"
+fi
+if [ -f "$PANEL_DIR/bin/vet" ]; then
+    echo "  vet installed:    $BIN_DIR/vet"
+fi
 echo ""
 echo "  Next steps:"
 echo "    dokima --help"
