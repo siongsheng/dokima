@@ -101,7 +101,7 @@ def _write_log_line(text):
 
 _PROVIDER_FAILURE_PATTERNS = [
     re.compile(r'rate limit', re.IGNORECASE),
-    re.compile(r'503'),
+    re.compile(r'\b503\b'),
     re.compile(r'service unavailable', re.IGNORECASE),
     re.compile(r'provider\.error', re.IGNORECASE),
     re.compile(r'model.*not.*(?:found|available)', re.IGNORECASE | re.DOTALL),
