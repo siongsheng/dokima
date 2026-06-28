@@ -7,6 +7,10 @@ Output: Live to terminal + saved to /tmp/dokima-output.txt
 """
 import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
 
+# Set restrictive umask before any file writes — ensures all /tmp artifacts
+# are created with owner-only permissions (0o077) by default
+os.umask(0o077)
+
 REAL_HOME = pwd.getpwuid(os.getuid()).pw_dir
 HERMES = os.path.join(REAL_HOME, ".hermes")
 HERMES_BIN = os.path.join(HERMES, "hermes-agent/venv/bin/hermes")
@@ -70,6 +74,7 @@ def _write_log_line(text):
     try:
         if _LOG_FILE_HANDLE is None:
             _LOG_FILE_HANDLE = open(OUTPUT_LOG, "a")
+            os.chmod(OUTPUT_LOG, 0o600)
         _LOG_FILE_HANDLE.write(text + "\n")
         _LOG_FILE_HANDLE.flush()
     except Exception:
@@ -870,6 +875,7 @@ def acquire_lock():
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd.write(f"{os.getpid()}\n")
             fd.flush()
+            os.chmod(_lock_path(), 0o600)
             return True, fd
         except (IOError, OSError):
             fd.close()
@@ -1769,6 +1775,7 @@ def handle_stop(project_dir):
     else:
         with open(sp, "w") as f:
             f.write(f"stop at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        os.chmod(sp, 0o600)
         print(f"Stop signal sent to PID {pid}. Pipeline will stop after current feature.")
     sys.exit(0)
 
@@ -4060,6 +4067,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             interview_path = "/tmp/dokima-interview.json"
             with open(interview_path, "w") as f:
                 json.dump(interview_state, f)
+            os.chmod(interview_path, 0o600)
             print(f"\n{'═' * 55}", flush=True)
             print(f"  STRATEGIST NEEDS CLARIFICATION", flush=True)
             print(f"{'═' * 55}", flush=True)
