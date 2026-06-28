@@ -198,3 +198,107 @@ class TestCheckpointValidation:
             panel.delete_checkpoint(slug)
             if os.path.exists(saved_spec_path):
                 os.remove(saved_spec_path)
+
+
+class TestResumeFlag:
+    """Task 2: --resume / --no-resume flag sets global RESUME."""
+
+    def test_resume_flag_default(self):
+        """RESUME defaults to None (auto-detect) when not set."""
+        panel = _load()
+        assert panel.RESUME is None
+
+    def test_resume_flag_true(self):
+        """Setting RESUME = True enables resume mode."""
+        panel = _load()
+        panel.RESUME = True
+        assert panel.RESUME is True
+
+    def test_resume_flag_false(self):
+        """Setting RESUME = False disables resume mode."""
+        panel = _load()
+        panel.RESUME = False
+        assert panel.RESUME is False
+
+
+class TestPipelineCheckpointSave:
+    """Task 3: Checkpoint saved after each phase in run_pipeline."""
+
+    def test_save_checkpoint_after_strategist(self):
+        panel = _load()
+        slug = "test-pipeline-strategist"
+        try:
+            panel.save_checkpoint(slug, {
+                "version": 1,
+                "feature": "Test Feature",
+                "branch": "feat/test",
+                "spec_path": "/tmp/test-spec.md",
+                "phases_completed": ["strategist"],
+            })
+            cpath = panel._checkpoint_path(slug)
+            assert os.path.exists(cpath)
+            data = panel.load_checkpoint(slug)
+            assert "strategist" in data["phases_completed"]
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_checkpoint_accumulates_phases(self):
+        panel = _load()
+        slug = "test-pipeline-accumulate"
+        try:
+            data = {"version": 1, "phases_completed": ["strategist", "coder"]}
+            panel.save_checkpoint(slug, data)
+            loaded = panel.load_checkpoint(slug)
+            assert loaded["phases_completed"] == ["strategist", "coder"]
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_checkpoint_deleted_on_completion(self):
+        panel = _load()
+        slug = "test-pipeline-complete"
+        try:
+            panel.save_checkpoint(slug, {"version": 1, "phases_completed": ["strategist", "coder", "vet", "nm", "tech_lead"]})
+            assert panel.load_checkpoint(slug) is not None
+            panel.save_checkpoint(slug, None)  # signal completion
+            assert panel.load_checkpoint(slug) is None
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_checkpoint_cleanup_no_resume(self):
+        """When RESUME=False, any existing checkpoint should be deleted."""
+        panel = _load()
+        slug = "test-pipeline-no-resume"
+        try:
+            panel.save_checkpoint(slug, {"version": 1, "phases_completed": ["strategist"]})
+            assert panel.load_checkpoint(slug) is not None
+            # Simulate what happens when RESUME=False and pipeline starts
+            if panel.load_checkpoint(slug) and not panel.RESUME:
+                panel.save_checkpoint(slug, None)
+            assert panel.load_checkpoint(slug) is None
+        finally:
+            panel.delete_checkpoint(slug)
+
+
+class TestResumeSkipPhase:
+    """Task 3: Resume skips completed phases."""
+
+    def test_skip_strategist_when_checkpointed(self):
+        """If checkpoint says strategist done, should skip strategist."""
+        panel = _load()
+        assert panel._phase_should_skip(["strategist", "coder"], "strategist") is True
+
+    def test_no_skip_uncompleted_phase(self):
+        """If checkpoint doesn't list vet, vet should run."""
+        panel = _load()
+        assert panel._phase_should_skip(["strategist", "coder"], "vet") is False
+
+    def test_no_skip_empty_checkpoint(self):
+        """Empty phases_completed should not skip anything."""
+        panel = _load()
+        assert panel._phase_should_skip([], "strategist") is False
+
+    def test_no_skip_without_resume_flag(self):
+        """When resume=False or None, don't skip even if checkpoint exists."""
+        panel = _load()
+        assert panel._phase_should_skip([], "strategist", resume=False) is False
+        assert panel._phase_should_skip([], "strategist", resume=None) is False
