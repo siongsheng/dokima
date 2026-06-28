@@ -506,3 +506,35 @@ class TestDepthMatrixCells:
         # default is "Medium" → (Medium, MEDIUM) = "full"
         depth = self._run_and_get_depth(panel, spec)
         assert depth == "full", f"Expected 'full' (default Medium), got '{depth}'"
+
+    def test_impact_parser_defaults_to_medium_not_high(self, panel):
+        """No Impact marker → defaults to MEDIUM (not HIGH)."""
+        spec = """# Test Feature
+
+## Impact
+Test impact.
+
+## What Changed
+- Nothing.
+
+### Confidence: High
+
+## Task Breakdown
+
+### Task 1: Single task
+**Files:** a.py
+**Dependencies:** [none]
+**Parallelizable:** no
+**Description:** Do thing.
+"""
+        # No Impact marker → impact="MEDIUM" → (High, MEDIUM) = "vet+nm"
+        depth = self._run_and_get_depth(panel, spec)
+        assert depth == "vet+nm", f"Expected 'vet+nm' (default MEDIUM), got '{depth}'"
+
+    def test_impact_parser_rejects_substring_false_positive(self, panel):
+        """'HIGHER' must NOT match marker 'HIGH' — defaults to MEDIUM."""
+        spec = _make_spec_with_confidence_impact("High", "HIGHER")
+        # "Impact: HIGHER" should NOT match "HIGH";
+        # default is "MEDIUM" → (High, MEDIUM) = "vet+nm"
+        depth = self._run_and_get_depth(panel, spec)
+        assert depth == "vet+nm", f"Expected 'vet+nm' (default MEDIUM), got '{depth}'"
