@@ -1,5 +1,12 @@
 # Pipeline Performance Tracking
 
+> **SHOULD FIX:** This file documents old behavior (--fix mode run from Jun 25)
+> that predates the F006 checkpoint/resume changes. The checkpoint save gates
+> now use `if resume is not False:` instead of `if cp is not None or resume:`,
+> and the strategist checkpoint at line 4771 is saved unconditionally. This
+> tracking doc should be updated to reflect current pipeline behavior once
+> the next meaningful run completes.
+
 ## Current Run: --fix mode implementation
 - **Feature:** Add --fix mode
 - **Started:** 2026-06-25 ~11:25 SGT

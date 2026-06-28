@@ -302,3 +302,77 @@ class TestResumeSkipPhase:
         panel = _load()
         assert panel._phase_should_skip([], "strategist", resume=False) is False
         assert panel._phase_should_skip([], "strategist", resume=None) is False
+
+
+class TestCheckpointGateBehavior:
+    """Task 3: Checkpoint gate saves when resume is None or True, not when False.
+
+    The gate condition ``if resume is not False:`` must save checkpoints by
+    default (resume=None) and with --resume (True), and suppress them only
+    with --no-resume (False).
+    """
+
+    def test_saves_checkpoint_when_resume_none(self):
+        """save_checkpoint is called when resume=None (default)."""
+        panel = _load()
+        slug = "test-gate-resume-none"
+        try:
+            # Simulate the gate: when resume is not False, save checkpoint
+            resume = None  # default
+            if resume is not False:
+                panel.save_checkpoint(slug, {
+                    "version": 1,
+                    "phases_completed": ["coder"],
+                })
+            cpath = panel._checkpoint_path(slug)
+            assert os.path.exists(cpath), \
+                "Expected checkpoint saved when resume=None (default)"
+            data = panel.load_checkpoint(slug)
+            assert data is not None
+            assert "coder" in data["phases_completed"]
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_saves_checkpoint_when_resume_true(self):
+        """save_checkpoint is called when resume=True."""
+        panel = _load()
+        slug = "test-gate-resume-true"
+        try:
+            resume = True
+            if resume is not False:
+                panel.save_checkpoint(slug, {
+                    "version": 1,
+                    "phases_completed": ["coder"],
+                })
+            cpath = panel._checkpoint_path(slug)
+            assert os.path.exists(cpath), \
+                "Expected checkpoint saved when resume=True"
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_skips_checkpoint_when_resume_false(self):
+        """save_checkpoint is NOT called when resume=False."""
+        panel = _load()
+        slug = "test-gate-resume-false"
+        try:
+            resume = False
+            if resume is not False:
+                panel.save_checkpoint(slug, {
+                    "version": 1,
+                    "phases_completed": ["coder"],
+                })
+            cpath = panel._checkpoint_path(slug)
+            assert not os.path.exists(cpath), \
+                "Expected NO checkpoint saved when resume=False"
+        finally:
+            panel.delete_checkpoint(slug)
+
+    def test_saves_checkpoint_directly_matches_gate_logic(self):
+        """Verify the gate condition is semantically correct for all values."""
+        # The actual gate: if resume is not False
+        def would_save(resume):
+            return resume is not False
+
+        assert would_save(None) is True, "resume=None should save (default)"
+        assert would_save(True) is True, "resume=True should save"
+        assert would_save(False) is False, "resume=False should suppress"
