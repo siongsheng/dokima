@@ -21,6 +21,29 @@ max_parallel_override = None  # set from --max-parallel=N flag in main()
 
 # ── helpers ──────────────────────────────────────
 
+def _read_stdin_with_timeout(prompt="", timeout=60, stdin=None):
+    """Read a line from stdin with timeout.
+
+    Returns (answer, timed_out) where answer is the stripped line
+    or '' on timeout/EOF/KeyboardInterrupt, and timed_out indicates
+    select timed out.
+    """
+    if stdin is None:
+        stdin = sys.stdin
+    if prompt:
+        print(prompt, end="", flush=True)
+    try:
+        ready, _, _ = select.select([stdin], [], [], timeout)
+        if not ready:
+            return ("", True)
+        line = stdin.readline()
+        if not line:
+            return ("", False)
+        return (line.strip(), False)
+    except (EOFError, KeyboardInterrupt):
+        return ("", False)
+
+
 def load_key():
     env_path = os.path.join(PROFILES, "work", ".env")
     if not os.path.exists(env_path):
@@ -3067,19 +3090,13 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
                 print(f"  {i}. {q.strip()}", flush=True)
 
             user_answers = []
-            try:
-                for i in range(len(coder_clarify)):
-                    print(f"\n  A{i+1}: ", end="", flush=True)
-                    ready, _, _ = select.select([sys.stdin], [], [], 60.0)
-                    if not ready:
+            for i in range(len(coder_clarify)):
+                answer, timed_out = _read_stdin_with_timeout(prompt=f"\n  A{i+1}: ")
+                if not answer:
+                    if timed_out:
                         print("(timed out — using default assumption)", flush=True)
-                        break
-                    answer = sys.stdin.readline().strip()
-                    if not answer:
-                        break
-                    user_answers.append(answer)
-            except (EOFError, KeyboardInterrupt):
-                print("\n  ⚠ No input available — proceeding with assumptions", flush=True)
+                    break
+                user_answers.append(answer)
 
             if user_answers:
                 ans_block = "\n".join(
@@ -3877,19 +3894,13 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
         print("-" * 60, flush=True)
         user_answers = []
-        try:
-            for i in range(len(clarification_lines)):
-                print(f"\n  A{i+1}: ", end="", flush=True)
-                ready, _, _ = select.select([sys.stdin], [], [], 60.0)
-                if not ready:
+        for i in range(len(clarification_lines)):
+            answer, timed_out = _read_stdin_with_timeout(prompt=f"\n  A{i+1}: ")
+            if not answer:
+                if timed_out:
                     print("(timed out \u2014 accepting assumptions)", flush=True)
-                    break
-                answer = sys.stdin.readline().strip()
-                if not answer:
-                    break
-                user_answers.append(answer)
-        except (EOFError, KeyboardInterrupt):
-            print("\n  \u26a0 No input available \u2014 proceeding with assumptions", flush=True)
+                break
+            user_answers.append(answer)
         if user_answers:
             print(f"\n  \u2713 Got {len(user_answers)} answer(s). Re-running strategist with your clarifications...", flush=True)
             clarif_context = "\n".join(
