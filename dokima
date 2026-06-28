@@ -182,6 +182,31 @@ def _detect_provider_failure(output, returncode=0):
     return False
 
 
+# ── fallback model config ─────────────────────
+
+FALLBACK_MODEL_RE = re.compile(r'^[a-zA-Z0-9_./-]+$')
+
+
+def _load_fallback_config():
+    """Read PANEL_FALLBACK_STRATEGIST, PANEL_FALLBACK_CODER, PANEL_FALLBACK_TL
+    from environment. Validates each with FALLBACK_MODEL_RE safe pattern.
+    Returns a dict keyed by profile name (strategist, coder, tl).
+    Invalid or absent vars are skipped with a warning."""
+    config = {}
+    role_map = {"strategist": "PANEL_FALLBACK_STRATEGIST",
+                "coder": "PANEL_FALLBACK_CODER",
+                "tl": "PANEL_FALLBACK_TL"}
+    for role, env_var in role_map.items():
+        val = os.environ.get(env_var, "")
+        if not val:
+            continue
+        if not FALLBACK_MODEL_RE.match(val):
+            print(f"  WARNING: {env_var} has invalid format (must match {FALLBACK_MODEL_RE.pattern}), skipping", flush=True)
+            continue
+        config[role] = val
+    return config
+
+
 def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None):
     """Spawn a Hermes agent as a subprocess. Returns stdout or raises on failure.
     If model is specified (e.g. 'deepseek-v4-pro'), passes -m/--provider to override the profile default."""
@@ -5011,6 +5036,12 @@ def main():
         print("ERROR: Could not read API_SERVER_KEY from .env")
         _cleanup_lock()
         sys.exit(1)
+
+    # ── Load fallback model config ──
+    FALLBACK_MODELS = _load_fallback_config()
+    if FALLBACK_MODELS:
+        roles = ", ".join(FALLBACK_MODELS.keys())
+        print(f"  ✓ Fallback models configured for: {roles}", flush=True)
 
     REPO = detect_repo()
     if not REPO:
