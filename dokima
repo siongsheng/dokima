@@ -3652,6 +3652,110 @@ Report: what you fixed, commit hash."""
     return {"nm_ok": True, "pr_url": pr_url, "risk": risk, "nm_stdout": nm_stdout}
 
 
+def _extract_tl_verdict(tl_output: str) -> str:
+    """Extract the LAST VERDICT from TL output.
+
+    TL may quote earlier verdicts or change its mind mid-review.
+    Always use the final verdict line.
+    """
+    if not tl_output or not tl_output.strip():
+        return "UNKNOWN"
+    if "[TIMEOUT:" in tl_output and "VERDICT:" not in tl_output.upper():
+        return "TIMED_OUT"
+
+    all_verdicts = re.findall(
+        r'VERDICT:\s*(APPROVED|BLOCKED|CHANGES\s+REQUESTED)',
+        tl_output.upper()
+    )
+    if not all_verdicts:
+        return "UNKNOWN"
+
+    last = all_verdicts[-1].strip()
+    if "CHANGES" in last:
+        return "CHANGES REQUESTED"
+    elif "BLOCKED" in last:
+        return "BLOCKED"
+    return "APPROVED"
+
+
+def _extract_tl_blockers(tl_output: str) -> list[str]:
+    """Extract structured BLOCKER findings from TL output, filtering monologue.
+
+    Returns only real findings — strips lines like 'Now let me check...',
+    'However, N BLOCKERs remain...', and raw severity markers without context.
+    Prefers lines from structured ### BLOCKERS section or bold-numbered items.
+    """
+    if not tl_output or not tl_output.strip():
+        return []
+
+    lines = tl_output.split("\n")
+    blockers = []
+
+    # Look for structured ### BLOCKERS section first
+    in_blockers_section = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Section header
+        if stripped.startswith("### BLOCKERS") or stripped.startswith("### Blockers"):
+            in_blockers_section = True
+            continue
+        # Next section ends it
+        if in_blockers_section and (
+            stripped.startswith("### ") or stripped.startswith("## ")
+        ):
+            in_blockers_section = False
+            continue
+
+        if in_blockers_section and stripped:
+            blockers.append(stripped)
+            continue
+
+    # If no structured section found, fall back to line-level heuristics
+    if not blockers:
+        noise_patterns = [
+            "now let me", "however,", "let me check", "let me look",
+            "let me read", "let me verify", "this coverage gap",
+            "previous reviewer", "previous review", "unfixed by",
+            "severity: 🔴 blocker", "- severity: 🔴",
+            "severity: blocker",
+        ]
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            upper = stripped.upper()
+            # Must mention BLOCKER or MUST FIX
+            if "BLOCKER" not in upper and "MUST FIX" not in upper:
+                continue
+            # Filter noise
+            if any(p in stripped.lower() for p in noise_patterns):
+                continue
+            # Keep structured findings (bold-numbered, dash-prefixed with colon)
+            if (
+                stripped.startswith("**") or
+                (stripped.startswith("- ") and ":" in stripped[2:40]) or
+                stripped.startswith("1.") or stripped.startswith("2.") or
+                stripped.startswith("3.")
+            ):
+                blockers.append(stripped)
+
+    # Merge: each bold-numbered title + its following detail line → one entry
+    merged = []
+    for b in blockers:
+        if b.startswith("**") and b[2:3].isdigit():
+            merged.append(b)
+        elif merged and not b.startswith("**"):
+            merged[-1] = merged[-1] + " — " + b.lstrip("- ").rstrip(".")
+        else:
+            merged.append(b)
+    blockers = merged
+
+    return blockers[:10]
+
+
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
@@ -3764,30 +3868,13 @@ Report: what you fixed, commit hash."""
         print("  ⚠ Tech Lead timed out — using partial output for verdict and issues")
 
     # ── POST-TECH-LEAD GATE ──
-    verdict = "TIMED_OUT" if "[TIMEOUT:" in tl_output and "VERDICT:" not in tl_output.upper() else "UNKNOWN"
-    if verdict != "TIMED_OUT":
-        tl_upper = tl_output.upper()
-        # Use last VERDICT line — TL may quote earlier verdicts (from nm),
-        # but the TL's own verdict is always the last one in the output.
-        all_verdicts = re.findall(r'VERDICT:\s*(APPROVED|BLOCKED|CHANGES\s+REQUESTED)', tl_upper)
-        if all_verdicts:
-            last = all_verdicts[-1].strip()
-            if "CHANGES" in last:
-                verdict = "CHANGES REQUESTED"
-            elif "BLOCKED" in last:
-                verdict = "BLOCKED"
-            elif "APPROVED" in last:
-                verdict = "APPROVED"
+    verdict = _extract_tl_verdict(tl_output)
 
     # ── Inject TL review into PR body ──
     if pr_url and verdict not in ("SKIPPED", "UNKNOWN", "TIMED_OUT"):
         pr_num = pr_url.split("/")[-1]
-        # Extract blocker lines
-        blocker_lines = [
-            l.strip() for l in tl_output.split("\n")
-            if any(kw in l.upper() for kw in ("BLOCKER", "MUST FIX"))
-            and l.strip()
-        ][:10]
+        # Extract blocker lines using the smart extractor
+        blocker_lines = _extract_tl_blockers(tl_output)
         # Extract risk from TL output or use strategist's impact
         risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', tl_output, re.IGNORECASE)
         tl_risk = risk_match.group(1).upper() if risk_match else impact
