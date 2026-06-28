@@ -187,6 +187,10 @@
     "hash": "aca4a2c0d86db25cdc74ee1ab726aa52",
     "desc": "Exports: _setup_test_project"
   },
+  "tests/test_profile_templates.py": {
+    "hash": "ca34e6ca5be6d49b271bc7e708cf67c1",
+    "desc": "Exports: TestEnsureProfiles"
+  },
   "tests/test_rich_pipeline.py": {
     "hash": "774920992898755fffcae480cbf52c2f",
     "desc": "Exports: _setup_project"
