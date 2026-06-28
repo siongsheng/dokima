@@ -4264,17 +4264,34 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     nm_output = ""
     tl_output = ""
 
-    # Parallel coders
+    # Execution mode dispatch
     if parallel_enabled and depth in ("coder", "vet+nm", "full"):
-        print("\n── Parallel Coders (PANEL_PARALLEL=1) ──", flush=True)
         dag = TaskDAG()
         feature_slug = slugify(feature)
         dag.parse(spec, feature_slug)
         if not dag.tasks:
             print("  ⚠ No tasks found in strategist output — falling back to sequential coder", flush=True)
-            parallel_enabled = False
+            exec_mode = "single_session"
         else:
             print(f"  Parsed {len(dag.tasks)} tasks from spec", flush=True)
+            exec_mode = os.environ.get("PANEL_FORCE_EXECUTION_MODE")
+            if exec_mode not in ("single_session", "per_task_spawn"):
+                exec_mode = dag.compute_execution_mode()
+            print(f"  Execution mode: {exec_mode}", flush=True)
+
+        if exec_mode == "single_session":
+            # Single session coder (batch mode)
+            print("\n── Single Session Coder ──", flush=True)
+            coder_result = run_phase2_coder(
+                feature, spec, spec_path, tasks_extract_path,
+                pr_sections, branch, depth, mode, is_next,
+            )
+            coder_failed = coder_result["coder_failed"]
+            pr_url = coder_result["pr_url"]
+            verdict = coder_result["verdict"]
+        else:
+            # Per-task spawn (parallel coders)
+            print("\n── Parallel Coders ──", flush=True)
             waves = dag.compute_waves()
             print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
             all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
