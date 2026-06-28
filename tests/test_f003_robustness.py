@@ -69,7 +69,6 @@ class TestRedOnlyCommits:
 
         assert result["coder_failed"] is True
         assert result["verdict"] == "VET_FAILED"
-        raise AssertionError("RED commit")  # Deliberate failure — will fix in GREEN
 
 
 class TestEmptyCoderOutput:
