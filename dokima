@@ -1608,7 +1608,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     print(f"\n{tag} ⏳ Spawning in worktree {worktree_path}...", flush=True)
 
     cmd = [HERMES_BIN, "--profile", "coder", "--yolo",
-           "-s", "ai-coding-best-practices-lite", "chat", "-q", coder_prompt]
+           "-s", "software-development/ai-coding-best-practices-lite", "chat", "-q", coder_prompt]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             universal_newlines=True, cwd=worktree_path, env=env)
     return proc
