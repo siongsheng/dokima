@@ -23,6 +23,7 @@ FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
 SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 max_parallel_override = None  # set from --max-parallel=N flag in main()
 FALLBACK_MODELS = {}           # populated from PANEL_FALLBACK_* env vars in main()
+RESUME = None                  # set from --resume/--no-resume flag or PANEL_RESUME env
 
 # ── security helpers ─────────────────────────────
 
@@ -997,6 +998,15 @@ def delete_checkpoint(slug):
     cpath = _checkpoint_path(slug)
     if os.path.exists(cpath):
         os.remove(cpath)
+
+
+def _phase_should_skip(phases_completed, phase_name, resume=None):
+    """Check if a phase should be skipped during resume.
+    Returns True if phase_name is in phases_completed AND resume is True.
+    If resume is None (auto-detect) or False, never skip."""
+    if not resume:
+        return False
+    return phase_name in phases_completed
 
 
 def validate_checkpoint(slug):
@@ -4710,48 +4720,108 @@ Output NOTHING ELSE."""
     }
 
 
-def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
+def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO
 
     # Sanitize feature description before it enters any agent prompt
     feature = _sanitize_prompt(feature)
+    feature_slug = slugify(feature)
 
-    strat_result = run_phase1_strategist(feature, user_answers_prefill)
-    spec = strat_result["spec"]
-    spec_path = strat_result["spec_path"]
-    pr_sections = strat_result["pr_sections"]
-    tasks_extract_path = strat_result["tasks_extract_path"]
-    depth = strat_result["depth"]
-    branch = strat_result["branch"]
-    confidence = strat_result["confidence"]
-    impact = strat_result["impact"]
-    mode = strat_result["mode"]
-    strat_output = strat_result["strat_output"]
-    parallel_enabled = strat_result["parallel_enabled"]
+    # ── Resume / Checkpoint Handling ──
+    phases_completed = []
+    cp = None
+    if resume:
+        cp = load_checkpoint(feature_slug)
+        if cp and validate_checkpoint(feature_slug):
+            phases_completed = cp.get("phases_completed", [])
+            print(f"  ✓ Resume: {len(phases_completed)} phase(s) completed: {', '.join(phases_completed)}", flush=True)
+        else:
+            print("  ⚠ No valid checkpoint found — starting fresh", flush=True)
+            resume = False
+            cp = None
+    else:
+        delete_checkpoint(feature_slug)
 
-    # Commit spec to feature branch before coder starts
-    print(f"\n── Commit spec to {branch} ──", flush=True)
-    try:
-        _, _, rc = git("checkout", DEFAULT_BRANCH)
-        _, _, rc = git("checkout", "-b", branch, DEFAULT_BRANCH)
-        if rc != 0:
-            git("checkout", branch)
-        git("add", spec_path)
-        if tasks_extract_path and os.path.exists(tasks_extract_path):
-            git("add", tasks_extract_path)
-        git("commit", "-m", f"spec: add {feature} spec")
-        git("push", "-u", "origin", branch)
-        git("checkout", DEFAULT_BRANCH)
-        print(f"  ✓ Spec committed to {branch}", flush=True)
-    except Exception as e:
-        print(f"  ⚠ Spec commit failed: {e} — coder will handle", flush=True)
+    # Only run strategist if not completed
+    if not _phase_should_skip(phases_completed, "strategist", resume):
+        strat_result = run_phase1_strategist(feature, user_answers_prefill)
+        spec = strat_result["spec"]
+        spec_path = strat_result["spec_path"]
+        pr_sections = strat_result["pr_sections"]
+        tasks_extract_path = strat_result["tasks_extract_path"]
+        depth = strat_result["depth"]
+        branch = strat_result["branch"]
+        confidence = strat_result["confidence"]
+        impact = strat_result["impact"]
+        mode = strat_result["mode"]
+        strat_output = strat_result["strat_output"]
+        parallel_enabled = strat_result["parallel_enabled"]
+
+        # Commit spec to feature branch before coder starts
+        print(f"\n── Commit spec to {branch} ──", flush=True)
+        try:
+            _, _, rc = git("checkout", DEFAULT_BRANCH)
+            _, _, rc = git("checkout", "-b", branch, DEFAULT_BRANCH)
+            if rc != 0:
+                git("checkout", branch)
+            git("add", spec_path)
+            if tasks_extract_path and os.path.exists(tasks_extract_path):
+                git("add", tasks_extract_path)
+            git("commit", "-m", f"spec: add {feature} spec")
+            git("push", "-u", "origin", branch)
+            git("checkout", DEFAULT_BRANCH)
+            print(f"  ✓ Spec committed to {branch}", flush=True)
+        except Exception as e:
+            print(f"  ⚠ Spec commit failed: {e} — coder will handle", flush=True)
+
+        # Save checkpoint after strategist
+        save_checkpoint(feature_slug, {
+            "version": 1,
+            "feature": feature,
+            "branch": branch,
+            "spec_path": spec_path,
+            "tasks_extract_path": tasks_extract_path or "",
+            "depth": depth,
+            "impact": impact,
+            "mode": mode,
+            "parallel_enabled": parallel_enabled,
+            "phases_completed": phases_completed + ["strategist"],
+        })
+        phases_completed.append("strategist")
+    else:
+        # Reconstruct from checkpoint
+        spec_path = cp.get("spec_path", "")
+        branch = cp.get("branch", "")
+        depth = cp.get("depth", "vet")
+        impact = cp.get("impact", "LOW")
+        mode = cp.get("mode", "")
+        parallel_enabled = cp.get("parallel_enabled", False)
+        pr_sections = ""
+        strat_output = ""
+        tasks_extract_path = cp.get("tasks_extract_path", "")
+        # Read spec from file
+        try:
+            with open(spec_path) as f:
+                spec = f.read()
+        except (IOError, FileNotFoundError):
+            print(f"  ⚠ Cannot read spec at {spec_path} — falling back to empty spec", flush=True)
+            spec = ""
+        # Re-checkout the branch
+        git("checkout", branch)
+        git("pull", "origin", branch)
+        print(f"  ✓ Resumed from strategist: branch={branch}", flush=True)
 
     coder_failed = False
     pr_url = None
     verdict = None
     nm_output = ""
     tl_output = ""
+
+    # Reconstruct pr_url from checkpoint if coder was completed
+    if _phase_should_skip(phases_completed, "coder", resume) and cp:
+        pr_url = cp.get("pr_url", "")
+        print(f"  ✓ Resuming after coder: PR URL={pr_url}", flush=True)
 
     # ── DAG parse + execution mode ──
     dag = TaskDAG()
@@ -4816,6 +4886,15 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
             print("\n── Phase 3: vet — SKIPPED (depth=vet, parallel) ──", flush=True)
             print("── Phase 4+5: nm+TL — SKIPPED (depth=vet) ──", flush=True)
             verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
+            # Save checkpoint after coder (parallel)
+            if cp is not None or resume:
+                save_checkpoint(feature_slug, {
+                    "version": 1, "feature": feature, "branch": branch,
+                    "spec_path": spec_path, "tasks_extract_path": tasks_extract_path or "",
+                    "depth": depth, "impact": impact, "mode": mode,
+                    "parallel_enabled": parallel_enabled, "pr_url": pr_url or "",
+                    "phases_completed": phases_completed + ["coder"],
+                })
             continue_loop = run_post_pipeline(feature, is_next, is_continuous, True, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
             if not continue_loop:
                 return 0
@@ -4827,6 +4906,17 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
         coder_failed = coder_result["coder_failed"]
         pr_url = coder_result["pr_url"]
         verdict = coder_result["verdict"]
+        # Save checkpoint after coder
+        if cp is not None or resume:
+            cp_data = {
+                "version": 1, "feature": feature, "branch": branch,
+                "spec_path": spec_path, "tasks_extract_path": tasks_extract_path or "",
+                "depth": depth, "impact": impact, "mode": mode,
+                "parallel_enabled": parallel_enabled,
+                "pr_url": pr_url or "",
+                "phases_completed": phases_completed + ["coder"],
+            }
+            save_checkpoint(feature_slug, cp_data)
 
     # Phase 3: vet
     if not coder_failed and depth in ("vet+nm", "full"):
@@ -4836,6 +4926,17 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
         if vet_result["coder_failed"]:
             coder_failed = True
             verdict = "VET_FAILED"
+        # Save checkpoint after vet
+        if cp is not None or resume:
+            cp_data = {
+                "version": 1, "feature": feature, "branch": branch,
+                "spec_path": spec_path, "tasks_extract_path": tasks_extract_path or "",
+                "depth": depth, "impact": impact, "mode": mode,
+                "parallel_enabled": parallel_enabled,
+                "pr_url": pr_url or "",
+                "phases_completed": phases_completed + ["coder", "vet"],
+            }
+            save_checkpoint(feature_slug, cp_data)
     else:
         print(f"\n── Phase 3: vet — SKIPPED (depth={depth}) ──", flush=True)
         if coder_failed:
@@ -4845,6 +4946,17 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     if not coder_failed and depth in ("vet+nm", "full"):
         nm_result = run_phase4_nm(feature, branch, impact, pr_url)
         pr_url = nm_result["pr_url"]
+        # Save checkpoint after nm
+        if cp is not None or resume:
+            cp_data = {
+                "version": 1, "feature": feature, "branch": branch,
+                "spec_path": spec_path, "tasks_extract_path": tasks_extract_path or "",
+                "depth": depth, "impact": impact, "mode": mode,
+                "parallel_enabled": parallel_enabled,
+                "pr_url": pr_url or "",
+                "phases_completed": phases_completed + ["coder", "vet", "nm"],
+            }
+            save_checkpoint(feature_slug, cp_data)
     else:
         print(f"\n── Phase 4: nm — SKIPPED (depth={depth}) ──", flush=True)
         if coder_failed:
@@ -4865,13 +4977,16 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill):
     # Post pipeline
     continue_loop = True
     continue_loop = run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode)
+    # Delete checkpoint on successful completion
+    if not coder_failed:
+        delete_checkpoint(feature_slug)
     return 0
 
 
 # ── main ──
 
 def main():
-    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS
+    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME
     import shutil
     if len(sys.argv) < 2:
         print("Usage: dokima [--next|--continuous|--fix] [--fix-all] [--skip-autofix] [--force-full] [--skip-auto-archive] [--skip-human-gate] [--max-parallel=N] [--interactive] [--answers <json>] 'Feature' [dir]")
@@ -4975,6 +5090,12 @@ def main():
             skip_human_gate = True
             SKIP_HUMAN_GATE = True
             continue
+        if arg == "--resume":
+            RESUME = True
+            continue
+        if arg == "--no-resume":
+            RESUME = False
+            continue
         if arg.startswith("--max-parallel="):
             try:
                 max_parallel_override = int(arg.split("=", 1)[1])
@@ -5004,6 +5125,12 @@ def main():
         mp = os.environ.get("PANEL_MAX_PARALLEL")
         if mp and mp.isdigit():
             max_parallel_override = int(mp)
+    # Env var fallbacks for resume/no-resume (only if flag not explicitly set)
+    if RESUME is None:
+        if os.environ.get("PANEL_RESUME") == "1":
+            RESUME = True
+        elif os.environ.get("PANEL_NO_RESUME") == "1":
+            RESUME = False
 
     # ── --base-branch flag ──
     base_branch_override = os.environ.get("PANEL_BASE_BRANCH") or None
@@ -5219,7 +5346,7 @@ def main():
             print(f"  CONTINUOUS — Feature {iteration}")
             print(f"{'═'*60}\n")
 
-            run_pipeline(feature, is_next, True, user_answers_prefill)
+            run_pipeline(feature, is_next, True, user_answers_prefill, resume=RESUME)
 
             # Check stop file
             if os.path.exists(_stop_path()):
@@ -5250,7 +5377,7 @@ def main():
             update_status_md(status_path_c, next_feat.id, next_feat.title, "in_progress", branch=branch_c, source="panel")
             print(f"\n  Next: {next_feat.id} — {next_feat.title}")
     else:
-        run_pipeline(feature, is_next, False, user_answers_prefill)
+        run_pipeline(feature, is_next, False, user_answers_prefill, resume=RESUME)
 
     _cleanup_lock()
 

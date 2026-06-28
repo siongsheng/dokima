@@ -285,12 +285,12 @@ class TestResumeSkipPhase:
     def test_skip_strategist_when_checkpointed(self):
         """If checkpoint says strategist done, should skip strategist."""
         panel = _load()
-        assert panel._phase_should_skip(["strategist", "coder"], "strategist") is True
+        assert panel._phase_should_skip(["strategist", "coder"], "strategist", resume=True) is True
 
     def test_no_skip_uncompleted_phase(self):
         """If checkpoint doesn't list vet, vet should run."""
         panel = _load()
-        assert panel._phase_should_skip(["strategist", "coder"], "vet") is False
+        assert panel._phase_should_skip(["strategist", "coder"], "vet", resume=True) is False
 
     def test_no_skip_empty_checkpoint(self):
         """Empty phases_completed should not skip anything."""
