@@ -95,3 +95,109 @@ class TestDetectProviderFailure:
 
     def test_none_returns_false(self):
         assert not self.panel._detect_provider_failure(None)
+
+
+# ── Task 3: Fallback retry logic ──────────────────────────────────
+
+class _MockProcess:
+    """A minimal mock subprocess.Popen result."""
+    def __init__(self, stdout_lines, stderr_text="", returncode=0):
+        self._stdout_lines = stdout_lines
+        self._stderr_text = stderr_text
+        self.returncode = returncode
+        self.stdout = iter(stdout_lines)
+        self.stderr = type('_Stderr', (), {'read': lambda self: stderr_text})()
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+    def terminate(self):
+        pass
+
+    def communicate(self, timeout=None):
+        return ("", "")
+
+
+class TestFallbackRetry:
+    """spawn_agent retries with FALLBACK_MODEL on provider failure."""
+
+    @staticmethod
+    def _make_panel_with_fallback(model):
+        os.environ["PANEL_FALLBACK_MODEL"] = model
+        try:
+            return _load()
+        finally:
+            os.environ.pop("PANEL_FALLBACK_MODEL", None)
+
+    def test_fallback_fires_on_provider_error(self):
+        """When primary fails (error in stderr), fallback model is used and result returned."""
+        panel = self._make_panel_with_fallback("deepseek-v4-pro")
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                # First call: provider failure
+                return _MockProcess(
+                    stdout_lines=["[strategist] some output\n"],
+                    stderr_text="503 Service Unavailable",
+                    returncode=1,
+                )
+            # Second call (fallback): success
+            return _MockProcess(
+                stdout_lines=["[strategist] fallback succeeded\n"],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "fallback succeeded" in result
+        assert len(calls) == 2, f"Expected 2 Popen calls, got {len(calls)}"
+        # Verify fallback cmd includes the fallback model
+        fb_cmd = calls[1]
+        fb_cmd_str = " ".join(fb_cmd)
+        assert "deepseek-v4-pro" in fb_cmd_str
+
+    def test_no_fallback_when_output_is_valid(self):
+        """When primary output is valid (no provider error), no fallback occurs."""
+        panel = self._make_panel_with_fallback("deepseek-v4-pro")
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["[strategist] completed successfully\n"],
+                stderr_text="",
+                returncode=0,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "completed successfully" in result
+        assert len(calls) == 1, f"Expected 1 Popen call, got {len(calls)}"
+
+    def test_no_fallback_when_fallback_model_unset(self):
+        """When PANEL_FALLBACK_MODEL is empty, no fallback even on provider error."""
+        os.environ.pop("PANEL_FALLBACK_MODEL", None)
+        panel = _load()
+        calls = []
+
+        def mock_popen(cmd, **kwargs):
+            calls.append(cmd)
+            return _MockProcess(
+                stdout_lines=["[strategist] some output\n"],
+                stderr_text="503 Service Unavailable",
+                returncode=1,
+            )
+
+        with patch.object(subprocess, "Popen", mock_popen):
+            result = panel.spawn_agent("strategist", ["some-skill"], "prompt")
+
+        assert "some output" in result
+        assert len(calls) == 1, f"Expected 1 Popen call, got {len(calls)}"
