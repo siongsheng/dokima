@@ -1275,6 +1275,12 @@ def show_help():
     print(HELP_TEXT)
     sys.exit(0)
 
+def show_help_json():
+    """Print CLI_METADATA as formatted JSON and exit."""
+    print(json.dumps(CLI_METADATA, indent=2))
+    sys.exit(0)
+
+
 
 def parse_roadmap(roadmap_path: str) -> list:
     """Parse specs/roadmap.md into a list of RoadmapFeature. Returns empty list if none found.
