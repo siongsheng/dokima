@@ -212,3 +212,62 @@ class TestProjectDirValidation:
         with open(test_file, "w") as f:
             f.write("not a dir")
         assert module._validate_project_dir(test_file) is False
+
+
+class TestShellSafety:
+    """Task 5: Shell safety assertions — grep-based regression checks."""
+
+    PANEL_PATH = PANEL_PATH
+
+    def test_no_shell_true_anywhere(self):
+        """No subprocess call should use shell=True."""
+        with open(self.PANEL_PATH) as f:
+            source = f.read()
+        # shell=True should not appear in non-commented code
+        assert "shell=True" not in source, \
+            f"Found shell=True in dokima — security risk"
+
+    def test_no_os_system_anywhere(self):
+        """No os.system() calls anywhere in the source."""
+        with open(self.PANEL_PATH) as f:
+            source = f.read()
+        assert "os.system(" not in source, \
+            f"Found os.system() in dokima — security risk"
+
+    def test_all_subprocess_use_list_args(self):
+        """All subprocess calls should use list-based args, not string commands."""
+        with open(self.PANEL_PATH) as f:
+            source = f.read()
+        # Find all subprocess.run( calls and check args are lists
+        lines = source.split("\n")
+        for lineno, line in enumerate(lines, 1):
+            stripped = line.strip()
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            # Check subprocess.run(, subprocess.Popen( calls
+            for method in ("subprocess.run(", "subprocess.Popen("):
+                if method in stripped:
+                    # Extract the first argument — expect it to be a list literal
+                    # Find content after the method
+                    idx = stripped.index(method) + len(method)
+                    # Get the first argument by extracting until the first comma
+                    # at depth 0 (balanced parens)
+                    depth = 1
+                    first_arg = ""
+                    for ch in stripped[idx:]:
+                        if ch == "(":
+                            depth += 1
+                        elif ch == ")":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        if depth == 1 and ch == ",":
+                            break
+                        if depth >= 1:
+                            first_arg += ch
+                    # Check if first arg is a list literal [ or a string quote
+                    first_arg = first_arg.strip()
+                    if first_arg.startswith(("'", '"', 'f"', "f'")):
+                        assert False, \
+                            f"Line {lineno}: subprocess call uses string command '{first_arg[:50]}' — use list args instead"
