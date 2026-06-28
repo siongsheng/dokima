@@ -82,6 +82,29 @@ def _redact_secrets(text):
 _LOG_FILE_HANDLE = None
 
 
+_FAILURE_PATTERNS = [
+    r"\brate\s*limit\b",
+    r"\b503\b",
+    r"Service\s+Unavailable",
+    r"provider\.?error",
+    r"model.*not.*found",
+    r"connection\s+refused",
+]
+
+
+def _detect_provider_failure(output):
+    """Check agent output for known provider failure patterns.
+    Returns True if any pattern matches (case-insensitive), False otherwise.
+    Handles None gracefully — returns False for None or empty input."""
+    if not output:
+        return False
+    text = str(output)
+    for pattern in _FAILURE_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
 def _write_log_line(text):
     """Append a redacted line to OUTPUT_LOG. Creates the file if it doesn't exist."""
     global _LOG_FILE_HANDLE
