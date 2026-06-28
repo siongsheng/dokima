@@ -46,6 +46,19 @@ def _sanitize_prompt(text):
     return text
 
 
+def _validate_project_dir(path):
+    """Verify path is a real directory containing .git (a valid git repo).
+    Returns True if valid, False otherwise."""
+    if not path:
+        return False
+    if not os.path.isdir(path):
+        return False
+    git_dir = os.path.join(path, ".git")
+    if not os.path.isdir(git_dir):
+        return False
+    return True
+
+
 def _redact_secrets(text):
     """Strip GH_TOKEN, GITHUB_TOKEN, and API_SERVER_KEY values from text.
     Looks up current values from the environment at call time (not cached).
@@ -4857,6 +4870,14 @@ def main():
     import atexit
     atexit.register(_cleanup_lock)
     # ── PROJECT SETUP ──
+    # Validate PROJECT_DIR is a real git repo before proceeding
+    if not _validate_project_dir(PROJECT_DIR):
+        print(f"ERROR: {PROJECT_DIR} is not a valid git repository (no .git directory found).")
+        print("  The panel requires a git repository to operate in.")
+        print("  Use a project directory that has been initialized with 'git init' or cloned from GitHub.")
+        _cleanup_lock()
+        sys.exit(1)
+
     agents_path = os.path.join(PROJECT_DIR, "AGENTS.md")
     if not os.path.exists(agents_path):
         print(f"ERROR: No AGENTS.md found in {PROJECT_DIR}")
