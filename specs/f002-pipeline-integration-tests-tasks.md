@@ -1,41 +1,36 @@
 # Task Breakdown: F002: Pipeline Integration Tests
 
-### Task 1: Extract _read_stdin_with_timeout() helper
+### Task 1: Move select import to module level
 **Files:** dokima
 **Dependencies:** [none]
-**Description:** Extract _read_stdin_with_timeout() helper
+**Description:** Move select import to module level
 
-### Task 2: Create Orchestrator class with injectable dependencies
+### Task 2: Extract _read_stdin_with_timeout() helper function
 **Files:** dokima
 **Dependencies:** 1
-**Description:** Create Orchestrator class with injectable dependencies
+**Description:** Extract _read_stdin_with_timeout() helper function
 
-### Task 3: Add test_repo and mock_orchestrator fixtures
-**Files:** tests/conftest.py
-**Dependencies:** 2
-**Description:** Add test_repo and mock_orchestrator fixtures
+### Task 3: Add PANEL_NO_LOCK env var to bypass flock in acquire_lock()
+**Files:** dokima
+**Dependencies:** [none]
+**Description:** Add PANEL_NO_LOCK env var to bypass flock in acquire_lock()
 
-### Task 4: Phase 1-2 integration test — Strategist → Coder
+### Task 4: Ensure PANEL_MAX_RETRIES=0 short-circuits all retry paths
+**Files:** dokima
+**Dependencies:** [none]
+**Description:** Ensure PANEL_MAX_RETRIES=0 short-circuits all retry paths
+
+### Task 5: Unskip 5 blocked existing tests
+**Files:** tests/test_edge_cases.py, tests/test_final_coverage.py, tests/test_main_integration.py
+**Dependencies:** 1, 2, 3, 4
+**Description:** Unskip 5 blocked existing tests
+
+### Task 6: Add pipeline integration test file with mocked external agents
 **Files:** tests/test_pipeline_integration.py
-**Dependencies:** 3
-**Description:** Phase 1-2 integration test — Strategist → Coder
+**Dependencies:** 1, 2, 3
+**Description:** Add pipeline integration test file with mocked external agents
 
-### Task 5: Phase 3-5 integration test — Vet → nm → TL
-**Files:** tests/test_pipeline_integration.py
-**Dependencies:** 4
-**Description:** Phase 3-5 integration test — Vet → nm → TL
-
-### Task 6: Flag parsing and CLI argument tests
-**Files:** tests/test_main.py
-**Dependencies:** 2
-**Description:** Flag parsing and CLI argument tests
-
-### Task 7: Lock, signal, and stdin edge case tests
-**Files:** tests/test_main.py
-**Dependencies:** 3
-**Description:** Lock, signal, and stdin edge case tests
-
-### Task 8: Final validation and F002 closure
+### Task 7: Run full suite, update roadmap, close F002
 **Files:** specs/roadmap.md, specs/STATUS.md
-**Dependencies:** 4, 5, 6, 7
-**Description:** Final validation and F002 closure
+**Dependencies:** 5, 6
+**Description:** Run full suite, update roadmap, close F002
