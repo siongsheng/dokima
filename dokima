@@ -22,6 +22,9 @@ SKIP_AUTOFIX = False       # set from --skip-autofix flag or PANEL_SKIP_AUTOFIX 
 FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
 SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
 max_parallel_override = None  # set from --max-parallel=N flag in main()
+FALLBACK_MODEL = os.environ.get("PANEL_FALLBACK_MODEL", "").strip()
+    # Model-family fallback target (e.g. "openrouter/anthropic/claude-sonnet-4").
+    # If set, spawn_agent retries with this model on provider failure.
 
 # ── security helpers ─────────────────────────────
 
@@ -240,6 +243,14 @@ def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None):
     result = "".join(output)
     if timed_out:
         result += f"\n\n[TIMEOUT: agent exceeded {timeout}s. Partial output above.]"
+
+    # ── Model-family fallback retry ──────────────────────────
+    # If FALLBACK_MODEL is configured and the output looks like a provider failure,
+    # retry once with the fallback model to recover from transient provider outages.
+    if FALLBACK_MODEL and _detect_provider_failure(result) and not timed_out:
+        print(f"\n{tag} ⚠ FALLBACK: retrying with {FALLBACK_MODEL}...", flush=True)
+        # Re-invoke spawn_agent with the fallback model (same profile, skills, prompt)
+        result = spawn_agent(profile, skills, prompt, timeout=timeout, cwd=cwd, model=FALLBACK_MODEL)
     return result
 
 def git(*args, **kwargs):
