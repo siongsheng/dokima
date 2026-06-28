@@ -237,3 +237,35 @@ class TestSpawnAgentFallbackRetry:
         assert "openrouter" in fallback_cmd
         assert "-m" in fallback_cmd or "--model" in fallback_cmd
         assert "claude-sonnet-4" in fallback_cmd
+
+
+class TestConventionsDoc:
+    """Task 7: conventions.md documents Model Fallback behavior."""
+
+    CONVENTIONS_PATH = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "specs", "conventions.md")
+    )
+
+    def test_has_model_fallback_section(self):
+        """conventions.md must have a ## Model Fallback section."""
+        with open(self.CONVENTIONS_PATH) as f:
+            content = f.read()
+        assert "## Model Fallback" in content, (
+            "Missing '## Model Fallback' section in conventions.md"
+        )
+
+    def test_has_verification_subsection(self):
+        """Model Fallback section must have a ### Verification subsection."""
+        with open(self.CONVENTIONS_PATH) as f:
+            content = f.read()
+        assert "### Verification" in content, (
+            "Missing '### Verification' subsection in Model Fallback docs"
+        )
+
+    def test_verification_mentions_fallback_check(self):
+        """Verification subsection must describe how to verify fallback fired."""
+        with open(self.CONVENTIONS_PATH) as f:
+            content = f.read()
+        assert "grep" in content and "FALLBACK" in content, (
+            "Verification section must describe how to check fallback fired (grep for FALLBACK)"
+        )
