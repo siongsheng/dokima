@@ -17,6 +17,14 @@ PANEL_REPO="${PANEL_REPO:-https://github.com/siongsheng/dokima.git}"
 PANEL_DIR="${PANEL_DIR:-$HOME/.local/share/dokima}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 
+# ── Parse Flags ──────────────────────────────────────────────────────
+WITH_PROFILES=false
+for arg in "$@"; do
+    case "$arg" in
+        --with-profiles) WITH_PROFILES=true ;;
+    esac
+done
+
 # ── 1. Dependency Checks ────────────────────────────────────────────
 command -v python3 >/dev/null 2>&1 || err "Python 3.6+ required but not found. Install Python: https://python.org"
 command -v gh      >/dev/null 2>&1 || err "GitHub CLI (gh) required but not found. Install: https://cli.github.com"
@@ -59,6 +67,19 @@ for script in nm vet; do
         warn "$script not found in repo — skipping"
     fi
 done
+
+# ── 5. Initialize Profiles (--with-profiles) ──────────────────────────
+if $WITH_PROFILES; then
+    log "Initializing agent profiles..."
+    for profile in strategist coder tech-lead nm; do
+        if hermes profile list 2>/dev/null | grep -qw "$profile"; then
+            log "Profile '$profile' already exists"
+        else
+            hermes profile create "$profile" 2>/dev/null || warn "Failed to create profile '$profile'"
+            log "Profile '$profile' created"
+        fi
+    done
+fi
 
 # ── Done ─────────────────────────────────────────────────────────────
 echo ""
