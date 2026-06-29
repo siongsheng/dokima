@@ -1115,28 +1115,48 @@ def acquire_lock():
     """Try to acquire an advisory lock. Returns (held, fd)."""
     max_attempts = 3
     for attempt in range(max_attempts):
-        fd = open(_lock_path(), "w")
+        # Capture lock mtime before truncation (F023: lock-age auto-cleanup)
+        lp = _lock_path()
+        lock_mtime = None
+        if os.path.exists(lp):
+            try:
+                lock_mtime = os.path.getmtime(lp)
+            except OSError:
+                pass
+
+        fd = open(lp, "w")
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd.write(f"{os.getpid()}\n")
             fd.flush()
-            os.chmod(_lock_path(), 0o600)
+            os.chmod(lp, 0o600)
             return True, fd
         except (IOError, OSError):
             fd.close()
             try:
-                with open(_lock_path()) as lf:
+                with open(lp) as lf:
                     stale_pid = lf.read().strip()
             except Exception:
                 stale_pid = ""
             if stale_pid and stale_pid.isdigit():
                 if _check_pid(stale_pid) and _verify_pid_owner(int(stale_pid)):
-                    print(f"ERROR: Panel already running (PID {stale_pid}). If stuck, remove {_lock_path()}.")
+                    # F023: Lock-age auto-cleanup — handle SIGKILL + PID recycled edge case
+                    lock_max_age = int(os.environ.get("PANEL_LOCK_MAX_AGE_SECS", "43200"))
+                    if lock_mtime is not None:
+                        lock_age = time.time() - lock_mtime
+                        if lock_age > lock_max_age:
+                            print(f"  Stale lock (> {lock_max_age}s old, PID {stale_pid} recycled) — removing and retrying...")
+                            try:
+                                os.remove(lp)
+                            except OSError:
+                                pass
+                            continue
+                    print(f"ERROR: Panel already running (PID {stale_pid}). If stuck, remove {lp}.")
                     sys.exit(1)
                 else:
                     print(f"  Stale lock (PID {stale_pid} is dead/wrong process) — removing and retrying...")
                     try:
-                        os.remove(_lock_path())
+                        os.remove(lp)
                     except OSError:
                         pass
                     continue
