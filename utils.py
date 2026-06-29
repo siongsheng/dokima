@@ -1818,3 +1818,83 @@ def deploy_profile_skills():
         shutil.copytree(src, dest)
         print(f"  Deployed skill '{skill}' → {profile}", flush=True)
 
+
+def halt_and_revert(reason, phase, branch, task_ids=None, worktrees=None):
+    """Revert all changes and print failure summary for orchestrator.
+
+    Args:
+        reason: Why the pipeline halted.
+        phase: Which phase failed (e.g., 'PHASE 2 (Parallel Coders)').
+        branch: The main feature branch to delete.
+        task_ids: Optional list of task IDs. When provided, deletes task
+                  branches (feat/<slug>-tN) before the main branch.
+        worktrees: Optional WorktreeManager reference. When provided,
+                   calls cleanup_all() to remove worktree directories.
+    """
+    print(f"\n{'═'*55}", flush=True)
+    print(f"  PIPELINE HALTED — {phase} Failed", flush=True)
+    print(f"{'═'*55}", flush=True)
+    print(f"\nReason: {reason}", flush=True)
+    print("\nReverting all changes...", flush=True)
+
+    # Delete task branches first (feat/<slug>-tN)
+    if task_ids:
+        for tid in task_ids:
+            task_branch = f"{branch}-t{tid}"
+            try:
+                git("branch", "-D", task_branch)
+            except Exception:
+                pass  # Branch might not exist if created before worktree
+
+    git("checkout", DEFAULT_BRANCH)
+    git("branch", "-D", branch)
+    git("stash", "clear")
+    print(f"  Branch '{branch}' deleted, back on master", flush=True)
+
+    # Clean up worktree directories if manager provided
+    if worktrees and task_ids:
+        try:
+            worktrees.cleanup_all(task_ids)
+        except Exception:
+            pass
+
+    print("\n── Orchestrator Action Required ──", flush=True)
+    print(f"  1. Review the failure context above", flush=True)
+    print(f"  2. Diagnose root cause", flush=True)
+    print(f"  3. Fix the issue (code, config, prompt, etc.)", flush=True)
+    print(f"  4. Ask user for go-ahead before retrying", flush=True)
+    print(f"\nFull log: {OUTPUT_LOG}", flush=True)
+
+
+def archive_specs_for_feature(spec_path, branch, pr_url):
+    """Move a feature's spec directory to archive/ if PR is merged.
+    Returns True if archived, False otherwise."""
+    if not pr_url:
+        return False
+    import shutil as _shutil
+    pr_num = pr_url.rstrip("/").split("/")[-1]
+    if not pr_num.isdigit():
+        return False
+    try:
+        stdout, _, rc = gh("pr", "view", pr_num, "--json", "merged,state")
+        if rc != 0 or not stdout.strip():
+            return False
+        import json as _json
+        data = _json.loads(stdout)
+        if data.get("merged") is True:
+            parent_dir = os.path.dirname(spec_path)
+            archive_dir = os.path.join(parent_dir, "archive")
+            os.makedirs(archive_dir, exist_ok=True)
+            dirname = os.path.basename(spec_path)
+            archive_target = os.path.join(archive_dir, dirname)
+            if os.path.exists(archive_target):
+                if os.path.isdir(archive_target):
+                    _shutil.rmtree(archive_target)
+                else:
+                    os.remove(archive_target)
+            _shutil.move(spec_path, archive_target)
+            return True
+    except Exception:
+        pass
+    return False
+
