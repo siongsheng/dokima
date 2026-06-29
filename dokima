@@ -25,6 +25,14 @@ max_parallel_override = None  # set from --max-parallel=N flag in main()
 FALLBACK_MODELS = {}           # populated from PANEL_FALLBACK_* env vars in main()
 RESUME = None                  # set from --resume/--no-resume flag or PANEL_RESUME env
 
+# Read VERSION file from script directory (single source of truth)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_version_path = os.path.join(_script_dir, "VERSION")
+try:
+    VERSION = open(_version_path).read().strip()
+except OSError:
+    VERSION = "unknown"
+
 # ── security helpers ─────────────────────────────
 
 def _sanitize_prompt(text):
@@ -5295,6 +5303,7 @@ def main():
     is_stop = False
     is_kill = False
     is_status = False
+    is_version = False
     is_list_crons = False
     is_fix = False
     is_map = False
@@ -5321,6 +5330,9 @@ def main():
             continue
         if arg == "--help-json":
             is_help_json = True
+            continue
+        if arg in ("--version", "-v"):
+            is_version = True
             continue
         if arg == "--next":
             is_next = True
@@ -5480,7 +5492,7 @@ def main():
                 PROJECT_DIR = os.path.abspath(filtered_argv[0]) if filtered_argv else os.getcwd()
             PANEL_FEATURE = feature
     else:
-        if len(filtered_argv) < 1 and not is_help and not is_help_json and not is_list_crons:
+        if len(filtered_argv) < 1 and not is_help and not is_help_json and not is_list_crons and not is_version:
             print("ERROR: Feature description required")
             sys.exit(1)
         feature = filtered_argv[0] if filtered_argv else ""
@@ -5492,6 +5504,9 @@ def main():
             PROJECT_DIR = os.path.abspath(filtered_argv[1]) if len(filtered_argv) >= 2 else os.getcwd()
 
     # ── CONTROL FLAGS: early exit (priority order) ──
+    if is_version:
+        print(f"dokima v{VERSION}")
+        sys.exit(0)
     if is_help_json:
         show_help_json()
     if is_help:
