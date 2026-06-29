@@ -42,3 +42,34 @@ def test_help_json_includes_version():
     commands = data.get("commands", [])
     version_cmds = [c for c in commands if c.get("name") == "--version"]
     assert version_cmds, f"--version not in commands array: {commands}"
+
+
+def test_upgrade_no_install_dir_exits_0():
+    """--upgrade exits 0 with helpful message when not installed via install.sh."""
+    rc, out, err = _run("--upgrade")
+    assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+    # Should mention install.sh or not installed
+    lower = (out + err).lower()
+    assert "install" in lower or "not installed" in lower, \
+        f"Expected message about install, got: out={out!r} err={err!r}"
+
+
+def test_v_shorthand_works():
+    """-v shorthand prints version same as --version."""
+    rc, out, err = _run("-v")
+    assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+    assert out.startswith("dokima v"), f"Expected 'dokima v...', got: {out}"
+
+
+def test_help_still_works():
+    """--help output is unchanged (still exits 0)."""
+    rc, out, err = _run("--help")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert "Dokima" in out, f"Help output missing 'Dokima': {out[:100]}"
+
+
+def test_version_with_extra_args_exits_0():
+    """--version with extra args still exits 0, ignoring extra args."""
+    rc, out, err = _run("--version", "/some/path")
+    assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+    assert out.startswith("dokima v"), f"Expected 'dokima v...', got: {out}"
