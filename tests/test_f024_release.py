@@ -256,3 +256,10 @@ class TestReleaseHelpText:
         rc, out, err = self._run("--help-json")
         assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
         assert "--release" in out, f"Expected --release in --help-json output, got:\n{out}"
+
+    def test_release_invalid_bump_exits_1(self):
+        """dokima --release invalid exits 1 with usage error."""
+        rc, out, err = self._run("--release", "invalid")
+        assert rc != 0, f"Expected non-zero exit for invalid bump, got {rc}"
+        assert "patch" in (out + err).lower() or "invalid" in (out + err).lower(), \
+            f"Expected error message about bump type, got out={out} err={err}"
