@@ -14,6 +14,7 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
+- **F013: Vendor-Agnostic Model Config** — in progress since 2026-06-29 08:57, branch `feat/f013-vendor-agnostic-model-config` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
