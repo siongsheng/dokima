@@ -106,12 +106,13 @@ def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None, fall
     with the fallback model. Output tagged with [profile:fallback] on fallback success."""
     # Allow test patching via dokima.spawn_agent or agent.spawn_agent override (F022 modular refactor)
     dokima_mod = _IMPORTING_PANEL
-    agent_mod = sys.modules.get('agent')
     # Check if agent.spawn_agent was patched (tests use panel._agent.spawn_agent)
-    if agent_mod is not None:
-        agent_override = getattr(agent_mod, 'spawn_agent', None)
-        if agent_override is not None and agent_override is not _SPAWN_ORIGINAL:
-            return agent_override(profile, skills, prompt, timeout=timeout, cwd=cwd, model=model, fallback_model=fallback_model)
+    if dokima_mod is not None:
+        agent_mod = getattr(dokima_mod, '_agent', None)
+        if agent_mod is not None:
+            agent_override = getattr(agent_mod, 'spawn_agent', None)
+            if agent_override is not None and agent_override is not _SPAWN_ORIGINAL:
+                return agent_override(profile, skills, prompt, timeout=timeout, cwd=cwd, model=model, fallback_model=fallback_model)
     # Check if dokima.spawn_agent was patched (tests use panel.spawn_agent)
     if dokima_mod is not None:
         dokima_override = getattr(dokima_mod, 'spawn_agent', None)

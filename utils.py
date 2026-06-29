@@ -1986,10 +1986,7 @@ def archive_specs_for_feature(spec_path, branch, pr_url):
     return False
 
 # Module-level original references for delegation checks (F022 modular refactor)
-_GH_ORIGINAL = gh
-_GIT_ORIGINAL = git
-_CHECK_PID_ORIGINAL = _check_pid
-_VERIFY_PID_OWNER_ORIGINAL = _verify_pid_owner
+_SAFE_RUN_ORIGINAL = _safe_run
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
 

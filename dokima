@@ -451,6 +451,9 @@ def main():
         _cleanup_lock()
         return
 
+    # ── Sync module globals before pipeline execution (F022b) ──
+    _sync_modules()
+
     # ── RUN PIPELINE ──
     if is_continuous:
         roadmap_path = os.path.join(PROJECT_DIR, "specs", "roadmap.md")
