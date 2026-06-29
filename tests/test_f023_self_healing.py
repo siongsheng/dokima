@@ -194,3 +194,56 @@ def test_lock_age_dead_pid_still_cleaned(panel, tmpdir_path, monkeypatch):
         os.remove(lp)
     except OSError:
         pass
+
+
+# ── Task 2+6: Truncation detection ────────────────────────────────────
+
+def test_detect_truncation_no_report_marker_mid_sentence(panel):
+    """Output missing Report: line + ends mid-sentence → truncated."""
+    output = "I have implemented the feature and added tests.\nThe code is ready"
+    assert panel._detect_truncation(output) is True
+
+
+def test_detect_truncation_has_report_line(panel):
+    """Output with Report: line → not truncated."""
+    output = "Implemented feature\n\nReport: all tests pass, build clean\n\nDone."
+    assert panel._detect_truncation(output) is False
+
+
+def test_detect_truncation_ends_with_terminal_punctuation(panel):
+    """Output ends with . ! or ? → not truncated (even without Report: line)."""
+    output = "The feature is complete and all tests pass."
+    assert panel._detect_truncation(output) is False
+
+
+def test_detect_truncation_empty_output(panel):
+    """Empty output → truncated (coder crashed)."""
+    assert panel._detect_truncation("") is True
+
+
+def test_detect_truncation_none_input(panel):
+    """None input → not truncated (safety)."""
+    assert panel._detect_truncation(None) is False
+
+
+def test_detect_truncation_short_without_report(panel):
+    """Short output (< 200 chars) without Report: line → truncated."""
+    output = "Just a few words"
+    assert panel._detect_truncation(output) is True
+
+
+def test_detect_truncation_whitespace_only(panel):
+    """Whitespace-only output → truncated."""
+    assert panel._detect_truncation("   \n  \n  ") is True
+
+
+def test_detect_truncation_ends_with_exclamation(panel):
+    """Output ending with ! → not truncated."""
+    output = "Everything is working!"
+    assert panel._detect_truncation(output) is False
+
+
+def test_detect_truncation_ends_with_question(panel):
+    """Output ending with ? → not truncated."""
+    output = "Is everything working?"
+    assert panel._detect_truncation(output) is False
