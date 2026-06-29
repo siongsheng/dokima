@@ -106,6 +106,8 @@ def main():
     map_full = False
     is_add = False
     add_priority = None
+    is_release = False
+    release_bump = None
     # --fix mode toggles (flags with env var fallbacks)
     fix_all = False
     skip_autofix = False
@@ -171,6 +173,15 @@ def main():
         if arg == "--add":
             is_add = True
             continue
+        if arg == "--release":
+            is_release = True
+            continue
+        if is_release and release_bump is None:
+            if arg not in ("patch", "minor", "major"):
+                print(f"ERROR: Invalid bump type '{arg}'. Use: patch, minor, or major", flush=True)
+                sys.exit(1)
+            release_bump = arg
+            continue
         if arg.startswith("--priority="):
             add_priority = arg.split("=", 1)[1].upper()
             if add_priority not in ("P0", "P1", "P2", "P3"):
@@ -212,6 +223,11 @@ def main():
             skip_next = True
             continue
         filtered_argv.append(arg)
+
+    # ── Release flag: missing bump type check ──
+    if is_release and release_bump is None:
+        print("ERROR: --release requires a bump type: patch, minor, or major", flush=True)
+        sys.exit(1)
 
     # ── Env var fallbacks for flags (flag wins if set, then env var, then default) ──
     if not fix_all and os.environ.get("PANEL_FIX_ALL") == "1":
