@@ -63,7 +63,7 @@
 ### F010: Parallel Coder Robustness
 **Priority:** P1
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [x] Done
 **User Story:** As a panel operator, parallel coders never conflict on the same file, worktree cleanup is reliable, and timeout/dead agents don't block the wave.
 
 ### F019: Data-Driven Execution Mode (Orchestrator Computes)
@@ -105,6 +105,13 @@
 ---
 
 ## Phase 3: Distribution & Portability
+
+
+### F024: Auto-tag releases and generate changelogs from merged PRs. When a PR is merged, auto-bump version, create git tag, and publish GitHub Release with auto-generated changelog grouped by conventional commit prefix.
+**Priority:** P2
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I can auto-tag releases and generate changelogs from merged prs. when a pr is merged, auto-bump version, create git tag, and publish github release with auto-generated changelog grouped by conventional commit prefix.
 
 ### F011: Installer Script
 **Priority:** P2
