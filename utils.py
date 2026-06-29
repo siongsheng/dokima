@@ -2022,6 +2022,33 @@ def archive_specs_for_feature(spec_path, branch, pr_url):
         pass
     return False
 
+# ── F024: Auto-Release ───────────────────────────
+
+def _bump_version(current, bump):
+    """Bump a semver string (X.Y.Z) by patch/minor/major.
+    Returns the new version string. Raises ValueError on invalid input."""
+    if bump not in ("patch", "minor", "major"):
+        raise ValueError(f"Invalid bump type: {bump!r} (expected patch, minor, or major)")
+    try:
+        parts = [int(x) for x in current.split(".")]
+    except (ValueError, AttributeError):
+        raise ValueError(f"Invalid version string: {current!r}")
+    if len(parts) != 3:
+        raise ValueError(f"Invalid version string: {current!r} (expected X.Y.Z)")
+
+    x, y, z = parts
+    if bump == "patch":
+        z += 1
+    elif bump == "minor":
+        y += 1
+        z = 0
+    elif bump == "major":
+        x += 1
+        y = 0
+        z = 0
+    return f"{x}.{y}.{z}"
+
+
 # Module-level original references for delegation checks (F022 modular refactor)
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
