@@ -32,6 +32,13 @@ def test_help_includes_version_command():
     assert "dokima --version" in out, f"--version not in help output:\n{out}"
 
 
+def test_help_includes_upgrade_command():
+    """--help output includes --upgrade in CONTROL section."""
+    rc, out, err = _run("--help")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert "dokima --upgrade" in out, f"--upgrade not in help output:\n{out}"
+
+
 def test_help_json_includes_version():
     """--help-json includes version field and --version command."""
     rc, out, err = _run("--help-json")
@@ -42,6 +49,8 @@ def test_help_json_includes_version():
     commands = data.get("commands", [])
     version_cmds = [c for c in commands if c.get("name") == "--version"]
     assert version_cmds, f"--version not in commands array: {commands}"
+    upgrade_cmds = [c for c in commands if c.get("name") == "--upgrade"]
+    assert upgrade_cmds, f"--upgrade not in commands array: {commands}"
 
 
 def test_upgrade_no_install_dir_exits_0():
