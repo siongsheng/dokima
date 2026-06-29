@@ -979,12 +979,57 @@ def do_release(bump, project_dir, dry_run=False):
         sys.exit(1)
 
     # Validate project_dir is a git repo
-    if not os.path.isdir(os.path.join(project_dir, ".git")):
+    if not os.path.exists(os.path.join(project_dir, ".git")):
         print(f"ERROR: {project_dir} is not a valid git repository (no .git directory found).")
         sys.exit(1)
 
-    # Detect default branch
+    # Read current VERSION (needed for both dry-run and real release)
+    version_path = os.path.join(project_dir, "VERSION")
+    if not os.path.exists(version_path):
+        print(f"ERROR: VERSION file not found at {version_path}")
+        sys.exit(1)
+    try:
+        with open(version_path) as f:
+            current_version = f.read().strip()
+    except OSError:
+        print(f"ERROR: Could not read VERSION file at {version_path}")
+        sys.exit(1)
+
+    # Compute new version using _bump_version (if available) or inline
+    try:
+        new_version = _bump_version(current_version, bump)
+    except NameError:
+        # _bump_version not yet available (stub path for Task 5)
+        parts = [int(x) for x in current_version.split(".")]
+        if len(parts) != 3:
+            print(f"ERROR: VERSION '{current_version}' is not valid semver (X.Y.Z).")
+            sys.exit(1)
+        if bump == "patch":
+            parts[2] += 1
+        elif bump == "minor":
+            parts[1] += 1
+            parts[2] = 0
+        elif bump == "major":
+            parts[0] += 1
+            parts[1] = 0
+            parts[2] = 0
+        new_version = ".".join(str(p) for p in parts)
+
+    tag_name = f"v{new_version}"
+
+    # Detect default branch (needed for dry-run plan and real release)
     default_branch = _detect_default_branch(project_dir)
+
+    if dry_run:
+        print(f"[DRY RUN] Would release dokima {tag_name}")
+        print(f"  Current branch: {default_branch}")
+        print(f"  Bump: {current_version} -> {new_version} ({bump})")
+        print(f"  Commit: chore: bump version to {tag_name}")
+        print(f"  Tag: git tag -a {tag_name} -m 'Release {tag_name}'")
+        print(f"  Push: git push origin {default_branch}")
+        print(f"  Push tag: git push origin {tag_name}")
+        print(f"  Release: gh release create {tag_name} --generate-notes --title '{tag_name}' --target {default_branch}")
+        sys.exit(0)
 
     # Validate on default branch
     try:
@@ -1024,50 +1069,6 @@ def do_release(bump, project_dir, dry_run=False):
     except subprocess.TimeoutExpired:
         print("ERROR: Could not reach origin. Check your network connection.")
         sys.exit(1)
-
-    # Read current VERSION
-    version_path = os.path.join(project_dir, "VERSION")
-    if not os.path.exists(version_path):
-        print(f"ERROR: VERSION file not found at {version_path}")
-        sys.exit(1)
-    try:
-        with open(version_path) as f:
-            current_version = f.read().strip()
-    except OSError:
-        print(f"ERROR: Could not read VERSION file at {version_path}")
-        sys.exit(1)
-
-    # Compute new version using _bump_version (if available) or inline
-    try:
-        new_version = _bump_version(current_version, bump)
-    except NameError:
-        # _bump_version not yet available (stub path for Task 5)
-        parts = [int(x) for x in current_version.split(".")]
-        if len(parts) != 3:
-            print(f"ERROR: VERSION '{current_version}' is not valid semver (X.Y.Z).")
-            sys.exit(1)
-        if bump == "patch":
-            parts[2] += 1
-        elif bump == "minor":
-            parts[1] += 1
-            parts[2] = 0
-        elif bump == "major":
-            parts[0] += 1
-            parts[1] = 0
-            parts[2] = 0
-        new_version = ".".join(str(p) for p in parts)
-
-    tag_name = f"v{new_version}"
-
-    if dry_run:
-        print(f"[DRY RUN] Would release dokima {tag_name}")
-        print(f"  Bump: {current_version} -> {new_version} ({bump})")
-        print(f"  Commit: chore: bump version to {tag_name}")
-        print(f"  Tag: git tag -a {tag_name} -m 'Release {tag_name}'")
-        print(f"  Push: git push origin {default_branch}")
-        print(f"  Push tag: git push origin {tag_name}")
-        print(f"  Release: gh release create {tag_name} --generate-notes --title '{tag_name}' --target {default_branch}")
-        sys.exit(0)
 
     # Write new VERSION (atomic: temp file + rename)
     temp_path = version_path + ".tmp"

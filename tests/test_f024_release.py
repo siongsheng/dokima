@@ -220,11 +220,17 @@ class TestDryRun:
 
     def test_release_dry_run_with_project_dir(self):
         """--release patch --dry-run with project_dir arg works."""
-        rc, stdout, stderr = _run("--release", "patch", "--dry-run", "/tmp")
-        assert rc == 0, (
-            f"Expected exit 0, got {rc}\n"
-            f"stdout: {stdout}\nstderr: {stderr}"
-        )
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.run(["git", "-C", td, "init", "-q"], capture_output=True)
+            # Create a VERSION file so dry-run can read it
+            version_path = os.path.join(td, "VERSION")
+            with open(version_path, "w") as f:
+                f.write("1.0.0\n")
+            rc, stdout, stderr = _run("--release", "patch", "--dry-run", td, cwd=td)
+            assert rc == 0, (
+                f"Expected exit 0, got {rc}\n"
+                f"stdout: {stdout}\nstderr: {stderr}"
+            )
 
     def test_dry_run_before_release(self):
         """--dry-run --release patch (flag order swap) is recognized."""

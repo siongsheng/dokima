@@ -103,14 +103,13 @@ def main():
     is_upgrade = False
     is_release = False
     release_bump = None
+    is_dry_run = False
     is_list_crons = False
     is_fix = False
     is_map = False
     map_full = False
     is_add = False
     add_priority = None
-    is_release = False
-    release_bump = None
     # --fix mode toggles (flags with env var fallbacks)
     fix_all = False
     skip_autofix = False
@@ -141,6 +140,9 @@ def main():
         if arg == "--release":
             is_release = True
             skip_next = True
+            continue
+        if arg == "--dry-run":
+            is_dry_run = True
             continue
         if arg == "--next":
             is_next = True
@@ -269,13 +271,6 @@ def main():
             base_branch_override = sys.argv[i + 1]
             break
 
-    # ── --release bump type extraction ──
-    if is_release:
-        for i, arg in enumerate(sys.argv):
-            if arg == "--release" and i + 1 < len(sys.argv):
-                release_bump = sys.argv[i + 1]
-                break
-
     answers_idx = None
     answers_path = None
     for i, arg in enumerate(sys.argv):
@@ -340,7 +335,7 @@ def main():
     if is_upgrade:
         check_upgrade()
     if is_release:
-        do_release(release_bump, PROJECT_DIR)
+        do_release(release_bump, PROJECT_DIR, dry_run=is_dry_run)
     if is_version:
         print(f"dokima v{VERSION}")
         sys.exit(0)
@@ -348,10 +343,6 @@ def main():
         show_help_json()
     if is_help:
         show_help()
-    if is_release:
-        # Task 4: flag scanning — dispatch to do_release added in Task 5
-        print(f"  Release mode: {release_bump} (dispatch in Task 5)")
-        sys.exit(0)
     if is_kill:
         handle_kill(PROJECT_DIR)
     if is_add:
