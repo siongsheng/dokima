@@ -82,3 +82,35 @@ def test_version_with_extra_args_exits_0():
     rc, out, err = _run("--version", "/some/path")
     assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
     assert out.startswith("dokima v"), f"Expected 'dokima v...', got: {out}"
+
+
+def test_version_works_in_non_git_directory():
+    """--version works even in a non-git directory (no git dependency)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        p = subprocess.run(
+            [sys.executable, SCRIPT, "--version"],
+            capture_output=True, text=True, timeout=10, cwd=td
+        )
+        assert p.returncode == 0, f"Expected exit 0, got {p.returncode}. stderr: {p.stderr}"
+        assert p.stdout.strip().startswith("dokima v"), f"Expected 'dokima v...', got: {p.stdout.strip()!r}"
+
+
+def test_version_first_flag_wins():
+    """--version --help: first flag wins, --version prints and exits."""
+    rc, out, err = _run("--version", "--help")
+    assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+    assert out.startswith("dokima v"), f"Expected 'dokima v...', got: {out}"
+
+
+def test_version_file_is_valid():
+    """VERSION file exists and contains valid semver."""
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    version_path = os.path.join(script_dir, "VERSION")
+    assert os.path.exists(version_path), f"VERSION file not found at {version_path}"
+    with open(version_path) as f:
+        content = f.read()
+    version = content.strip()
+    assert version, "VERSION file is empty"
+    import re
+    assert re.match(r'^\d+\.\d+\.\d+$', version), f"VERSION not semver: {version!r}"
