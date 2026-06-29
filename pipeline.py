@@ -617,6 +617,7 @@ CRITICAL: Two distinct commits, RED before GREEN, different timestamps. NEVER bu
 BEFORE PUSHING: After ALL tasks done, check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README for <feature>\". Then run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only git push when clean.
 
 CRITICAL RULES:
+- YOU ARE THE CODER — your job is to IMPLEMENT working code, not to write specs or planning documents. The strategist already wrote the spec. You must produce actual code changes that pass tests.
 - ONLY modify files listed in the current task's **Files:** field. DO NOT delete, rename, or touch any other files — even if they look stale, unused, or mergeable.
 - DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
 - DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.
@@ -905,6 +906,21 @@ Report: what was broken, what you fixed, commit hash."""
                 f"Risk: {impact}"
             )
             return {"nm_output": nm_output, "pr_url": None, "coder_failed": True, "verdict": "VET_FAILED", "test_pass": test_pass, "build_pass": build_pass}
+
+    # 4. Verify coder produced actual code changes (not just spec/docs)
+    print("  ⏳ Checking diff for code changes...", flush=True)
+    diff_stat, _, _ = git("diff", "--stat", DEFAULT_BRANCH + "..." + branch)
+    source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
+    spec_only = re.findall(r'^\s*specs/[\w/.-]+\.(?:md)\s*\|', diff_stat, re.MULTILINE)
+    if not source_files and (spec_only or not diff_stat.strip()):
+        print(f"  🔴 BLOCKED — No source code changes detected in diff.", flush=True)
+        print(f"  Coder only produced spec/documentation files:", flush=True)
+        for m in spec_only:
+            print(f"    {m.strip().rstrip('|')}", flush=True)
+        print(f"  This is not a valid feature implementation — coder must produce code.", flush=True)
+        halt_and_revert("nm: coder produced no source code changes (spec-only)", "PHASE 3 (Verification)", branch)
+        return {"nm_output": f"VET_FAILED: no source code changes\n{diff_stat[:500]}", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED", "test_pass": test_pass, "build_pass": build_pass}
 
     # 4. Create PR (verification passed)
     print("  ⏳ Creating PR...", flush=True)

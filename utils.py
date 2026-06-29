@@ -343,6 +343,25 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
             spec_text, re.DOTALL | re.IGNORECASE)
         if imp_m and imp_m.group(1).strip():
             impact = f"## Impact\n\n{imp_m.group(1).strip()}"
+    if not impact:
+        # Fallback: Executive Summary section
+        exec_m = re.search(
+            r'^##?\s*Executive\s+Summary\s*\n+(.+?)(?=\n##\s|\n###\s|\n\*\*Confidence|\Z)',
+            spec_text, re.DOTALL | re.IGNORECASE | re.MULTILINE)
+        if exec_m and exec_m.group(1).strip():
+            impact = f"## Impact\n\n{exec_m.group(1).strip()}"
+    if not impact:
+        # Fallback: Position: <text> (used in older spec formats)
+        pos_m = re.search(
+            r'Position:\s*(.+?)(?=\n\s*\n\s*(?:F\d{3}:|\Z))',
+            spec_text, re.DOTALL | re.IGNORECASE)
+        if pos_m and pos_m.group(1).strip():
+            text = pos_m.group(1).strip()
+            # Clean up: remove internal newlines, truncate
+            text = re.sub(r'\n\s+', ' ', text)
+            if len(text) > 500:
+                text = text[:497] + "..."
+            impact = f"## Impact\n\n{text}"
 
     # 3. ## What Changed — bullet list under ## N. What Changed header
     what_changed = ""

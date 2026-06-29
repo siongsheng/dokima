@@ -87,7 +87,7 @@
 ### F022b: Modular Architecture — Pipeline, Roadmap, Tasks
 **Priority:** P1
 **Dependencies:** F022
-**Status:** [ ] In Progress
+**Status:** [x] Done
 **User Story:** As a contributor, the remaining 3 modules (pipeline.py, roadmap.py, tasks.py) are extracted from the monolith. Pipeline phase coordination, DAG task execution, roadmap parsing, and task management each live in their own module. Agents working on pipeline logic read ~300 lines instead of 5000+. Builds on F022's agent.py and utils.py extraction. Same 640 tests, same behavior.
 
 ### F020: Structured CLI Output (`--help-json`)
@@ -105,7 +105,7 @@
 ### F024: Auto-Release — Tagging, Changelog, and GitHub Releases
 **Priority:** P2
 **Dependencies:** F021
-**Status:** [x] Done Progress Progress
+**Status:** [ ] Pending
 **User Story:** As a maintainer, `dokima --release [patch|minor|major]` bumps the version, auto-generates a changelog from merged PRs grouped by conventional commit prefix, creates a git tag, and publishes a GitHub Release — all in one command. Validates clean tree, default branch, and git sync before releasing.
 
 ---
