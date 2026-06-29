@@ -5348,23 +5348,25 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
         waves = dag.compute_waves()
         print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
         all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
+        task_ids = list(dag.tasks.keys())
+        wt_mgr = WorktreeManager(PROJECT_DIR)
         if not all_ok:
             print("\n  ⚠ Some tasks failed — checking if feature is still viable", flush=True)
             completed = [t for t in dag.tasks.values() if t.status == "completed"]
             if not completed:
-                halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch)
+                halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch, task_ids=task_ids, worktrees=wt_mgr)
                 coder_failed = True
                 pr_url = None
                 verdict = "CODER_FAILED"
             else:
                 print(f"  {len(completed)}/{len(dag.tasks)} tasks completed — proceeding with partial results", flush=True)
                 if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
-                    halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                    halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch, task_ids=task_ids, worktrees=wt_mgr)
                     coder_failed = True
                     verdict = "CODER_FAILED"
         else:
             if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
-                halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch, task_ids=task_ids, worktrees=wt_mgr)
                 coder_failed = True
                 verdict = "CODER_FAILED"
 
