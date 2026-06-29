@@ -87,7 +87,7 @@
 ### F022b: Modular Architecture — Pipeline, Roadmap, Tasks
 **Priority:** P1
 **Dependencies:** F022
-**Status:** [x] Done
+**Status:** [ ] In Progress
 **User Story:** As a contributor, the remaining 3 modules (pipeline.py, roadmap.py, tasks.py) are extracted from the monolith. Pipeline phase coordination, DAG task execution, roadmap parsing, and task management each live in their own module. Agents working on pipeline logic read ~300 lines instead of 5000+. Builds on F022's agent.py and utils.py extraction. Same 640 tests, same behavior.
 
 ### F020: Structured CLI Output (`--help-json`)
