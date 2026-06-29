@@ -1887,115 +1887,116 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
     print(f"  Max parallel agents: {max_parallel}", flush=True)
 
     all_completed = True
+    try:
 
-    for wave_num, wave in enumerate(waves, 1):
-        print(f"\n── Wave {wave_num}: {len(wave)} task(s) ──", flush=True)
-        wave_ids = ", ".join(f"Task {tid}" for tid in wave)
-        print(f"  {wave_ids}", flush=True)
+        for wave_num, wave in enumerate(waves, 1):
+            print(f"\n── Wave {wave_num}: {len(wave)} task(s) ──", flush=True)
+            wave_ids = ", ".join(f"Task {tid}" for tid in wave)
+            print(f"  {wave_ids}", flush=True)
 
-        # Validate no file collisions within the wave
-        dag = TaskDAG()
-        dag.tasks = tasks
-        if not dag.validate_parallel_files(wave):
-            print("  ⚠ File collision detected — run sequentially instead", flush=True)
-            # Fall back to sequential execution using spawn_agent (mockable, synchronous)
+            # Validate no file collisions within the wave
+            dag = TaskDAG()
+            dag.tasks = tasks
+            if not dag.validate_parallel_files(wave):
+                print("  ⚠ File collision detected — run sequentially instead", flush=True)
+                # Fall back to sequential execution using spawn_agent (mockable, synchronous)
+                for tid in wave:
+                    if not locks.claim(tid, f"coder-wave{wave_num}-seq"):
+                        continue
+                    task = tasks[tid]
+                    parent_branch = DEFAULT_BRANCH
+                    if task.dependencies:
+                        dep_id = task.dependencies[0]
+                        if dep_id in tasks and tasks[dep_id].branch:
+                            parent_branch = tasks[dep_id].branch
+                    wt_path = worktrees.create(tid, task.branch)
+
+                    # Build coder prompt inline — same as spawn_coder_in_worktree
+                    spec_ref = tasks_extract_path if tasks_extract_path else spec_path
+                    spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
+                    coder_prompt = f"""Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
+
+    You are working on Task {task.id}: {task.description}
+    Files to create/modify: {', '.join(task.files) if task.files else 'determine from spec'}
+
+    FIRST: Verify you are in the correct worktree and on branch '{task.branch}' (parent: {parent_branch}).
+
+    TDD — TWO SEPARATE COMMITS on this branch:
+    RED: Write tests → {TEST_CMD} must FAIL → git add <test files only> && git commit -m "test: {task.description[:60]}"
+    GREEN: Write minimum code → {TEST_CMD} must PASS → {BUILD_CMD} must succeed → git add <impl files only> && git commit -m "feat: {task.description[:60]}"
+    CRITICAL: Two distinct commits, RED before GREEN. No task numbers in commit messages. Do NOT modify files outside task scope.
+    BEFORE PUSHING: Check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README\". Run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only push when clean.
+    Report: both commit hashes, files changed, test results, lint status, branch name.
+    """
+                    try:
+                        output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
+                                             coder_prompt, timeout=900, cwd=wt_path, fallback_model=FALLBACK_MODELS.get("coder"))
+                        task.status = "completed"
+                        task.output = output
+                        print(f"  ✅ Task {tid} completed ({len(output)} chars)", flush=True)
+                    except Exception as e:
+                        task.status = "failed"
+                        task.output = str(e)
+                        print(f"  ❌ Task {tid} failed: {e}", flush=True)
+                    locks.release(tid)
+            else:
+                # Parallel spawn — honour max_parallel cap
+                spawned_this_wave = 0
+                overflow = []  # tasks that exceed the cap, run after first batch
+
+                for tid in wave:
+                    if spawned_this_wave >= max_parallel:
+                        overflow.append(tid)
+                        continue
+                    if not locks.claim(tid, f"coder-wave{wave_num}"):
+                        print(f"  ⚠ Task {tid} already claimed — skipping", flush=True)
+                        continue
+                    task = tasks[tid]
+                    parent_branch = DEFAULT_BRANCH
+                    if task.dependencies:
+                        dep_id = task.dependencies[0]
+                        if dep_id in tasks and tasks[dep_id].branch:
+                            parent_branch = tasks[dep_id].branch
+                    wt_path = worktrees.create(tid, task.branch)
+                    proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
+                    running[tid] = proc
+                    spawned_this_wave += 1
+
+                if overflow:
+                    print(f"  ⚠ {len(overflow)} task(s) exceed max_parallel ({max_parallel}) — queued", flush=True)
+
+                _poll_until_wave_done(wave, running, tasks, locks, timeout=900)
+
+                # Run overflow tasks
+                for tid in overflow:
+                    if not locks.claim(tid, f"coder-wave{wave_num}-overflow"):
+                        continue
+                    task = tasks[tid]
+                    parent_branch = DEFAULT_BRANCH
+                    if task.dependencies:
+                        dep_id = task.dependencies[0]
+                        if dep_id in tasks and tasks[dep_id].branch:
+                            parent_branch = tasks[dep_id].branch
+                    wt_path = worktrees.create(tid, task.branch)
+                    proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
+                    running[tid] = proc
+                    _poll_until_wave_done([tid], running, tasks, locks, timeout=900)
+
+            # Report wave results
             for tid in wave:
-                if not locks.claim(tid, f"coder-wave{wave_num}-seq"):
-                    continue
                 task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
+                if task.status == "failed":
+                    all_completed = False
+                    print(f"  ❌ Task {tid} FAILED: {task.description[:80]}", flush=True)
+                elif task.status == "timed_out":
+                    all_completed = False
+                    print(f"  ⚠ Task {tid} TIMED OUT: {task.description[:80]}", flush=True)
+                elif task.status == "completed":
+                    print(f"  ✅ Task {tid} done: {task.description[:80]}", flush=True)
 
-                # Build coder prompt inline — same as spawn_coder_in_worktree
-                spec_ref = tasks_extract_path if tasks_extract_path else spec_path
-                spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
-                coder_prompt = f"""Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
-
-You are working on Task {task.id}: {task.description}
-Files to create/modify: {', '.join(task.files) if task.files else 'determine from spec'}
-
-FIRST: Verify you are in the correct worktree and on branch '{task.branch}' (parent: {parent_branch}).
-
-TDD — TWO SEPARATE COMMITS on this branch:
-RED: Write tests → {TEST_CMD} must FAIL → git add <test files only> && git commit -m "test: {task.description[:60]}"
-GREEN: Write minimum code → {TEST_CMD} must PASS → {BUILD_CMD} must succeed → git add <impl files only> && git commit -m "feat: {task.description[:60]}"
-CRITICAL: Two distinct commits, RED before GREEN. No task numbers in commit messages. Do NOT modify files outside task scope.
-BEFORE PUSHING: Check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README\". Run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only push when clean.
-Report: both commit hashes, files changed, test results, lint status, branch name.
-"""
-                try:
-                    output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                                         coder_prompt, timeout=900, cwd=wt_path, fallback_model=FALLBACK_MODELS.get("coder"))
-                    task.status = "completed"
-                    task.output = output
-                    print(f"  ✅ Task {tid} completed ({len(output)} chars)", flush=True)
-                except Exception as e:
-                    task.status = "failed"
-                    task.output = str(e)
-                    print(f"  ❌ Task {tid} failed: {e}", flush=True)
-                locks.release(tid)
-        else:
-            # Parallel spawn — honour max_parallel cap
-            spawned_this_wave = 0
-            overflow = []  # tasks that exceed the cap, run after first batch
-
-            for tid in wave:
-                if spawned_this_wave >= max_parallel:
-                    overflow.append(tid)
-                    continue
-                if not locks.claim(tid, f"coder-wave{wave_num}"):
-                    print(f"  ⚠ Task {tid} already claimed — skipping", flush=True)
-                    continue
-                task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
-                proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
-                running[tid] = proc
-                spawned_this_wave += 1
-
-            if overflow:
-                print(f"  ⚠ {len(overflow)} task(s) exceed max_parallel ({max_parallel}) — queued", flush=True)
-
-            _poll_until_wave_done(wave, running, tasks, locks, timeout=900)
-
-            # Run overflow tasks
-            for tid in overflow:
-                if not locks.claim(tid, f"coder-wave{wave_num}-overflow"):
-                    continue
-                task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
-                proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
-                running[tid] = proc
-                _poll_until_wave_done([tid], running, tasks, locks, timeout=900)
-
-        # Report wave results
-        for tid in wave:
-            task = tasks[tid]
-            if task.status == "failed":
-                all_completed = False
-                print(f"  ❌ Task {tid} FAILED: {task.description[:80]}", flush=True)
-            elif task.status == "timed_out":
-                all_completed = False
-                print(f"  ⚠ Task {tid} TIMED OUT: {task.description[:80]}", flush=True)
-            elif task.status == "completed":
-                print(f"  ✅ Task {tid} done: {task.description[:80]}", flush=True)
-
-    # Cleanup all worktrees
-    all_ids = list(tasks.keys())
-    worktrees.cleanup_all(all_ids)
+    finally:
+        all_ids = list(tasks.keys())
+        worktrees.cleanup_all(all_ids)
 
     return all_completed
 
