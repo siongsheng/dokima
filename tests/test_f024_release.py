@@ -1,17 +1,21 @@
-"""Tests for F024 Task 4: --release flag scanning in dokima main()."""
+"""Tests for F024: Auto-Release — Tagging, Changelog, and GitHub Releases."""
 import os
 import sys
 import subprocess
+import json
+import tempfile
 import pytest
 
-PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dokima"))
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dokima")
 
 
-def _run(*args):
-    """Run dokima with given args, return (returncode, stdout, stderr)."""
-    cmd = [sys.executable, PANEL_PATH] + list(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    return result.returncode, result.stdout, result.stderr
+def _run(*args, cwd=None, timeout=15):
+    """Run dokima with given args and return (returncode, stdout, stderr)."""
+    p = subprocess.run(
+        [sys.executable, SCRIPT] + list(args),
+        capture_output=True, text=True, timeout=timeout, cwd=cwd
+    )
+    return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
 class TestReleaseFlagScanning:
@@ -101,3 +105,63 @@ class TestReleaseFlagScanning:
             f"Expected exit 0, got {rc}\n"
             f"stdout: {stdout}\nstderr: {stderr}"
         )
+
+
+class TestReleaseDispatch:
+    """Task 5: --release dispatch — flag parsing and early-exit dispatch."""
+
+    def test_release_flag_is_recognized(self):
+        """dokima --release patch is recognized as a flag, not a feature description."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", "patch", cwd=td)
+            combined = out + err
+            assert "is not a valid git repository" not in combined, \
+                f"--release should be recognized as a flag. Got: {combined!r}"
+
+    def test_release_flag_no_bump_shows_error(self):
+        """dokima --release (no bump type) produces a bump-type-specific error."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", cwd=td)
+            combined = (out + err).lower()
+            bump_mentioned = "patch" in combined or "minor" in combined or "major" in combined
+            is_git_error = "not a valid git repository" in combined
+            assert bump_mentioned and not is_git_error, \
+                f"Expected bump-type error, got out={out!r} err={err!r}"
+
+    def test_release_flag_invalid_bump_shows_error(self):
+        """dokima --release invalid exits non-zero with bump type error."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", "prepatch", cwd=td)
+            assert rc != 0, f"Expected non-zero exit, got {rc}. out={out!r} err={err!r}"
+            combined = (out + err).lower()
+            assert "patch" in combined, f"Expected 'patch' in error, got out={out!r} err={err!r}"
+            assert "minor" in combined, f"Expected 'minor' in error, got out={out!r} err={err!r}"
+            assert "major" in combined, f"Expected 'major' in error, got out={out!r} err={err!r}"
+            assert "not a valid git repository" not in combined, \
+                f"Should be a bump-type error, not git-repo error. Got: {combined!r}"
+
+    def test_release_flag_accepts_minor(self):
+        """dokima --release minor is recognized and dispatched."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", "minor", cwd=td)
+            combined = out + err
+            assert "is not a valid git repository" not in combined, \
+                f"--release minor should be recognized as a flag. Got: {combined!r}"
+
+    def test_release_flag_accepts_major(self):
+        """dokima --release major is recognized and dispatched."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", "major", cwd=td)
+            combined = out + err
+            assert "is not a valid git repository" not in combined, \
+                f"--release major should be recognized as a flag. Got: {combined!r}"
+
+    def test_release_flag_with_project_dir(self):
+        """dokima --release patch with a project dir dispatches."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = _run("--release", "patch", td, cwd=td)
+            combined = out + err
+            assert "Feature description required" not in combined, \
+                f"--release should be a flag. Got: {combined!r}"
+            assert "is not a valid git repository" not in combined, \
+                f"--release should dispatch before project validation. Got: {combined!r}"
