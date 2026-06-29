@@ -1,6 +1,6 @@
 {
   "AGENTS.md": {
-    "hash": "9b0248debd0172d61b97abf182dbfe3b",
+    "hash": "86a30a4c807bbb7baa0f202245b256bc",
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
@@ -12,7 +12,7 @@
     "desc": "Dokima"
   },
   "agent.py": {
-    "hash": "62030bd021dd8e6aa7c8fc209f2bb089",
+    "hash": "151ce18f87211bfdfac9cddf93e14371",
     "desc": "\u2500\u2500 Module-level globals (set by main()) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
   "install.sh": {
@@ -20,8 +20,8 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "4abe61020fea5a86d68d1f435d52d798",
-    "desc": "Exports: run_post_pipeline"
+    "hash": "43d956a5c25e712592becd506b6214b5",
+    "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
     "hash": "0e674ce502784c0031a1525a713dc44a",
@@ -32,7 +32,11 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "d84e0bb61e3c083d83b4209c76c8fe67",
+    "hash": "7e67bc07d76d5f87faed4627c989bfce",
+    "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
+  },
+  "utils_debug.py": {
+    "hash": "83196f1e4c81455b0be8f0ab61eecda6",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
@@ -76,7 +80,7 @@
     "desc": "Spec Strategist (Lite \u2014 Panel Edition)"
   },
   "tests/conftest.py": {
-    "hash": "fd038f6cbdb55dfba930f31c056a2c63",
+    "hash": "f470a567f7353cfc5bbeaa3532e4a984",
     "desc": "Exports: _load_panel"
   },
   "tests/test_acquire_lock.py": {
@@ -116,7 +120,7 @@
     "desc": "Exports: test_first_acquisition_succeeds, test_second_acquisition_blocked, test_stale_lock_dead_pid"
   },
   "tests/test_edge_cases.py": {
-    "hash": "6270cf0ead433aa8f31ecb51b473bd72",
+    "hash": "80e2d8e5bd44d3b4e074b202f905c8cd",
     "desc": "Exports: _setup"
   },
   "tests/test_execution_mode_dispatch.py": {
@@ -132,7 +136,7 @@
     "desc": "Exports: TestExtractFilePathsBacktick"
   },
   "tests/test_extract_pr.py": {
-    "hash": "4968e5a3dd91451aaf1c44a65b3c0314",
+    "hash": "66dac95b9160c118df6f6f939839025f",
     "desc": ""
   },
   "tests/test_f001_security.py": {
@@ -248,8 +252,8 @@
     "desc": "Exports: _setup_test_project"
   },
   "tests/test_profile_templates.py": {
-    "hash": "f4858616a6c8de514296374affc29209",
-    "desc": "Exports: TestEnsureProfiles"
+    "hash": "a97e572719ffbe89f96b6b3e9f16db0a",
+    "desc": "Exports: _fresh_panel, TestEnsureProfiles"
   },
   "tests/test_rich_pipeline.py": {
     "hash": "33cab01aad7b53f6c6adf990b7177fa7",

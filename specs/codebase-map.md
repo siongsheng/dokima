@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-06-29 13:20:14 (incremental | 78 files)
+## Generated: 2026-06-29 15:40:38 (incremental | 79 files)
 
 ## Tree
 ├── AGENTS.md  — Dokima — Multi-Agent Orchestration Engine
@@ -8,10 +8,11 @@
 ├── README.md  — Dokima
 ├── agent.py  — ── Module-level globals (set by main()) ──────────
 ├── install.sh  — Dokima Installer — one-command setup
-├── pipeline.py  — Exports: run_post_pipeline
+├── pipeline.py  — Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 ├── roadmap.py  — Exports: parse_roadmap
 ├── tasks.py  — Exports: WorktreeManager
-└── utils.py  — shutil imported dynamically where needed (deploy_profile_skills)
+├── utils.py  — shutil imported dynamically where needed (deploy_profile_skills)
+└── utils_debug.py  — shutil imported dynamically where needed (deploy_profile_skills)
 ├── docs/
 ├── pipeline.md  — Dokima — Pipeline Reference
 └── setup.md  — Dokima — Deployment & Setup Guide
@@ -75,7 +76,7 @@
 ├── test_pick_next_feature.py  — Helper to build RoadmapFeature objects for testing
 ├── test_pid_utils.py  — Exports: test_check_live_pid, test_check_dead_pid, test_check_non_numeric, test_check_empty_string, test_verify_owner_on_self
 ├── test_pipeline_integration.py  — Exports: _setup_test_project
-├── test_profile_templates.py  — Exports: TestEnsureProfiles
+├── test_profile_templates.py  — Exports: _fresh_panel, TestEnsureProfiles
 ├── test_rich_pipeline.py  — Exports: _setup_project
 ├── test_roadmap_parse.py  — Exports: test_file_not_found, test_empty_file, test_single_feature_all_fields
 ├── test_roadmap_update.py  — Exports: test_pending_to_in_progress, test_in_progress_to_done, test_done_to_pending_revert, test_feature_not_found_no_change, test_file_not_found_no_crash
