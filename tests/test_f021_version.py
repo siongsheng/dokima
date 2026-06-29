@@ -23,3 +23,22 @@ def test_version_flag_prints_version_and_exits_0():
     version = parts[1]
     # Should be something like X.Y.Z
     assert "." in version, f"Expected semver, got version: {version}"
+
+
+def test_help_includes_version_command():
+    """--help output includes --version in CONTROL section."""
+    rc, out, err = _run("--help")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert "dokima --version" in out, f"--version not in help output:\n{out}"
+
+
+def test_help_json_includes_version():
+    """--help-json includes version field and --version command."""
+    rc, out, err = _run("--help-json")
+    assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+    data = json.loads(out)
+    assert "version" in data, f"No 'version' field in help-json: {data}"
+    assert data["version"], f"version field is empty"
+    commands = data.get("commands", [])
+    version_cmds = [c for c in commands if c.get("name") == "--version"]
+    assert version_cmds, f"--version not in commands array: {commands}"
