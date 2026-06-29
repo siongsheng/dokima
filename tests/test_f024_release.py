@@ -230,3 +230,29 @@ class TestPruneOldTags:
         # Should have tried 2 deletes (v2.0.0 and v1.0.0)
         push_deletes = [c for c in git_calls if c[0] == "push"]
         assert len(push_deletes) == 2
+
+
+class TestReleaseHelpText:
+    """Tests that --release appears in HELP_TEXT and CLI_METADATA."""
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dokima")
+
+    def _run(self, *args):
+        import subprocess
+        p = subprocess.run(
+            [sys.executable, self.SCRIPT] + list(args),
+            capture_output=True, text=True, timeout=10
+        )
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+
+    def test_help_includes_release_command(self):
+        """--help output includes --release in COMMANDS section."""
+        rc, out, err = self._run("--help")
+        assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+        assert "--release" in out, f"Expected --release in help output, got:\n{out}"
+
+    def test_help_json_includes_release(self):
+        """--help-json output includes --release entry."""
+        rc, out, err = self._run("--help-json")
+        assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
+        assert "--release" in out, f"Expected --release in --help-json output, got:\n{out}"
