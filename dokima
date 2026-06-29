@@ -2165,6 +2165,20 @@ def _get_lock_state(project_dir):
         except OSError:
             pass
         return False, "", {}
+
+    # F023: Lock-age auto-cleanup for --status — handle SIGKILL + PID recycled
+    lock_max_age = int(os.environ.get("PANEL_LOCK_MAX_AGE_SECS", "43200"))
+    try:
+        lock_age = time.time() - os.path.getmtime(lp)
+        if lock_age > lock_max_age:
+            try:
+                os.remove(lp)
+            except OSError:
+                pass
+            return False, "", {}
+    except OSError:
+        pass  # Can't stat — proceed with existing logic
+
     # Read roadmap for current feature
     info = {}
     roadmap_path = os.path.join(project_dir, "specs", "roadmap.md")
