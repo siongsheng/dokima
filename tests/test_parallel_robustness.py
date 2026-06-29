@@ -1,6 +1,7 @@
 """Tests for F010: Parallel Coder Robustness."""
 import os
 import sys
+import time
 import pytest
 from unittest.mock import patch, MagicMock, call
 
@@ -387,4 +388,80 @@ class TestValidateParallelFilesNormpath:
         # Same file claimed by two tasks is a collision
         assert not dag.validate_parallel_files(["1", "2"]), \
             "Same file claimed twice should collide"
+
+
+class TestTaskLockStaleCleanup:
+    """Task 5: TaskLock.__init__ cleans stale locks with old timestamps."""
+
+    def test_stale_lock_removed(self, tmpdir_path):
+        """Lock file older than 30 minutes is deleted on init."""
+        panel = _load_panel()
+
+        tasks_dir = os.path.join(tmpdir_path, "tasks")
+        os.makedirs(tasks_dir, exist_ok=True)
+
+        # Create a lock file with an old timestamp (1 hour ago)
+        old_time = time.time() - 3600
+        lockfile = os.path.join(tasks_dir, "1.lock")
+        with open(lockfile, "w") as f:
+            f.write(f"owner: agent-old\ntimestamp: {old_time}\n")
+
+        lockfile2 = os.path.join(tasks_dir, "2.lock")
+        with open(lockfile2, "w") as f:
+            f.write(f"owner: agent-old\ntimestamp: {old_time}\n")
+
+        # Create TaskLock (should clean stale locks on init)
+        lock = panel.TaskLock(tmpdir_path)
+
+        # Old locks should be removed
+        assert not os.path.exists(lockfile), \
+            f"Stale lock for task 1 should be removed"
+        assert not os.path.exists(lockfile2), \
+            f"Stale lock for task 2 should be removed"
+
+    def test_fresh_lock_preserved(self, tmpdir_path):
+        """Lock file with recent timestamp is NOT deleted."""
+        panel = _load_panel()
+
+        tasks_dir = os.path.join(tmpdir_path, "tasks")
+        os.makedirs(tasks_dir, exist_ok=True)
+
+        # Create a lock file with current timestamp
+        fresh_time = time.time()
+        lockfile = os.path.join(tasks_dir, "1.lock")
+        with open(lockfile, "w") as f:
+            f.write(f"owner: agent-fresh\ntimestamp: {fresh_time}\n")
+
+        lock = panel.TaskLock(tmpdir_path)
+
+        # Fresh lock should still exist
+        assert os.path.exists(lockfile), \
+            "Fresh lock should be preserved, but it was removed"
+
+    def test_corrupt_lock_removed(self, tmpdir_path):
+        """Lock file with unparseable content is removed."""
+        panel = _load_panel()
+
+        tasks_dir = os.path.join(tmpdir_path, "tasks")
+        os.makedirs(tasks_dir, exist_ok=True)
+
+        lockfile = os.path.join(tasks_dir, "1.lock")
+        with open(lockfile, "w") as f:
+            f.write("garbage data\nno owner field\n")
+
+        lock = panel.TaskLock(tmpdir_path)
+
+        assert not os.path.exists(lockfile), \
+            "Corrupt lock file should be removed"
+
+    def test_no_tasks_dir_does_not_crash(self, tmpdir_path):
+        """If tasks dir doesn't exist, init doesn't crash."""
+        panel = _load_panel()
+
+        tasks_dir = os.path.join(tmpdir_path, "tasks")
+        assert not os.path.exists(tasks_dir)
+
+        lock = panel.TaskLock(tmpdir_path)
+
+        assert lock.tasks_dir == tasks_dir
 
