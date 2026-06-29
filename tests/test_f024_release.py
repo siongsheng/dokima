@@ -273,6 +273,14 @@ class TestReleaseHelpText:
         assert "Feature description required" not in combined, \
             f"--release should be dispatched, not fall through. Got: {combined}"
 
+    def test_release_dry_run_output(self):
+        """dokima --release patch --dry-run either shows [DRY RUN] plan or clear error."""
+        rc, out, err = self._run("--release", "patch", "--dry-run")
+        combined = out + err
+        # Dry-run either succeeds (prints plan) or fails with clear precondition error
+        assert ("[DRY RUN]" in combined or "ERROR:" in combined), \
+            f"Expected [DRY RUN] or clear ERROR, got: {combined}"
+
 
 class TestDoRelease:
     """Tests for do_release() function."""
