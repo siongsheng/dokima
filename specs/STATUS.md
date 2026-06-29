@@ -26,7 +26,7 @@
 - **F011: Installer Script** — done 2026-06-29 02:15, PR [#36](https://github.com/siongsheng/dokima/pull/36) [panel]
 - **F012: Profile Templates** — done 2026-06-29 02:39, PR [#37](https://github.com/siongsheng/dokima/pull/37) [panel]
 - **F020: Structured CLI Output (`--help-json`)** — done 2026-06-29 03:04 [panel]
-- **F010: Parallel Coder Robustness** — done 2026-06-29 08:42, PR [#28](https://github.com/siongsheng/dokima/pull/28) [auto-repair]
 - **F023: Pipeline Self-Healing** — done 2026-06-29 08:42, PR [#29](https://github.com/siongsheng/dokima/pull/29) [auto-repair]
 - **F022: Modular Architecture** — done 2026-06-29 08:42, PR [#30](https://github.com/siongsheng/dokima/pull/30) [auto-repair]
 - **F021: Semantic Versioning + GitHub Releases** — done 2026-06-29 08:56, PR [#41](https://github.com/siongsheng/dokima/pull/41) [panel]
+- **F010: Parallel Coder Robustness** — done 2026-06-29 08:57, PR [#28](https://github.com/siongsheng/dokima/pull/28) [auto-repair]
