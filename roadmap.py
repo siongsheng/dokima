@@ -11,7 +11,7 @@ from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _clean
                    clean_spec_content, verify_spec_quality, generate_codebase_map,
                    extract_file_paths, load_github_token, save_checkpoint,
                    delete_checkpoint, _signal_handler, _safe_run, _redact_secrets,
-                   HERMES_BIN, DEFAULT_BRANCH, PROJECT_DIR, REPO, PANEL_FEATURE,
+                   HERMES, HERMES_BIN, DEFAULT_BRANCH, PROJECT_DIR, REPO, PANEL_FEATURE,
                    PROFILES, OUTPUT_LOG, FALLBACK_MODELS, PANEL_PORT, API_KEY,
                    SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override,
                    RESUME, MAX_CONTINUOUS, _LOG_FILE_HANDLE, _LOCK_FD,
@@ -231,6 +231,10 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
             pr_data = json.loads(stdout.strip()) if stdout.strip().startswith("{") else {}
             pr_url = pr_data.get("url", stdout.strip())
             pr_num = pr_data.get("number", "")
+
+            # Guard: require a valid PR number (skip non-JSON / corrupted output)
+            if not pr_num:
+                continue
 
             # Guard: only auto-repair if the PR had real code changes (not just specs)
             if pr_num:

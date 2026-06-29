@@ -474,11 +474,24 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
                         project_dir: str, spec_path: str,
                         tasks_extract_path: str = "") -> bool:
     """Execute parallel coder phase with worktree isolation."""
+    # Allow test patching via tasks.run_parallel_coders override (F022 modular refactor)
+    import sys as _sys_rpc
+    _tasks_mod = _sys_rpc.modules.get('tasks')
+    if _tasks_mod is not None:
+        _fn = getattr(_tasks_mod, 'run_parallel_coders', None)
+        if _fn is not None and _fn is not _RPC_ORIGINAL:
+            return _fn(tasks, waves, project_dir, spec_path, tasks_extract_path)
+
     panel_dir = os.path.join(project_dir, ".dokima")
     os.makedirs(panel_dir, exist_ok=True)
 
-    worktrees = WorktreeManager(project_dir)
-    locks = TaskLock(panel_dir)
+    # Allow test patching via dokima module (F022 modular refactor)
+    _dokima = _sys_rpc.modules.get('dokima')
+    _WorktreeManager = getattr(_dokima, 'WorktreeManager', WorktreeManager) if _dokima else WorktreeManager
+    _TaskLock = getattr(_dokima, 'TaskLock', TaskLock) if _dokima else TaskLock
+
+    worktrees = _WorktreeManager(project_dir)
+    locks = _TaskLock(panel_dir)
     running = {}  # task_id → Popen
 
     max_parallel = max_parallel_override if max_parallel_override is not None else 5
@@ -607,3 +620,6 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
         worktrees.cleanup_all(all_ids)
 
     return all_completed
+
+# Module-level original reference for delegation check (F022 modular refactor)
+_RPC_ORIGINAL = run_parallel_coders
