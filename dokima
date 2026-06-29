@@ -589,17 +589,45 @@ def _check_pr_body_quality(spec_text: str, failures: list) -> None:
         )
 
 
-def halt_and_revert(reason, phase, branch):
-    """Revert all changes and print failure summary for orchestrator."""
+def halt_and_revert(reason, phase, branch, task_ids=None, worktrees=None):
+    """Revert all changes and print failure summary for orchestrator.
+
+    Args:
+        reason: Why the pipeline halted.
+        phase: Which phase failed (e.g., 'PHASE 2 (Parallel Coders)').
+        branch: The main feature branch to delete.
+        task_ids: Optional list of task IDs. When provided, deletes task
+                  branches (feat/<slug>-tN) before the main branch.
+        worktrees: Optional WorktreeManager reference. When provided,
+                   calls cleanup_all() to remove worktree directories.
+    """
     print(f"\n{'═'*55}", flush=True)
     print(f"  PIPELINE HALTED — {phase} Failed", flush=True)
     print(f"{'═'*55}", flush=True)
     print(f"\nReason: {reason}", flush=True)
     print("\nReverting all changes...", flush=True)
+
+    # Delete task branches first (feat/<slug>-tN)
+    if task_ids:
+        for tid in task_ids:
+            task_branch = f"{branch}-t{tid}"
+            try:
+                git("branch", "-D", task_branch)
+            except Exception:
+                pass  # Branch might not exist if created before worktree
+
     git("checkout", DEFAULT_BRANCH)
     git("branch", "-D", branch)
     git("stash", "clear")
     print(f"  Branch '{branch}' deleted, back on master", flush=True)
+
+    # Clean up worktree directories if manager provided
+    if worktrees and task_ids:
+        try:
+            worktrees.cleanup_all(task_ids)
+        except Exception:
+            pass
+
     print("\n── Orchestrator Action Required ──", flush=True)
     print(f"  1. Review the failure context above", flush=True)
     print(f"  2. Diagnose root cause", flush=True)
@@ -789,6 +817,43 @@ class TaskLock:
     Pattern adapted from Claude Code Agent Teams (.claude/tasks/)."""
     def __init__(self, panel_dir):
         self.tasks_dir = os.path.join(panel_dir, "tasks")
+        self.cleanup_stale()
+
+    def cleanup_stale(self, stale_seconds: int = 1800) -> None:
+        """Remove lock files older than stale_seconds (default 30 min).
+
+        Lock files without a parseable timestamp are treated as corrupt
+        and removed. Missing tasks directory is silently skipped.
+        """
+        if not os.path.isdir(self.tasks_dir):
+            return
+        cutoff = time.time() - stale_seconds
+        try:
+            for entry in os.listdir(self.tasks_dir):
+                if not entry.endswith(".lock"):
+                    continue
+                lockfile = os.path.join(self.tasks_dir, entry)
+                try:
+                    with open(lockfile) as f:
+                        content = f.read()
+                    ts_match = re.search(r"timestamp:\s*([\d.]+)", content)
+                    if ts_match:
+                        lock_ts = float(ts_match.group(1))
+                        if lock_ts < cutoff:
+                            os.remove(lockfile)
+                    else:
+                        # No timestamp found — corrupted, remove
+                        os.remove(lockfile)
+                except (PermissionError, OSError):
+                    pass  # Can't read/delete, skip
+                except ValueError:
+                    # Unparseable timestamp — corrupted, remove
+                    try:
+                        os.remove(lockfile)
+                    except OSError:
+                        pass
+        except OSError:
+            pass  # Can't list directory, skip
 
     def claim(self, task_id: str, agent_id: str) -> bool:
         os.makedirs(self.tasks_dir, exist_ok=True)
@@ -916,7 +981,7 @@ class TaskDAG:
             all_files.extend((tid, f) for f in self.tasks[tid].files)
         seen = {}
         for tid, f in all_files:
-            f_norm = f.strip().lower()
+            f_norm = os.path.normpath(f.strip()).lower()
             if f_norm in seen and seen[f_norm] != tid:
                 print(f"  ⚠ File collision: {f} claimed by tasks {seen[f_norm]} and {tid}", flush=True)
                 return False
@@ -1772,21 +1837,52 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
 
 
 def _reap_completed(running: dict, tasks: dict[str, Task], locks: TaskLock) -> list[str]:
-    """Check for completed/failed processes. Returns list of task IDs that finished."""
+    """Check for completed/failed processes. Returns list of task IDs that finished.
+
+    Uses non-blocking stdout drain to avoid proc.communicate() hanging on zombie
+    children that hold pipe handles open. Escalates to SIGKILL if wait() times out
+    after 2 seconds, marking the task as 'orphaned'.
+    """
     finished = []
     for tid, proc in list(running.items()):
         ret = proc.poll()
         if ret is not None:
-            output = ""
+            # Drain stdout in non-blocking chunks (avoids communicate() hang)
+            output_chunks = []
+            if proc.stdout is not None:
+                try:
+                    while True:
+                        chunk = proc.stdout.read(4096)
+                        if not chunk:
+                            break
+                        if isinstance(chunk, bytes):
+                            output_chunks.append(chunk.decode(errors="replace"))
+                        else:
+                            output_chunks.append(str(chunk))
+                except BrokenPipeError:
+                    pass
+                except Exception:
+                    pass
+            output = "".join(output_chunks)
+
+            # Reap the process; escalate to SIGKILL if stuck
+            orphaned = False
             try:
-                remaining, _ = proc.communicate(timeout=5)
-                if remaining:
-                    output = remaining.decode(errors="replace") if isinstance(remaining, bytes) else remaining
-            except Exception:
-                pass
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+                ret = proc.poll()
+                orphaned = True
 
             task = tasks[tid]
-            if ret == 0:
+            if orphaned or (ret is not None and ret < 0):
+                task.status = "orphaned"
+                print(f"  ⚠ Task {tid} orphaned (SIGKILL)", flush=True)
+            elif ret == 0:
                 task.status = "completed"
                 print(f"  ✅ Task {tid} completed", flush=True)
             else:
@@ -1887,115 +1983,126 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
     print(f"  Max parallel agents: {max_parallel}", flush=True)
 
     all_completed = True
+    try:
 
-    for wave_num, wave in enumerate(waves, 1):
-        print(f"\n── Wave {wave_num}: {len(wave)} task(s) ──", flush=True)
-        wave_ids = ", ".join(f"Task {tid}" for tid in wave)
-        print(f"  {wave_ids}", flush=True)
+        for wave_num, wave in enumerate(waves, 1):
+            print(f"\n── Wave {wave_num}: {len(wave)} task(s) ──", flush=True)
+            wave_ids = ", ".join(f"Task {tid}" for tid in wave)
+            print(f"  {wave_ids}", flush=True)
 
-        # Validate no file collisions within the wave
-        dag = TaskDAG()
-        dag.tasks = tasks
-        if not dag.validate_parallel_files(wave):
-            print("  ⚠ File collision detected — run sequentially instead", flush=True)
-            # Fall back to sequential execution using spawn_agent (mockable, synchronous)
+            # Validate no file collisions within the wave
+            dag = TaskDAG()
+            dag.tasks = tasks
+            if not dag.validate_parallel_files(wave):
+                print("  ⚠ File collision detected — run sequentially instead", flush=True)
+                # Fall back to sequential execution using spawn_agent (mockable, synchronous)
+                for tid in wave:
+                    if not locks.claim(tid, f"coder-wave{wave_num}-seq"):
+                        continue
+                    task = tasks[tid]
+                    parent_branch = DEFAULT_BRANCH
+                    if task.dependencies:
+                        dep_id = task.dependencies[0]
+                        if dep_id in tasks and tasks[dep_id].branch:
+                            parent_branch = tasks[dep_id].branch
+                    wt_path = worktrees.create(tid, task.branch)
+
+                    # Build coder prompt inline — same as spawn_coder_in_worktree
+                    spec_ref = tasks_extract_path if tasks_extract_path else spec_path
+                    spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
+                    coder_prompt = f"""Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
+
+    You are working on Task {task.id}: {task.description}
+    Files to create/modify: {', '.join(task.files) if task.files else 'determine from spec'}
+
+    FIRST: Verify you are in the correct worktree and on branch '{task.branch}' (parent: {parent_branch}).
+
+    TDD — TWO SEPARATE COMMITS on this branch:
+    RED: Write tests → {TEST_CMD} must FAIL → git add <test files only> && git commit -m "test: {task.description[:60]}"
+    GREEN: Write minimum code → {TEST_CMD} must PASS → {BUILD_CMD} must succeed → git add <impl files only> && git commit -m "feat: {task.description[:60]}"
+    CRITICAL: Two distinct commits, RED before GREEN. No task numbers in commit messages. Do NOT modify files outside task scope.
+    BEFORE PUSHING: Check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README\". Run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only push when clean.
+    Report: both commit hashes, files changed, test results, lint status, branch name.
+    """
+                    try:
+                        output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
+                                             coder_prompt, timeout=900, cwd=wt_path, fallback_model=FALLBACK_MODELS.get("coder"))
+                        task.status = "completed"
+                        task.output = output
+                        print(f"  ✅ Task {tid} completed ({len(output)} chars)", flush=True)
+                    except Exception as e:
+                        task.status = "failed"
+                        task.output = str(e)
+                        print(f"  ❌ Task {tid} failed: {e}", flush=True)
+                    locks.release(tid)
+            else:
+                # Parallel spawn — honour max_parallel cap
+                spawned_this_wave = 0
+                overflow = []  # tasks that exceed the cap, run after first batch
+
+                for tid in wave:
+                    if spawned_this_wave >= max_parallel:
+                        overflow.append(tid)
+                        continue
+                    if not locks.claim(tid, f"coder-wave{wave_num}"):
+                        print(f"  ⚠ Task {tid} already claimed — skipping", flush=True)
+                        continue
+                    task = tasks[tid]
+                    parent_branch = DEFAULT_BRANCH
+                    if task.dependencies:
+                        dep_id = task.dependencies[0]
+                        if dep_id in tasks and tasks[dep_id].branch:
+                            parent_branch = tasks[dep_id].branch
+                    wt_path = worktrees.create(tid, task.branch)
+                    proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
+                    running[tid] = proc
+                    spawned_this_wave += 1
+
+                if overflow:
+                    print(f"  ⚠ {len(overflow)} task(s) exceed max_parallel ({max_parallel}) — queued", flush=True)
+
+                _poll_until_wave_done(wave, running, tasks, locks, timeout=900)
+
+                # Run overflow tasks in sub-waves (parallel batches)
+                overflow_idx = 0
+                while overflow_idx < len(overflow):
+                    sub_wave = overflow[overflow_idx:overflow_idx + max_parallel]
+                    overflow_idx += len(sub_wave)
+
+                    print(f"  ⚠ Overflow sub-wave: {len(sub_wave)} task(s)", flush=True)
+
+                    # Spawn all tasks in this sub-wave
+                    for tid in sub_wave:
+                        if not locks.claim(tid, f"coder-wave{wave_num}-overflow"):
+                            continue
+                        task = tasks[tid]
+                        parent_branch = DEFAULT_BRANCH
+                        if task.dependencies:
+                            dep_id = task.dependencies[0]
+                            if dep_id in tasks and tasks[dep_id].branch:
+                                parent_branch = tasks[dep_id].branch
+                        wt_path = worktrees.create(tid, task.branch)
+                        proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
+                        running[tid] = proc
+
+                    # Poll the sub-wave in parallel
+                    _poll_until_wave_done(sub_wave, running, tasks, locks, timeout=900)
+
+            # Report wave results
             for tid in wave:
-                if not locks.claim(tid, f"coder-wave{wave_num}-seq"):
-                    continue
                 task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
+                if task.status == "failed":
+                    all_completed = False
+                    print(f"  ❌ Task {tid} FAILED: {task.description[:80]}", flush=True)
+                elif task.status == "timed_out":
+                    all_completed = False
+                    print(f"  ⚠ Task {tid} TIMED OUT: {task.description[:80]}", flush=True)
+                elif task.status == "completed":
+                    print(f"  ✅ Task {tid} done: {task.description[:80]}", flush=True)
 
-                # Build coder prompt inline — same as spawn_coder_in_worktree
-                spec_ref = tasks_extract_path if tasks_extract_path else spec_path
-                spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
-                coder_prompt = f"""Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
-
-You are working on Task {task.id}: {task.description}
-Files to create/modify: {', '.join(task.files) if task.files else 'determine from spec'}
-
-FIRST: Verify you are in the correct worktree and on branch '{task.branch}' (parent: {parent_branch}).
-
-TDD — TWO SEPARATE COMMITS on this branch:
-RED: Write tests → {TEST_CMD} must FAIL → git add <test files only> && git commit -m "test: {task.description[:60]}"
-GREEN: Write minimum code → {TEST_CMD} must PASS → {BUILD_CMD} must succeed → git add <impl files only> && git commit -m "feat: {task.description[:60]}"
-CRITICAL: Two distinct commits, RED before GREEN. No task numbers in commit messages. Do NOT modify files outside task scope.
-BEFORE PUSHING: Check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README\". Run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only push when clean.
-Report: both commit hashes, files changed, test results, lint status, branch name.
-"""
-                try:
-                    output = spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                                         coder_prompt, timeout=900, cwd=wt_path, fallback_model=FALLBACK_MODELS.get("coder"))
-                    task.status = "completed"
-                    task.output = output
-                    print(f"  ✅ Task {tid} completed ({len(output)} chars)", flush=True)
-                except Exception as e:
-                    task.status = "failed"
-                    task.output = str(e)
-                    print(f"  ❌ Task {tid} failed: {e}", flush=True)
-                locks.release(tid)
-        else:
-            # Parallel spawn — honour max_parallel cap
-            spawned_this_wave = 0
-            overflow = []  # tasks that exceed the cap, run after first batch
-
-            for tid in wave:
-                if spawned_this_wave >= max_parallel:
-                    overflow.append(tid)
-                    continue
-                if not locks.claim(tid, f"coder-wave{wave_num}"):
-                    print(f"  ⚠ Task {tid} already claimed — skipping", flush=True)
-                    continue
-                task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
-                proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
-                running[tid] = proc
-                spawned_this_wave += 1
-
-            if overflow:
-                print(f"  ⚠ {len(overflow)} task(s) exceed max_parallel ({max_parallel}) — queued", flush=True)
-
-            _poll_until_wave_done(wave, running, tasks, locks, timeout=900)
-
-            # Run overflow tasks
-            for tid in overflow:
-                if not locks.claim(tid, f"coder-wave{wave_num}-overflow"):
-                    continue
-                task = tasks[tid]
-                parent_branch = DEFAULT_BRANCH
-                if task.dependencies:
-                    dep_id = task.dependencies[0]
-                    if dep_id in tasks and tasks[dep_id].branch:
-                        parent_branch = tasks[dep_id].branch
-                wt_path = worktrees.create(tid, task.branch)
-                proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
-                running[tid] = proc
-                _poll_until_wave_done([tid], running, tasks, locks, timeout=900)
-
-        # Report wave results
-        for tid in wave:
-            task = tasks[tid]
-            if task.status == "failed":
-                all_completed = False
-                print(f"  ❌ Task {tid} FAILED: {task.description[:80]}", flush=True)
-            elif task.status == "timed_out":
-                all_completed = False
-                print(f"  ⚠ Task {tid} TIMED OUT: {task.description[:80]}", flush=True)
-            elif task.status == "completed":
-                print(f"  ✅ Task {tid} done: {task.description[:80]}", flush=True)
-
-    # Cleanup all worktrees
-    all_ids = list(tasks.keys())
-    worktrees.cleanup_all(all_ids)
+    finally:
+        all_ids = list(tasks.keys())
+        worktrees.cleanup_all(all_ids)
 
     return all_completed
 
@@ -5241,23 +5348,25 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
         waves = dag.compute_waves()
         print(f"  Waves: {' → '.join('[' + ','.join(w) + ']' for w in waves)}", flush=True)
         all_ok = run_parallel_coders(dag.tasks, waves, PROJECT_DIR, spec_path, tasks_extract_path)
+        task_ids = list(dag.tasks.keys())
+        wt_mgr = WorktreeManager(PROJECT_DIR)
         if not all_ok:
             print("\n  ⚠ Some tasks failed — checking if feature is still viable", flush=True)
             completed = [t for t in dag.tasks.values() if t.status == "completed"]
             if not completed:
-                halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch)
+                halt_and_revert("All parallel coders failed", "PHASE 2 (Parallel Coders)", branch, task_ids=task_ids, worktrees=wt_mgr)
                 coder_failed = True
                 pr_url = None
                 verdict = "CODER_FAILED"
             else:
                 print(f"  {len(completed)}/{len(dag.tasks)} tasks completed — proceeding with partial results", flush=True)
                 if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
-                    halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                    halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch, task_ids=task_ids, worktrees=wt_mgr)
                     coder_failed = True
                     verdict = "CODER_FAILED"
         else:
             if not merge_worktree_branches(branch, dag.tasks, WorktreeManager(PROJECT_DIR), PROJECT_DIR):
-                halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch)
+                halt_and_revert("Merge assembly failed", "PHASE 2 (Merge)", branch, task_ids=task_ids, worktrees=wt_mgr)
                 coder_failed = True
                 verdict = "CODER_FAILED"
 
