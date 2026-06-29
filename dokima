@@ -589,17 +589,45 @@ def _check_pr_body_quality(spec_text: str, failures: list) -> None:
         )
 
 
-def halt_and_revert(reason, phase, branch):
-    """Revert all changes and print failure summary for orchestrator."""
+def halt_and_revert(reason, phase, branch, task_ids=None, worktrees=None):
+    """Revert all changes and print failure summary for orchestrator.
+
+    Args:
+        reason: Why the pipeline halted.
+        phase: Which phase failed (e.g., 'PHASE 2 (Parallel Coders)').
+        branch: The main feature branch to delete.
+        task_ids: Optional list of task IDs. When provided, deletes task
+                  branches (feat/<slug>-tN) before the main branch.
+        worktrees: Optional WorktreeManager reference. When provided,
+                   calls cleanup_all() to remove worktree directories.
+    """
     print(f"\n{'═'*55}", flush=True)
     print(f"  PIPELINE HALTED — {phase} Failed", flush=True)
     print(f"{'═'*55}", flush=True)
     print(f"\nReason: {reason}", flush=True)
     print("\nReverting all changes...", flush=True)
+
+    # Delete task branches first (feat/<slug>-tN)
+    if task_ids:
+        for tid in task_ids:
+            task_branch = f"{branch}-t{tid}"
+            try:
+                git("branch", "-D", task_branch)
+            except Exception:
+                pass  # Branch might not exist if created before worktree
+
     git("checkout", DEFAULT_BRANCH)
     git("branch", "-D", branch)
     git("stash", "clear")
     print(f"  Branch '{branch}' deleted, back on master", flush=True)
+
+    # Clean up worktree directories if manager provided
+    if worktrees and task_ids:
+        try:
+            worktrees.cleanup_all(task_ids)
+        except Exception:
+            pass
+
     print("\n── Orchestrator Action Required ──", flush=True)
     print(f"  1. Review the failure context above", flush=True)
     print(f"  2. Diagnose root cause", flush=True)
