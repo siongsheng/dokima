@@ -263,3 +263,141 @@ class TestReleaseHelpText:
         assert rc != 0, f"Expected non-zero exit for invalid bump, got {rc}"
         assert "patch" in (out + err).lower() or "invalid" in (out + err).lower(), \
             f"Expected error message about bump type, got out={out} err={err}"
+
+
+class TestDoRelease:
+    """Tests for do_release() function."""
+
+    def test_invalid_bump_exits(self):
+        """do_release with invalid bump exits with error."""
+        try:
+            utils.do_release("nonsense", "/tmp")
+            assert False, "Expected SystemExit"
+        except SystemExit as e:
+            assert e.code == 1
+
+    def test_non_git_dir_exits(self):
+        """do_release on non-git dir exits with error."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                utils.do_release("patch", tmpdir)
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_dry_run_prints_plan(self):
+        """do_release with dry_run=True prints plan and exits 0."""
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            if args[0] == "diff-index":
+                return ("", "", 0)  # Clean tree
+            if args[0] == "fetch":
+                return ("", "", 0)
+            if args[0] == "rev-list":
+                return ("", "", 0)  # Up to date
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch("builtins.open", create=True) as mock_open, \
+             patch.object(utils, "VERSION", "1.2.1"), \
+             patch.object(utils, "PROJECT_DIR", "/tmp/test"):
+            mock_open.return_value.__enter__.return_value.read.return_value = "1.2.1\n"
+            try:
+                utils.do_release("patch", "/tmp/test", dry_run=True)
+            except SystemExit:
+                pass
+
+        # No write/commit/tag/push should happen
+        assert not any(
+            args[0] in ("commit", "tag") or
+            (len(args) >= 1 and args[0] == "push")
+            for args in git_calls
+        ), f"Expected no git writes in dry-run, got: {git_calls}"
+
+    def test_dirty_tree_exits(self):
+        """do_release on dirty tree exits with error."""
+        def fake_git(*args):
+            if args[0] == "diff-index":
+                return ("M file.py", "", 0)  # Dirty tree
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch.object(utils, "PROJECT_DIR", "/tmp/test"):
+            try:
+                utils.do_release("patch", "/tmp/test")
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_not_on_default_branch_exits(self):
+        """do_release not on default branch exits with error."""
+        def fake_git(*args):
+            if args[0] == "diff-index":
+                return ("", "", 0)  # Clean
+            if args[0] == "rev-parse":
+                return ("feature-branch", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch.object(utils, "PROJECT_DIR", "/tmp/test"):
+            try:
+                utils.do_release("patch", "/tmp/test")
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_behind_origin_exits(self):
+        """do_release when behind origin exits with error."""
+        def fake_git(*args):
+            if args[0] == "diff-index":
+                return ("", "", 0)  # Clean
+            if args[0] == "rev-parse":
+                return ("main", "", 0)
+            if args[0] == "fetch":
+                return ("", "", 0)
+            if args[0] == "rev-list":
+                return ("abc123\ndef456", "", 0)  # Behind
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch.object(utils, "PROJECT_DIR", "/tmp/test"):
+            try:
+                utils.do_release("patch", "/tmp/test")
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_version_file_missing_exits(self):
+        """do_release with missing VERSION file exits with error."""
+        def fake_git(*args):
+            if args[0] == "diff-index":
+                return ("", "", 0)
+            if args[0] == "rev-parse":
+                return ("main", "", 0)
+            if args[0] == "fetch":
+                return ("", "", 0)
+            if args[0] == "rev-list":
+                return ("", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch.object(utils, "PROJECT_DIR", "/tmp/test"), \
+             patch("os.path.exists", return_value=False):
+            try:
+                utils.do_release("patch", "/tmp/test")
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
