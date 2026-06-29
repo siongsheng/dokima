@@ -2,7 +2,7 @@
 import os
 import sys
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 # Reuse conftest's _load_panel to get a fresh dokima module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -128,4 +128,92 @@ class TestWorktreeCleanupOnException:
         )
         assert "1" in cleanup_called[0], (
             f"cleanup_all should include task ID 1, got {cleanup_called}"
+        )
+
+
+class TestHaltAndRevertTaskBranches:
+    """Task 2: halt_and_revert cleans task branches on parallel coder failure."""
+
+    def test_halt_and_revert_with_task_ids_deletes_task_branches(self):
+        """halt_and_revert with task_ids deletes feat/<slug>-tN branches first."""
+        panel = _load_panel()
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            return ("", "", 0)
+
+        with patch.object(panel, "git", side_effect=fake_git), \
+             patch.object(panel, "DEFAULT_BRANCH", "main"):
+            panel.halt_and_revert(
+                "All parallel coders failed",
+                "PHASE 2 (Parallel Coders)",
+                "feat/test-feature",
+                task_ids=["1", "2", "3"]
+            )
+
+        # Should have called git branch -D for each task branch
+        task_deletes = [c for c in git_calls if c[0] == "branch" and c[1] == "-D" and "-t" in c[2]]
+        assert len(task_deletes) == 3, (
+            f"Expected 3 task branch deletes, got {len(task_deletes)}: {task_deletes}"
+        )
+        # Task branches should be feat/test-feature-t1, feat/test-feature-t2, feat/test-feature-t3
+        expected_branches = {"feat/test-feature-t1", "feat/test-feature-t2", "feat/test-feature-t3"}
+        actual_branches = {c[2] for c in task_deletes}
+        assert actual_branches == expected_branches, (
+            f"Task branches don't match. Expected {expected_branches}, got {actual_branches}"
+        )
+        # Main branch should still be deleted
+        main_deletes = [c for c in git_calls if c[0] == "branch" and c[1] == "-D" and c[2] == "feat/test-feature"]
+        assert len(main_deletes) == 1, "Main feature branch should also be deleted"
+
+    def test_halt_and_revert_without_task_ids_backward_compatible(self):
+        """halt_and_revert without task_ids preserves original behavior."""
+        panel = _load_panel()
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            return ("", "", 0)
+
+        with patch.object(panel, "git", side_effect=fake_git), \
+             patch.object(panel, "DEFAULT_BRANCH", "main"):
+            panel.halt_and_revert(
+                "Some error", "PHASE 2 (Coder)", "feat/old-feature"
+            )
+
+        # Only the main branch should be deleted
+        branch_deletes = [c for c in git_calls if c[0] == "branch" and c[1] == "-D"]
+        assert len(branch_deletes) == 1, (
+            f"Without task_ids, only 1 branch delete expected, got {len(branch_deletes)}: {branch_deletes}"
+        )
+        assert branch_deletes[0][2] == "feat/old-feature"
+
+    def test_halt_and_revert_with_worktrees_calls_cleanup_all(self):
+        """halt_and_revert with worktrees parameter calls cleanup_all."""
+        panel = _load_panel()
+        git_calls = []
+        cleanup_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            return ("", "", 0)
+
+        class FakeWorktreeManager:
+            def cleanup_all(self, task_ids):
+                cleanup_calls.append(list(task_ids))
+
+        with patch.object(panel, "git", side_effect=fake_git), \
+             patch.object(panel, "DEFAULT_BRANCH", "main"):
+            panel.halt_and_revert(
+                "Merge failed", "PHASE 2 (Merge)", "feat/test-feature",
+                task_ids=["1", "2"],
+                worktrees=FakeWorktreeManager()
+            )
+
+        assert len(cleanup_calls) == 1, (
+            f"cleanup_all should be called once, got {len(cleanup_calls)}"
+        )
+        assert cleanup_calls[0] == ["1", "2"], (
+            f"cleanup_all should receive task_ids ['1', '2'], got {cleanup_calls[0]}"
         )
