@@ -2005,27 +2005,39 @@ def archive_specs_for_feature(spec_path, branch, pr_url):
     return False
 
 def _prune_old_tags(keep_count=10):
-    """Delete old release tags from origin, keeping the newest keep_count.
-    Only prunes tags matching vX.Y.Z pattern. If ≤keep_count tags exist,
-    or no tags match the pattern, the function is a silent no-op."""
-    stdout, _, rc = git("tag", "--sort=-v:refname")
-    if rc != 0:
-        return
-
+    """Delete old release tags beyond keep_count, keeping only the newest.
+    Only considers tags matching vX.Y.Z pattern.
+    If no tags to prune, silent no-op.
+    Returns number of tags pruned."""
     import re as _re
-    _semver_pat = _re.compile(r'^v\d+\.\d+\.\d+$')
-    tags = [t.strip() for t in stdout.split('\n')
-            if t.strip() and _semver_pat.match(t.strip())]
+    stdout, stderr, rc = git("tag", "--sort=-v:refname")
+    if rc != 0 or not stdout:
+        return 0
 
-    if len(tags) <= keep_count:
-        return
+    all_tags = stdout.strip().split("\n")
+    # Filter to vX.Y.Z pattern only
+    versioned = [t.strip() for t in all_tags
+                 if _re.match(r'^v\d+\.\d+\.\d+$', t.strip())]
 
-    for tag in tags[keep_count:]:
-        print(f"Pruning old release tag: {tag}", flush=True)
+    if len(versioned) <= keep_count:
+        return 0
+
+    # Tags to delete (oldest beyond keep_count)
+    to_delete = versioned[keep_count:]
+
+    pruned = 0
+    for tag in to_delete:
+        print(f"  Pruning old tag: {tag}")
         try:
-            git("push", "origin", "--delete", tag)
+            _, _, push_rc = git("push", "origin", "--delete", tag)
+            if push_rc != 0:
+                print(f"  Warning: failed to delete tag {tag} (may already be deleted)")
+            else:
+                pruned += 1
         except Exception:
-            print(f"Warning: failed to prune {tag}", flush=True)
+            print(f"  Warning: failed to delete tag {tag} (may already be deleted)")
+
+    return pruned
 
 
 # Module-level original references for delegation checks (F022 modular refactor)
