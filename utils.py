@@ -977,7 +977,7 @@ def _bump_version(current, bump):
             f"Invalid bump type: {bump!r}. Must be one of: patch, minor, major"
         )
 
-    current = current.strip()
+    current = current.strip().lstrip("v")
     parts = current.split(".")
     if len(parts) != 3:
         raise ValueError(
@@ -1177,7 +1177,7 @@ def do_release(bump, project_dir, dry_run=False):
             f"--title \"{tag_name}\" --target {default_branch}"
         )
         print("[DRY RUN] No changes made.")
-        return
+        sys.exit(0)
 
     # ── 10. Write new VERSION (atomic: temp + rename) ───────────────────
     try:
