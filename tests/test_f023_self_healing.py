@@ -382,3 +382,66 @@ def test_vet_hash_cycle_different_output_proceeds(panel, tmpdir_path, monkeypatc
     assert mock_spawn.called
     # PR should have been created
     assert result.get("pr_url") is not None
+
+
+# ── Task 4: Lock-age auto-cleanup in _get_lock_state (--status) ─────────
+
+def test_get_lock_state_old_lock_cleaned(panel, tmpdir_path, monkeypatch):
+    """_get_lock_state removes lock file older than threshold even if PID alive."""
+    panel.PROJECT_DIR = tmpdir_path
+    lp = panel._lock_path(tmpdir_path)
+
+    # Write our PID to lock file (simulates a real process with our PID)
+    with open(lp, "w") as f:
+        f.write(f"{os.getpid()}\n")
+
+    # Set mtime to 13 hours ago (exceeds default threshold)
+    old_mtime = time.time() - (13 * 3600)
+    os.utime(lp, (old_mtime, old_mtime))
+
+    # Mock _check_pid to return True (PID is alive — us!)
+    with patch.object(panel, '_check_pid', return_value=True):
+        running, pid, info = panel._get_lock_state(tmpdir_path)
+
+    # Should NOT be running — lock was removed due to age
+    assert running is False
+    assert pid == ""
+    # Lock file should be gone
+    assert not os.path.exists(lp)
+
+
+def test_get_lock_state_fresh_lock_preserved(panel, tmpdir_path, monkeypatch):
+    """_get_lock_state preserves fresh lock file with live PID."""
+    panel.PROJECT_DIR = tmpdir_path
+    lp = panel._lock_path(tmpdir_path)
+
+    # Write our PID to lock file
+    with open(lp, "w") as f:
+        f.write(f"{os.getpid()}\n")
+
+    # Fresh mtime (now)
+    os.utime(lp, (time.time(), time.time()))
+
+    # Mock _check_pid to return True (PID is alive — us!)
+    with patch.object(panel, '_check_pid', return_value=True):
+        running, pid, info = panel._get_lock_state(tmpdir_path)
+
+    # Should still be running — lock is fresh
+    assert running is True
+    assert pid == str(os.getpid())
+    # Lock file should still exist
+    assert os.path.exists(lp)
+
+    # Clean up
+    try:
+        os.remove(lp)
+    except OSError:
+        pass
+
+
+def test_get_lock_state_lock_missing_returns_false(panel, tmpdir_path):
+    """_get_lock_state returns False when no lock file exists."""
+    running, pid, info = panel._get_lock_state(tmpdir_path)
+    assert running is False
+    assert pid == ""
+    assert info == {}
