@@ -5,7 +5,7 @@ Imports from utils, agent, and tasks.
 """
 import sys, os, json, re, subprocess, time
 
-from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
+from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
                    clean_spec_content, verify_spec_quality, generate_codebase_map,
