@@ -68,6 +68,7 @@ CONTROL:
   dokima --list-crons                    List all scheduled pipelines
   dokima --version                       Print version and exit
   dokima --upgrade                       Check for newer version and show upgrade instructions
+  dokima --release [patch|minor|major] [--dry-run] [project_dir]  Bump version, tag, and publish GitHub Release (patch: bug fixes, minor: new features, major: breaking changes)
 
 FLAGS:
   --interactive        Show human gate (with --next/--continuous)
