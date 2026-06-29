@@ -8,3 +8,10 @@ def test_help_text_documents_panel_max_parallel(panel):
         "PANEL_MAX_PARALLEL should be documented in HELP_TEXT "
         "since --max-parallel=N already is"
     )
+
+
+def test_help_text_documents_release(panel):
+    """--release should be documented in HELP_TEXT COMMANDS section."""
+    assert "--release" in panel.HELP_TEXT, (
+        "--release should be documented in HELP_TEXT COMMANDS section"
+    )
