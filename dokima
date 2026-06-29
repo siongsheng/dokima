@@ -817,6 +817,43 @@ class TaskLock:
     Pattern adapted from Claude Code Agent Teams (.claude/tasks/)."""
     def __init__(self, panel_dir):
         self.tasks_dir = os.path.join(panel_dir, "tasks")
+        self.cleanup_stale()
+
+    def cleanup_stale(self, stale_seconds: int = 1800) -> None:
+        """Remove lock files older than stale_seconds (default 30 min).
+
+        Lock files without a parseable timestamp are treated as corrupt
+        and removed. Missing tasks directory is silently skipped.
+        """
+        if not os.path.isdir(self.tasks_dir):
+            return
+        cutoff = time.time() - stale_seconds
+        try:
+            for entry in os.listdir(self.tasks_dir):
+                if not entry.endswith(".lock"):
+                    continue
+                lockfile = os.path.join(self.tasks_dir, entry)
+                try:
+                    with open(lockfile) as f:
+                        content = f.read()
+                    ts_match = re.search(r"timestamp:\s*([\d.]+)", content)
+                    if ts_match:
+                        lock_ts = float(ts_match.group(1))
+                        if lock_ts < cutoff:
+                            os.remove(lockfile)
+                    else:
+                        # No timestamp found — corrupted, remove
+                        os.remove(lockfile)
+                except (PermissionError, OSError):
+                    pass  # Can't read/delete, skip
+                except ValueError:
+                    # Unparseable timestamp — corrupted, remove
+                    try:
+                        os.remove(lockfile)
+                    except OSError:
+                        pass
+        except OSError:
+            pass  # Can't list directory, skip
 
     def claim(self, task_id: str, agent_id: str) -> bool:
         os.makedirs(self.tasks_dir, exist_ok=True)
