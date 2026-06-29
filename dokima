@@ -26,6 +26,7 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    validate_checkpoint, acquire_lock, _cleanup_lock, _signal_handler,
                    try_auto_merge, _supplement_pr_sections, _detect_default_branch,
                    _set_gh_token, show_help, show_help_json, check_upgrade, _version_newer,
+                   do_release,
                    _parse_status_md, _make_status_entry, update_status_md,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    handle_status, handle_stop, handle_kill, handle_list_crons,
@@ -102,6 +103,8 @@ def main():
     is_upgrade = False
     is_list_crons = False
     is_fix = False
+    is_release = False
+    release_bump = None
     is_map = False
     map_full = False
     is_add = False
@@ -120,6 +123,8 @@ def main():
     for arg in sys.argv[1:]:
         if skip_next:
             skip_next = False
+            if is_release:
+                release_bump = arg
             continue
         if arg in ("--help", "-h"):
             is_help = True
@@ -160,6 +165,10 @@ def main():
             continue
         if arg == "--fix":
             is_fix = True
+            continue
+        if arg == "--release":
+            is_release = True
+            skip_next = True
             continue
         if arg == "--map":
             is_map = True
@@ -269,8 +278,8 @@ def main():
             break
 
     # ── Determine PROJECT_DIR and feature ──
-    if is_next or is_stop or is_kill or is_status or is_fix or is_map:
-        if is_stop or is_kill or is_status or is_map:
+    if is_next or is_stop or is_kill or is_status or is_fix or is_map or is_release:
+        if is_stop or is_kill or is_status or is_map or is_release:
             if len(filtered_argv) >= 1:
                 PROJECT_DIR = os.path.abspath(filtered_argv[0])
             else:

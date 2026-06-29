@@ -963,6 +963,20 @@ def _version_newer(a, b):
     except (ValueError, AttributeError):
         return False
 
+def do_release(bump, project_dir, dry_run=False):
+    """Bump VERSION, create tag, generate changelog, publish GitHub Release.
+
+    Args:
+        bump: 'patch', 'minor', or 'major'
+        project_dir: path to git repository with a VERSION file
+        dry_run: if True, print plan without making changes
+
+    Precondition checks: git repo, default branch, clean tree, up-to-date with origin.
+    Exits on failure with clear message and exit 1.
+    """
+    # TODO: full implementation in Task 3
+    raise NotImplementedError("do_release not yet implemented")
+
 def _parse_status_md(status_path: str) -> tuple:
     """Parse STATUS.md into (header, active_entries, archived_entries).
        Returns defaults if file doesn't exist."""
