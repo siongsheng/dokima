@@ -338,3 +338,53 @@ class TestReapCompletedHardening:
         assert "partial data" in t1.output
         locks.release.assert_called_once_with("1")
 
+
+class TestValidateParallelFilesNormpath:
+    """Task 4: validate_parallel_files applies os.path.normpath to catch ./ and //."""
+
+    def test_dot_slash_normalized(self, panel):
+        """'./src/a.py' and 'src/a.py' should collide."""
+        dag = panel.TaskDAG()
+        t1 = panel.Task("1", "T1", ["./src/a.py"], [], True)
+        t2 = panel.Task("2", "T2", ["src/a.py"], [], True)
+        dag.tasks = {"1": t1, "2": t2}
+        assert not dag.validate_parallel_files(["1", "2"]), \
+            "'./src/a.py' and 'src/a.py' should collide after normpath"
+
+    def test_double_slash_normalized(self, panel):
+        """'src//a.py' and 'src/a.py' should collide."""
+        dag = panel.TaskDAG()
+        t1 = panel.Task("1", "T1", ["src//a.py"], [], True)
+        t2 = panel.Task("2", "T2", ["src/a.py"], [], True)
+        dag.tasks = {"1": t1, "2": t2}
+        assert not dag.validate_parallel_files(["1", "2"]), \
+            "'src//a.py' and 'src/a.py' should collide after normpath"
+
+    def test_no_collision_different_files(self, panel):
+        """'a/b/c.py' and 'd/e/f.py' should NOT collide."""
+        dag = panel.TaskDAG()
+        t1 = panel.Task("1", "T1", ["a/b/c.py"], [], True)
+        t2 = panel.Task("2", "T2", ["d/e/f.py"], [], True)
+        dag.tasks = {"1": t1, "2": t2}
+        assert dag.validate_parallel_files(["1", "2"]), \
+            "Different files should not collide"
+
+    def test_empty_file_list_skipped(self, panel):
+        """Tasks with empty file lists should not cause collision."""
+        dag = panel.TaskDAG()
+        t1 = panel.Task("1", "T1", [], [], True)
+        t2 = panel.Task("2", "T2", ["src/a.py"], [], True)
+        dag.tasks = {"1": t1, "2": t2}
+        assert dag.validate_parallel_files(["1", "2"]), \
+            "Empty file list should not collide"
+
+    def test_normpath_is_idempotent(self, panel):
+        """Applying normpath twice gives same result as once."""
+        dag = panel.TaskDAG()
+        t1 = panel.Task("1", "T1", ["./src/utils.py"], [], True)
+        t2 = panel.Task("2", "T2", ["./src/utils.py"], [], True)
+        dag.tasks = {"1": t1, "2": t2}
+        # Same file claimed by two tasks is a collision
+        assert not dag.validate_parallel_files(["1", "2"]), \
+            "Same file claimed twice should collide"
+
