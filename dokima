@@ -314,6 +314,12 @@ def main():
     # ── CONTROL FLAGS: early exit (priority order) ──
     if is_upgrade:
         check_upgrade()
+    if is_release:
+        if release_bump not in ("patch", "minor", "major"):
+            print("ERROR: Invalid bump type. Use patch, minor, or major.")
+            print("Usage: dokima --release <patch|minor|major> [project_dir]")
+            sys.exit(1)
+        do_release(release_bump, PROJECT_DIR)
     if is_version:
         print(f"dokima v{VERSION}")
         sys.exit(0)
