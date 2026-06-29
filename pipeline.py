@@ -5,6 +5,9 @@ Imports from utils, agent, tasks, and roadmap.
 """
 import sys, os, json, re, subprocess, time
 
+# Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
+_IMPORTING_PANEL = None
+
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
@@ -126,6 +129,13 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
 def discover_blocked_pr():
     """Detect most recent BLOCKED PR via gh CLI.
     Returns {number, title, headRefName, body} or None."""
+    # Allow test patching via dokima.discover_blocked_pr override (F022 modular refactor)
+    dokima_mod = _IMPORTING_PANEL
+    if dokima_mod is not None:
+        override = getattr(dokima_mod, 'discover_blocked_pr', None)
+        if override is not None and override is not discover_blocked_pr:
+            return override()
+
     global REPO
     stdout, _, rc = gh("pr", "list", "--state", "open",
                        "--repo", REPO,
