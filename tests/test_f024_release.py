@@ -1,11 +1,152 @@
 """Tests for _prune_old_tags — release tag pruning helper.
-Task 2: _prune_old_tags(keep_count=10) — keeps N newest vX.Y.Z tags, deletes older ones.
+Tests via panel fixture (class-based) and via direct utils import (module-level).
 """
 import pytest
+from unittest.mock import patch
 
+
+# ── Module-level tests (direct utils import) ──────────
+
+def test_prune_no_tags_silent_noop():
+    """When no tags exist, _prune_old_tags is silent no-op returning 0."""
+    import utils
+    with patch('utils.git', return_value=("", "", 0)):
+        result = utils._prune_old_tags()
+        assert result == 0
+
+
+def test_prune_fewer_than_keep_count():
+    """When tags <= keep_count, no pruning occurs."""
+    import utils
+    tags = "v3.0.0\nv2.0.0\nv1.0.0"
+    with patch('utils.git', return_value=(tags, "", 0)):
+        result = utils._prune_old_tags(keep_count=5)
+        assert result == 0
+
+
+def test_prune_exactly_keep_count():
+    """When tags == keep_count, no pruning occurs."""
+    import utils
+    tags = "\n".join("v{}.0.0".format(i) for i in range(10, 0, -1))
+    with patch('utils.git', return_value=(tags, "", 0)):
+        result = utils._prune_old_tags(keep_count=10)
+        assert result == 0
+
+
+def test_prune_more_than_keep_count():
+    """When >keep_count tags exist, keeps newest and prunes rest."""
+    import utils
+    # 12 version tags v12.0.0 through v1.0.0 (newest first)
+    tags = "\n".join("v{}.0.0".format(i) for i in range(12, 0, -1))
+
+    call_args = []
+
+    def mock_git(*args):
+        call_args.append(args)
+        if args[0] == "tag":
+            return (tags, "", 0)
+        elif args[0] == "push":
+            return ("", "", 0)
+        return ("", "", 1)
+
+    with patch('utils.git', side_effect=mock_git):
+        result = utils._prune_old_tags(keep_count=10)
+
+    assert result == 2  # 12 tags, keep 10 → prune 2
+    push_calls = [a for a in call_args if a[0] == "push"]
+    assert len(push_calls) == 2
+    deleted_tags = [a[-1] for a in push_calls]
+    assert "v1.0.0" in deleted_tags, f"Expected v1.0.0 to be pruned, got: {deleted_tags}"
+    assert "v2.0.0" in deleted_tags, f"Expected v2.0.0 to be pruned, got: {deleted_tags}"
+
+
+def test_prune_ignores_non_version_tags():
+    """Only vX.Y.Z tags are considered for pruning."""
+    import utils
+    tags = "v3.0.0\nsome-custom-tag\nv2.0.0\nbeta\nv1.0.0\nexperiment"
+
+    call_args = []
+
+    def mock_git(*args):
+        call_args.append(args)
+        if args[0] == "tag":
+            return (tags, "", 0)
+        elif args[0] == "push":
+            return ("", "", 0)
+        return ("", "", 1)
+
+    with patch('utils.git', side_effect=mock_git):
+        result = utils._prune_old_tags(keep_count=2)
+
+    # Only 3 version tags: v3.0.0, v2.0.0, v1.0.0 — keep 2 → prune v1.0.0
+    assert result == 1
+    push_calls = [a for a in call_args if a[0] == "push"]
+    assert len(push_calls) == 1
+    assert push_calls[0][-1] == "v1.0.0"
+
+
+def test_prune_push_failure_continues():
+    """When push --delete fails for a tag, warn and continue with remaining."""
+    import utils
+    tags = "\n".join("v{}.0.0".format(i) for i in range(12, 0, -1))
+
+    call_args = []
+
+    def mock_git(*args):
+        call_args.append(args)
+        if args[0] == "tag":
+            return (tags, "", 0)
+        elif args[0] == "push":
+            # First push call fails, second succeeds
+            push_count = len([a for a in call_args if a[0] == "push"])
+            if push_count == 1:
+                return ("", "remote: error", 1)
+            return ("", "", 0)
+        return ("", "", 1)
+
+    with patch('utils.git', side_effect=mock_git):
+        result = utils._prune_old_tags(keep_count=10)
+
+    # 2 tags to prune, 1 succeeded
+    assert result == 1
+
+
+def test_prune_git_tag_failure():
+    """When git tag command fails, returns 0 silently."""
+    import utils
+    with patch('utils.git', return_value=("", "fatal: not a git repo", 128)):
+        result = utils._prune_old_tags()
+        assert result == 0
+
+
+def test_prune_default_keep_count():
+    """Default keep_count is 10."""
+    import utils
+    tags = "\n".join("v{}.0.0".format(i) for i in range(15, 0, -1))
+
+    call_args = []
+
+    def mock_git(*args):
+        call_args.append(args)
+        if args[0] == "tag":
+            return (tags, "", 0)
+        elif args[0] == "push":
+            return ("", "", 0)
+        return ("", "", 1)
+
+    with patch('utils.git', side_effect=mock_git):
+        result = utils._prune_old_tags()
+
+    # 15 tags, default keep_count=10 → prune 5
+    assert result == 5
+    push_calls = [a for a in call_args if a[0] == "push"]
+    assert len(push_calls) == 5
+
+
+# ── Panel fixture tests (class-based) ──────────────────
 
 class TestPruneOldTags:
-    """Tests for _prune_old_tags(keep_count=10) in utils.py."""
+    """Tests for _prune_old_tags(keep_count=10) via panel fixture."""
 
     # ── no-op cases ──────────────────────────────────────────────
 
