@@ -217,3 +217,124 @@ class TestHaltAndRevertTaskBranches:
         assert cleanup_calls[0] == ["1", "2"], (
             f"cleanup_all should receive task_ids ['1', '2'], got {cleanup_calls[0]}"
         )
+
+
+class TestReapCompletedHardening:
+    """Task 3: _reap_completed drains pipes non-blocking, escalates to SIGKILL."""
+
+    def test_normal_exit_drains_stdout(self):
+        """Normal process exit → output captured, status completed, lock released."""
+        panel = _load_panel()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 0  # exited successfully
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.read.side_effect = [b"test output", b""]  # non-blocking chunks
+        mock_proc.wait.return_value = 0
+
+        t1 = panel.Task("1", "Task 1", ["a.py"], [], True)
+        running = {"1": mock_proc}
+        tasks = {"1": t1}
+        locks = MagicMock()
+
+        with patch.object(panel.subprocess, "TimeoutExpired", create=True), \
+             patch.object(panel, "time"):
+            finished = panel._reap_completed(running, tasks, locks)
+
+        assert finished == ["1"]
+        assert t1.status == "completed"
+        assert t1.output != ""
+        locks.release.assert_called_once_with("1")
+        assert "1" not in running
+
+    def test_failed_exit_sets_status_failed(self):
+        """Non-zero exit → status failed, lock released."""
+        panel = _load_panel()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 1  # failed
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.read.side_effect = [b"error output", b""]
+        mock_proc.wait.return_value = 1
+
+        t1 = panel.Task("1", "Task 1", ["a.py"], [], True)
+        running = {"1": mock_proc}
+        tasks = {"1": t1}
+        locks = MagicMock()
+
+        with patch.object(panel, "time"):
+            finished = panel._reap_completed(running, tasks, locks)
+
+        assert t1.status == "failed"
+        locks.release.assert_called_once_with("1")
+
+    def test_wait_timeout_escalates_to_sigkill(self):
+        """If wait() times out, escalate to kill() and mark orphaned."""
+        panel = _load_panel()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = -9  # killed
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.read.side_effect = [b"partial", b""]
+        mock_proc.wait.side_effect = panel.subprocess.TimeoutExpired("cmd", 2)
+
+        t1 = panel.Task("1", "Task 1", ["a.py"], [], True)
+        running = {"1": mock_proc}
+        tasks = {"1": t1}
+        locks = MagicMock()
+
+        with patch.object(panel, "time"):
+            finished = panel._reap_completed(running, tasks, locks)
+
+        # Should have called kill() after wait() timeout
+        mock_proc.kill.assert_called_once()
+        assert t1.status == "orphaned", (
+            f"After SIGKILL escalation, status should be 'orphaned', got '{t1.status}'"
+        )
+        locks.release.assert_called_once_with("1")
+
+    def test_stdout_none_guarded(self):
+        """Popen.stdout is None → handled gracefully, no crash."""
+        panel = _load_panel()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 0
+        mock_proc.stdout = None  # No stdout pipe
+        mock_proc.wait.return_value = 0
+
+        t1 = panel.Task("1", "Task 1", ["a.py"], [], True)
+        running = {"1": mock_proc}
+        tasks = {"1": t1}
+        locks = MagicMock()
+
+        with patch.object(panel, "time"):
+            finished = panel._reap_completed(running, tasks, locks)
+
+        assert t1.status == "completed"
+        assert t1.output == ""
+        locks.release.assert_called_once_with("1")
+
+    def test_broken_pipe_caught(self):
+        """BrokenPipeError during read → caught, partial output retained."""
+        panel = _load_panel()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 0
+        mock_proc.stdout = MagicMock()
+        # First read succeeds, second raises BrokenPipeError
+        mock_proc.stdout.read.side_effect = [b"partial data", BrokenPipeError()]
+        mock_proc.wait.return_value = 0
+
+        t1 = panel.Task("1", "Task 1", ["a.py"], [], True)
+        running = {"1": mock_proc}
+        tasks = {"1": t1}
+        locks = MagicMock()
+
+        with patch.object(panel, "time"):
+            finished = panel._reap_completed(running, tasks, locks)
+
+        assert t1.status == "completed"
+        # Should have partial output from the successful read
+        assert "partial data" in t1.output
+        locks.release.assert_called_once_with("1")
+
