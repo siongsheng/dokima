@@ -167,7 +167,7 @@ class TestVetRetryExhaustion:
         assert result["verdict"] == "VET_FAILED"
         assert len(halt_called) == 1, f"Expected exactly 1 halt_and_revert call, got {len(halt_called)}"
         reason, phase, branch = halt_called[0]
-        assert "verification failed" in reason.lower()
+        assert "verification failed" in reason.lower() or "hash cycle" in reason.lower()
 
 
 class TestSpecialCharacters:

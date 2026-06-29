@@ -3256,6 +3256,14 @@ def extract_file_paths(text):
     return sorted(paths)
 
 
+def _hash_output(text):
+    """Return MD5 hex digest of text for cycle detection (F023)."""
+    import hashlib
+    if text is None:
+        text = ""
+    return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
+
+
 def _detect_truncation(text):
     """Detect truncated coder output. Returns True if output appears truncated.
 
@@ -4156,6 +4164,7 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
     test_pass = build_pass = False
     test_output = build_output = ""
     tests_passed = tests_failed = "?"
+    prev_output_hash = None  # F023: cycle detection
 
     for verify_attempt in range(MAX_VERIFY_RETRIES + 1):
         if verify_attempt > 0:
@@ -4183,6 +4192,22 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
         build_output = build_result.stdout or ""
         print(f"  {'✅' if build_pass else '❌'} Build: {'passed' if build_pass else 'FAILED'} ({time.time()-t0:.0f}s)", flush=True)
 
+        # F023: Hash cycle detection — on retry, check if coder fix changed output
+        if verify_attempt > 0 and prev_output_hash is not None:
+            current_hash = _hash_output(test_output + build_output)
+            if current_hash == prev_output_hash:
+                print(f"\n  🔴 BLOCKED — Coder fix produced identical output (hash cycle detected)", flush=True)
+                print(f"  Coder is re-applying the same fix. Skipping further retries.", flush=True)
+                halt_and_revert("nm: coder fix loop detected (hash cycle)", "PHASE 3 (Verification)", branch)
+                nm_output = (
+                    f"Tests: {tests_passed} passed, {tests_failed} failed\n"
+                    f"Build: {'PASS' if build_pass else 'FAIL'}\n"
+                    f"PR: N/A\n"
+                    f"Risk: {impact}"
+                )
+                return {"nm_output": nm_output, "pr_url": None, "coder_failed": True,
+                        "verdict": "VET_FAILED", "test_pass": test_pass, "build_pass": build_pass}
+
         if test_pass and build_pass:
             break  # Clean!
 
@@ -4198,6 +4223,9 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
                     print(f"    {line.strip()}", flush=True)
 
         if verify_attempt < MAX_VERIFY_RETRIES:
+            # F023: Save pre-fix hash for cycle detection
+            prev_output_hash = _hash_output(test_output + build_output)
+
             # Loop back to coder
             fix_prompt = f"""Verification failed on branch '{branch}'. Fix these failures and push.
 
