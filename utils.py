@@ -2008,3 +2008,39 @@ def archive_specs_for_feature(spec_path, branch, pr_url):
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
 
+
+def _bump_version(current, bump):
+    """Return new semver string after applying bump type.
+
+    current: 'X.Y.Z' or 'vX.Y.Z' string (whitespace stripped).
+    bump: 'patch', 'minor', or 'major'.
+    Returns new 'X.Y.Z' (or 'vX.Y.Z' if prefix present).
+    Raises ValueError for invalid bump types.
+    """
+    s = current.strip()
+    if bump not in ("patch", "minor", "major"):
+        raise ValueError(f"Invalid bump type: {bump!r}")
+
+    prefix = ""
+    if s.startswith("v"):
+        prefix = "v"
+        s = s[1:]
+
+    parts = s.split(".")
+    if len(parts) != 3:
+        raise ValueError(f"Invalid semver: {s!r}")
+
+    x, y, z = int(parts[0]), int(parts[1]), int(parts[2])
+
+    if bump == "patch":
+        z += 1
+    elif bump == "minor":
+        y += 1
+        z = 0
+    elif bump == "major":
+        x += 1
+        y = 0
+        z = 0
+
+    return f"{prefix}{x}.{y}.{z}"
+
