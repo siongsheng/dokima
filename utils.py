@@ -110,6 +110,7 @@ CLI_METADATA = {
         {"name": "--list-crons", "syntax": "dokima --list-crons", "description": "List all scheduled pipelines"},
         {"name": "--version", "syntax": "dokima --version", "description": "Print version and exit"},
         {"name": "--upgrade", "syntax": "dokima --upgrade", "description": "Check for newer version and show upgrade instructions"},
+        {"name": "--release", "syntax": "dokima --release <patch|minor|major> [--dry-run] [project_dir]", "description": "Bump version, generate changelog, tag, and publish GitHub Release"},
     ],
     "flags": [
         {"flag": "--interactive", "args": None, "env_var": None, "description": "Show human gate (with --next/--continuous)"},
