@@ -944,7 +944,7 @@ class TaskDAG:
             all_files.extend((tid, f) for f in self.tasks[tid].files)
         seen = {}
         for tid, f in all_files:
-            f_norm = f.strip().lower()
+            f_norm = os.path.normpath(f.strip()).lower()
             if f_norm in seen and seen[f_norm] != tid:
                 print(f"  ⚠ File collision: {f} claimed by tasks {seen[f_norm]} and {tid}", flush=True)
                 return False
