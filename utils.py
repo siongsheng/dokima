@@ -2049,6 +2049,32 @@ def _bump_version(current, bump):
     return f"{x}.{y}.{z}"
 
 
+def _prune_old_tags(keep_count=10):
+    """Prune old vX.Y.Z tags beyond keep_count from origin.
+    Keeps the newest keep_count release tags, deletes the rest via
+    git push origin --delete. Non-vX.Y.Z tags are ignored.
+    Warns for each deleted tag. Silent no-op if ≤keep_count tags."""
+    stdout, stderr, rc = git("tag", "--sort=-v:refname")
+    if rc != 0 or not stdout.strip():
+        return
+
+    # Filter to vX.Y.Z tags only (already sorted newest-first)
+    semver_pattern = re.compile(r'^v\d+\.\d+\.\d+$')
+    version_tags = [t.strip() for t in stdout.split("\n") if semver_pattern.match(t.strip())]
+
+    # Keep the first keep_count, delete the rest
+    if len(version_tags) <= keep_count:
+        return
+
+    to_delete = version_tags[keep_count:]
+    for tag in to_delete:
+        print(f"  Pruning old tag: {tag}", flush=True)
+        _, stderr, rc = git("push", "origin", "--delete", tag)
+        if rc != 0:
+            print(f"  ⚠ Failed to delete tag {tag}: {stderr}", flush=True)
+            # Continue with remaining tags even if one fails
+
+
 # Module-level original references for delegation checks (F022 modular refactor)
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
