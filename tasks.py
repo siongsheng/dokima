@@ -13,6 +13,22 @@ from utils import (slugify, git, _safe_run, load_github_token,
                    OUTPUT_LOG)
 from agent import spawn_agent
 
+# Best-effort status import (F025 live dashboard)
+try:
+    from status import load_status, save_status, update_task as _status_update_task
+    def _update_dashboard(task_id, state, error=""):
+        """Update live dashboard for a task state change. Best-effort."""
+        try:
+            s = load_status(PROJECT_DIR)
+            if s:
+                _status_update_task(s, task_id, state, error)
+                save_status(s, PROJECT_DIR)
+        except Exception:
+            pass
+except ImportError:
+    def _update_dashboard(task_id, state, error=""):
+        pass
+
 # Module-level globals (set by main())
 PROJECT_DIR = ""
 
@@ -386,12 +402,15 @@ def _reap_completed(running: dict, tasks: dict[str, Task], locks: TaskLock) -> l
             task = tasks[tid]
             if orphaned or (ret is not None and ret < 0):
                 task.status = "orphaned"
+                _update_dashboard(tid, "failed", "orphaned (SIGKILL)")
                 print(f"  ⚠ Task {tid} orphaned (SIGKILL)", flush=True)
             elif ret == 0:
                 task.status = "completed"
+                _update_dashboard(tid, "completed")
                 print(f"  ✅ Task {tid} completed", flush=True)
             else:
                 task.status = "failed"
+                _update_dashboard(tid, "failed", f"exit={ret}")
                 print(f"  ❌ Task {tid} failed (exit={ret})", flush=True)
             task.output = output
             locks.release(tid)
@@ -509,6 +528,10 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
     locks = _TaskLock(panel_dir)
     running = {}  # task_id → Popen
 
+    # Register all tasks in live dashboard (F025)
+    for tid, t in tasks.items():
+        _update_dashboard(tid, "pending")
+
     max_parallel = max_parallel_override if max_parallel_override is not None else 5
     print(f"  Max parallel agents: {max_parallel}", flush=True)
 
@@ -586,6 +609,7 @@ def run_parallel_coders(tasks: dict[str, Task], waves: list[list[str]],
                     wt_path = worktrees.create(tid, task.branch)
                     proc = spawn_coder_in_worktree(task, wt_path, spec_path, parent_branch, tasks_extract_path)
                     running[tid] = proc
+                    _update_dashboard(tid, "running")
                     spawned_this_wave += 1
 
                 if overflow:
