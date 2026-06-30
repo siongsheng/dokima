@@ -14,7 +14,6 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
-- **F026: Auto-Update Docs CLI Cache on Release** — in progress since 2026-07-01 00:41, branch `feat/f026-auto-update-docs-cli-cache-on-relea-08bdf821` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
@@ -38,3 +37,4 @@
 - **F017: Dokima-as-Service** — done 2026-06-29 12:12 [auto-repair]
 - **F018: Multi-Repo Orchestration** — done 2026-06-29 12:12 [auto-repair]
 - **F024: Auto-Release — Tagging, Changelog, and GitHub Releases** — done 2026-06-30 01:08, PR [#53](https://github.com/siongsheng/dokima/pull/53) [panel]
+- **F026: Auto-Update Docs CLI Cache on Release** — done 2026-07-01 00:53, PR [#54](https://github.com/siongsheng/dokima/pull/54) [panel]
