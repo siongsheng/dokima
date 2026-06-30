@@ -11,11 +11,11 @@
 **Description:** Wire _update_docs_cache() into do_release()
 
 ### Task 3: Write unit tests for _update_docs_cache()
-**Files:** tests/test_f026_docs_cache.py
+**Files:** tests/test_f024_release.py
 **Dependencies:** 2
 **Description:** Write unit tests for _update_docs_cache()
 
-### Task 4: Add dry-run assertion to test_f024_release.py
+### Task 4: Verify all tests pass
 **Files:** tests/test_f024_release.py
-**Dependencies:** 2
-**Description:** Add dry-run assertion to test_f024_release.py
+**Dependencies:** 3
+**Description:** Verify all tests pass
