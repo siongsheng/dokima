@@ -2193,11 +2193,6 @@ def do_release(bump, project_dir, dry_run=False):
     """
     import shutil, tempfile
 
-    # Idempotency guard — prevent double-release from duplicate flag dispatch
-    if getattr(do_release, '_called', False):
-        return
-    do_release._called = True
-
     # 1. Validate bump type
     if bump not in ("patch", "minor", "major"):
         print(f"ERROR: Invalid bump type: {bump!r} (expected patch, minor, or major)", flush=True)
