@@ -728,7 +728,7 @@ CRITICAL RULES:
     print("── Phase: Strategist (init) ──", flush=True)
     os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
 
-    init_skills = ["spec-kit", "saas-ideation"]
+    init_skills = ["spec-strategist-lite", "saas-ideation"]
     missing_skills = []
     for skill in init_skills:
         # Check if skill exists in profile or global skills dirs
