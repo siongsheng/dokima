@@ -246,16 +246,16 @@ class TestReleaseHelpText:
         return p.returncode, p.stdout.strip(), p.stderr.strip()
 
     def test_help_includes_release_command(self):
-        """--help output includes --release in COMMANDS section."""
+        """--help output includes release in COMMANDS section."""
         rc, out, err = self._run("--help")
         assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
-        assert "--release" in out, f"Expected --release in help output, got:\n{out}"
+        assert "dokima release" in out, f"Expected 'dokima release' in help output, got:\n{out}"
 
     def test_help_json_includes_release(self):
-        """--help-json output includes --release entry."""
+        """--help-json output includes release entry."""
         rc, out, err = self._run("--help-json")
         assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
-        assert "--release" in out, f"Expected --release in --help-json output, got:\n{out}"
+        assert "release" in out, f"Expected 'release' in --help-json output, got:\n{out}"
 
     def test_release_invalid_bump_exits_1(self):
         """dokima --release invalid exits 1 with usage error."""

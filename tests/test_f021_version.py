@@ -26,31 +26,31 @@ def test_version_flag_prints_version_and_exits_0():
 
 
 def test_help_includes_version_command():
-    """--help output includes --version in CONTROL section."""
+    """--help output includes version in CONTROL section."""
     rc, out, err = _run("--help")
     assert rc == 0, f"Expected exit 0, got {rc}"
-    assert "dokima --version" in out, f"--version not in help output:\n{out}"
+    assert "dokima version" in out, f"version not in help output:\n{out}"
 
 
 def test_help_includes_upgrade_command():
-    """--help output includes --upgrade in CONTROL section."""
+    """--help output includes upgrade in CONTROL section."""
     rc, out, err = _run("--help")
     assert rc == 0, f"Expected exit 0, got {rc}"
-    assert "dokima --upgrade" in out, f"--upgrade not in help output:\n{out}"
+    assert "dokima upgrade" in out, f"upgrade not in help output:\n{out}"
 
 
 def test_help_json_includes_version():
-    """--help-json includes version field and --version command."""
+    """--help-json includes version field and version/upgrade commands."""
     rc, out, err = _run("--help-json")
     assert rc == 0, f"Expected exit 0, got {rc}. stderr: {err}"
     data = json.loads(out)
     assert "version" in data, f"No 'version' field in help-json: {data}"
     assert data["version"], f"version field is empty"
     commands = data.get("commands", [])
-    version_cmds = [c for c in commands if c.get("name") == "--version"]
-    assert version_cmds, f"--version not in commands array: {commands}"
-    upgrade_cmds = [c for c in commands if c.get("name") == "--upgrade"]
-    assert upgrade_cmds, f"--upgrade not in commands array: {commands}"
+    version_cmds = [c for c in commands if c.get("name") == "version"]
+    assert version_cmds, f"version not in commands array: {commands}"
+    upgrade_cmds = [c for c in commands if c.get("name") == "upgrade"]
+    assert upgrade_cmds, f"upgrade not in commands array: {commands}"
 
 
 def test_upgrade_no_install_dir_exits_0():
