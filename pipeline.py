@@ -45,6 +45,32 @@ from roadmap import (RoadmapFeature, parse_roadmap, pick_next_feature,
 from status import (PipelineStatus, save_status, load_status,
                     update_phase, add_task, update_task)
 
+
+def _make_map_hint(project_dir):
+    """Generate a codebase-map hint string for agent prompts.
+    Returns empty string if map doesn't exist or is 0 bytes.
+    Best-effort — never blocks the pipeline."""
+    map_path = os.path.join(project_dir, "specs", "codebase-map.md")
+    if not os.path.exists(map_path):
+        return ""
+    try:
+        size = os.path.getsize(map_path)
+    except OSError:
+        return ""
+    if size == 0:
+        return ""
+    return (
+        f"\n\n\u26a1 CODING STARTUP: Read {map_path} FIRST "
+        f"(~{size} bytes). "
+        "It contains the 4-section domain-aware codebase map "
+        "(Start Here, Domain Map, Impact Map, Test Map), "
+        "tech stack, file descriptions, and commands. "
+        "Use it instead of reading every file to understand "
+        "the codebase. Only read individual files when you need "
+        "implementation details."
+    )
+
+
 def _status_update(**kwargs):
     """Load status, apply updates, save. Best-effort — never crashes pipeline."""
     try:
@@ -544,16 +570,7 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
         spec_ref = f"{spec_path} for context" if spec_path else "the PR blocker descriptions above"
 
         # Codebase map hint — coder reads this INSTEAD of exploring the full codebase
-        map_path = os.path.join(PROJECT_DIR, "specs", "codebase-map.md")
-        map_hint = ""
-        if os.path.exists(map_path):
-            map_hint = (
-                f"\n\n⚡ CODING STARTUP: Read {map_path} FIRST "
-                f"(~{os.path.getsize(map_path)} bytes). "
-                "It contains the directory tree, tech stack, file descriptions, "
-                "and commands. Use it instead of reading every file to understand "
-                "the codebase. Only read individual files when you need implementation details."
-            )
+        map_hint = _make_map_hint(PROJECT_DIR)
 
         if mode == "fix" and spec:
             # Fix mode: spec IS the fix prompt (blockers + constraints inline)
@@ -1166,6 +1183,7 @@ def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output="
             print(f"  ⚠ Impact alignment check failed: {e}", flush=True)
 
     tl_prompt = f"""You are the Tech Lead — your job is a THREE-PART adversarial review against the spec at {spec_path}.
+{_make_map_hint(PROJECT_DIR)}
 
 FIRST — read the spec: the chosen approach, API/interface proposal, and task breakdown.
 
@@ -1415,7 +1433,9 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     strat_prompt = f"""You are the Strategist for a software project at {PROJECT_DIR}.
 {_ref_context}
+{_make_map_hint(PROJECT_DIR)}
     {_refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
+    0. Read specs/codebase-map.md FIRST — it contains the Domain Map (files grouped by purpose), Impact Map (dependency arrows), Test Map, and commands. Use it to understand the codebase without reading every file.
     1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
     2. Read AGENTS.md at {PROJECT_DIR}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
     3. If .specify/ exists, read .specify/memory/constitution.md and .specify/specs/baseline/spec.md. Otherwise skip.
