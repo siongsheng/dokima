@@ -1483,10 +1483,12 @@ def _extract_code_context(spec_text, task_text, project_dir):
     )
 
 def generate_codebase_map(project_dir, full=False):
-    """Generate a deterministic codebase map for the coder to read at session start.
+    """Generate a deterministic domain-aware codebase map for agents to read at session start.
     Uses file hashes to skip unchanged files (incremental mode).
-    Output: specs/codebase-map.md with directory tree + per-file descriptions.
+    Output: specs/codebase-map.md with 4 sections: Start Here, Domain Map, Impact Map, Test Map.
     Returns True if map was updated."""
+    import ast as _ast
+
     specs_dir = os.path.join(project_dir, "specs")
     map_path = os.path.join(specs_dir, "codebase-map.md")
     cache_path = os.path.join(specs_dir, ".map-cache.json")
@@ -1537,18 +1539,17 @@ def generate_codebase_map(project_dir, full=False):
         except Exception:
             pass
 
-    # Build directory tree — depth-first, insert parent headers as we go
+    # Walk the project tree
     source_exts = {'.py', '.ts', '.tsx', '.js', '.jsx', '.rs', '.go', '.css', '.scss',
                    '.md', '.mdx', '.json', '.yaml', '.yml', '.toml', '.sh', '.bash'}
     skip_dirs = {'node_modules', '.git', '__pycache__', '.venv', 'venv', 'target',
                  '.next', 'dist', 'build', '.turbo', '.hermes', 'specs', '.map-cache.json'}
 
-    tree_lines = []
+    all_files = []       # (rel_path, description) for Domain Map
+    py_files = []        # (rel_path, fpath) for Impact Map analysis
     changed = False
     new_cache = {}
     analyzed_files = 0
-    seen_dirs = set()
-    last_dir = None
 
     for dirpath, dirnames, filenames in os.walk(project_dir):
         dirnames[:] = sorted([d for d in dirnames if d not in skip_dirs and not d.startswith('.')])
@@ -1560,21 +1561,7 @@ def generate_codebase_map(project_dir, full=False):
         if not source_files:
             continue
 
-        # Insert ALL missing ancestor directory headers
-        if rel_dir:
-            parts = rel_dir.split(os.sep)
-            for i in range(len(parts)):
-                ancestor = os.sep.join(parts[:i+1])
-                if ancestor not in seen_dirs:
-                    seen_dirs.add(ancestor)
-                    a_indent = "│   " * i
-                    a_name = parts[i]
-                    tree_lines.append(f"{a_indent}├── {a_name}/")
-
-        d_depth = rel_dir.count(os.sep) if rel_dir else 0
-        d_indent = "│   " * d_depth if d_depth > 0 else ""
-
-        for j, fname in enumerate(source_files):
+        for fname in source_files:
             rel_path = os.path.join(rel_dir, fname) if rel_dir else fname
             fpath = os.path.join(dirpath, fname)
 
@@ -1601,43 +1588,245 @@ def generate_codebase_map(project_dir, full=False):
                     description = ""
 
             new_cache[rel_path] = {"hash": fhash, "desc": description}
+            all_files.append((rel_path, description))
 
-            is_last = (j == len(source_files) - 1)
-            branch = "└── " if is_last else "├── "
-            prefix = f"{d_indent}│   " if d_depth > 0 else ""
-            tree_lines.append(f"{prefix}{branch}{fname}")
-            if description:
-                tree_lines[-1] += f"  — {description}"
+            # Track Python files for import analysis
+            if fname.endswith('.py'):
+                py_files.append((rel_path, fpath))
 
             analyzed_files += 1
 
     if not changed and os.path.exists(map_path) and not full:
         return False  # Nothing changed, no need to rewrite
 
-    # Write map
+    # ── Domain Map: group files by domain ──
+    domain_map = _build_domain_map(all_files)
+
+    # ── Impact Map: analyze Python imports ──
+    impact_map = _build_impact_map(py_files, project_dir)
+
+    # ── Test Map: match test files to source modules ──
+    test_map = _build_test_map(all_files)
+
+    # ── Write map ──
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = os.path.basename(os.path.abspath(project_dir))
     mode = "full" if full else "incremental"
+    tech_str = ', '.join(tech) if tech else 'detected at runtime'
+
+    # Start Here section
+    key_files = _find_key_files(all_files)
 
     map_content = f"""## Project: {project_name}
-## Tech: {', '.join(tech) if tech else 'detected at runtime'}
+## Tech: {tech_str}
 ## Generated: {now} ({mode} | {analyzed_files} files)
 
-## Tree
-{chr(10).join(tree_lines)}
+## Start Here
+**{project_name}** is a software project in this directory.
+- Test: `{test_cmd}`
+- Build: `{build_cmd}`
+- Lint: `{lint_cmd}`
+Key files: {', '.join(key_files) if key_files else 'none detected'}
+Read the Domain Map below to understand the file organization before exploring individual files.
 
-## Commands
-- test: {test_cmd}
-- build: {build_cmd}
-- lint: {lint_cmd}
+## Domain Map
+{domain_map}
+
+## Impact Map
+{impact_map}
+
+## Test Map
+{test_map}
 """
     with open(map_path, 'w') as f:
         f.write(map_content)
     with open(cache_path, 'w') as f:
         json.dump(new_cache, f, indent=2)
 
-    print(f"  📄 Codebase map: {map_path} ({analyzed_files} files, {mode})", flush=True)
+    print(f"  \U0001f4c4 Codebase map: {map_path} ({analyzed_files} files, {mode})", flush=True)
     return True
+
+
+def _classify_domain(rel_path):
+    """Classify a file into a domain group based on its path."""
+    parts = rel_path.split(os.sep)
+
+    if parts[0] == 'tests':
+        return 'Tests'
+    if parts[0] == 'scripts':
+        return 'Scripts'
+    if parts[0] == 'skills':
+        return 'Skills'
+    if parts[0] == 'docs':
+        return 'Documentation'
+    if parts[0] == 'src' or parts[0] == 'lib':
+        return 'Source Code'
+
+    # Root-level classification by filename heuristics
+    basename = os.path.basename(rel_path)
+    name_lower = basename.lower()
+
+    if basename == 'dokima' or basename == 'main.py' or basename == 'index.js' or basename == 'index.ts':
+        return 'Entry Point'
+    if 'pipeline' in name_lower or 'workflow' in name_lower or 'orchestrat' in name_lower:
+        return 'Pipeline Orchestration'
+    if 'agent' in name_lower and 'test' not in name_lower:
+        return 'Agent Management'
+    if 'roadmap' in name_lower or 'status' in name_lower or 'tasks' in name_lower:
+        return 'Pipeline Orchestration'
+    if 'util' in name_lower or 'helper' in name_lower:
+        return 'Utilities'
+    if 'config' in name_lower or 'setting' in name_lower or basename.endswith('.toml') or basename.endswith('.yaml') or basename.endswith('.yml'):
+        return 'Configuration'
+    if basename == 'README.md' or basename == 'MAINTAINERS.md' or basename == 'AGENTS.md' or basename == 'CONTRIBUTING.md':
+        return 'Documentation'
+
+    ext = os.path.splitext(basename)[1]
+    if ext in ('.css', '.scss'):
+        return 'Styles'
+    if ext in ('.md', '.mdx'):
+        return 'Documentation'
+    if ext in ('.sh', '.bash'):
+        return 'Scripts'
+    if ext == '.json':
+        return 'Configuration'
+
+    return 'Other'
+
+
+def _build_domain_map(all_files):
+    """Build the Domain Map section: files grouped by domain."""
+    groups = {}
+    for rel_path, desc in all_files:
+        domain = _classify_domain(rel_path)
+        if domain not in groups:
+            groups[domain] = []
+        groups[domain].append((rel_path, desc))
+
+    # Order domains deterministically
+    domain_order = [
+        'Entry Point', 'Pipeline Orchestration', 'Agent Management',
+        'Source Code', 'Utilities', 'Configuration', 'Scripts', 'Skills',
+        'Tests', 'Styles', 'Documentation', 'Other'
+    ]
+
+    lines = []
+    for domain in domain_order:
+        if domain not in groups:
+            continue
+        lines.append(f"### {domain}")
+        for rel_path, desc in sorted(groups[domain]):
+            if desc:
+                lines.append(f"- {rel_path}  — {desc}")
+            else:
+                lines.append(f"- {rel_path}")
+        lines.append("")
+
+    if not lines:
+        return "No source files detected."
+
+    return '\n'.join(lines).rstrip()
+
+
+def _build_impact_map(py_files, project_dir):
+    """Build the Impact Map section: which files import which modules."""
+    import ast as _ast
+
+    if not py_files:
+        return "No Python source files detected."
+
+    imports_by_file = {}
+    for rel_path, fpath in py_files:
+        try:
+            with open(fpath, errors='replace') as f:
+                source = f.read()
+            tree = _ast.parse(source)
+            imports = set()
+            for node in _ast.walk(tree):
+                if isinstance(node, _ast.Import):
+                    for alias in node.names:
+                        imports.add(alias.name.split('.')[0])
+                elif isinstance(node, _ast.ImportFrom):
+                    if node.module:
+                        imports.add(node.module.split('.')[0])
+            imports_by_file[rel_path] = imports
+        except Exception:
+            imports_by_file[rel_path] = set()
+
+    # Build all known Python module names (files without .py extension)
+    all_modules = set()
+    for rel_path, _ in py_files:
+        name = os.path.splitext(os.path.basename(rel_path))[0]
+        all_modules.add(name)
+
+    lines = []
+    for rel_path in sorted(imports_by_file.keys()):
+        imports = imports_by_file[rel_path]
+        internal = imports & all_modules
+        external = imports - all_modules - {'os', 'sys', 're', 'json', 'time', 'datetime',
+                                             'subprocess', 'hashlib', 'ast', 'fcntl', 'signal',
+                                             'shlex', 'pwd', 'tempfile', 'pathlib', 'typing',
+                                             'collections', 'itertools', 'functools', 'math'}
+
+        parts = []
+        if internal:
+            parts.append(f"imports from {', '.join(sorted(internal))}")
+        if external:
+            parts.append(f"external: {', '.join(sorted(external))}")
+
+        if parts:
+            lines.append(f"- {rel_path} → {'; '.join(parts)}")
+        else:
+            lines.append(f"- {rel_path} → standalone (stdlib only)")
+
+    if not lines:
+        return "No imports detected."
+
+    return '\n'.join(lines)
+
+
+def _build_test_map(all_files):
+    """Build the Test Map section: test file → source module mapping."""
+    test_to_source = {}
+    source_files = set()
+
+    for rel_path, _ in all_files:
+        basename = os.path.basename(rel_path)
+        if basename.startswith('test_'):
+            # test_foo.py → foo.py or foo
+            rest = basename[5:]  # remove 'test_'
+            rest_no_ext = os.path.splitext(rest)[0]
+            test_to_source[rel_path] = rest_no_ext
+        elif not rel_path.startswith('tests/'):
+            name_no_ext = os.path.splitext(basename)[0]
+            source_files.add(name_no_ext)
+
+    lines = []
+    for test_path in sorted(test_to_source.keys()):
+        target = test_to_source[test_path]
+        if target in source_files:
+            lines.append(f"- {test_path} → {target}")
+        else:
+            lines.append(f"- {test_path} → (no matching source module)")
+
+    if not lines:
+        return "No test files detected."
+
+    return '\n'.join(lines)
+
+
+def _find_key_files(all_files):
+    """Find key entry-point files for the Start Here section."""
+    key_patterns = ['dokima', 'main.py', 'main.ts', 'main.js', 'index.ts', 'index.js',
+                    'pipeline.py', 'pipeline.ts', 'utils.py', 'agent.py',
+                    'app.py', 'server.py', 'server.ts']
+    found = []
+    for rel_path, _ in all_files:
+        basename = os.path.basename(rel_path)
+        if basename in key_patterns:
+            found.append(basename)
+    # Limit and order
+    return found[:6]
 
 def _describe_file(filename, content, rel_path):
     """Extract a one-line description from a source file.
