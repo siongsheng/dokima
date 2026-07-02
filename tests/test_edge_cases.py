@@ -179,7 +179,7 @@ class TestAdrCreation:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
@@ -226,7 +226,7 @@ class TestHumanGate:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = mock
             # Remove PANEL_SKIP_HUMAN_GATE from env so gate fires
             os.environ.pop("PANEL_SKIP_HUMAN_GATE", None)
@@ -267,7 +267,7 @@ class TestHumanGate:
 
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
             with patch("dokima.call_agent", return_value={"content": "M", "tokens": 1}), \
@@ -330,7 +330,7 @@ class TestParallelFailure:
 
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
             mock_proc = type("MockProc", (), {"poll": lambda s: 1, "communicate": lambda s, t=None: (b"fail", None)})()
@@ -386,7 +386,7 @@ class TestClarificationGate:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
@@ -459,7 +459,7 @@ class TestTechLeadPaths:
         old = sys.argv
         old_environ = os.environ.copy()
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
             panel.spawn_agent = mock
             if gh_se is None:

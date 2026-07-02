@@ -74,7 +74,7 @@ def test_archive_no_pr_url(panel, tmpdir_path):
 # ── Bug 2: Verdict gate ──────────────────────────────────────
 
 def test_blocked_next_not_done(panel, tmpdir_path):
-    """--next mode with BLOCKED verdict: status stays in_progress, NOT marked done."""
+    """next mode with BLOCKED verdict: status stays in_progress, NOT marked done."""
     panel.PANEL_FEATURE = "F004: blocked-next"
     panel.PROJECT_DIR = tmpdir_path
     panel.REPO = "test/test"
@@ -107,7 +107,7 @@ def test_blocked_next_not_done(panel, tmpdir_path):
 
 
 def test_blocked_continuous_not_done(panel, tmpdir_path):
-    """--continuous mode with BLOCKED verdict: continue_loop=False, NOT marked done."""
+    """continuous mode with BLOCKED verdict: continue_loop=False, NOT marked done."""
     panel.PANEL_FEATURE = "F005: blocked-continuous"
     panel.PROJECT_DIR = tmpdir_path
     panel.REPO = "test/test"
@@ -140,7 +140,7 @@ def test_blocked_continuous_not_done(panel, tmpdir_path):
 
 
 def test_approved_next_done(panel, tmpdir_path):
-    """--next mode with APPROVED verdict: status IS marked done (regression)."""
+    """next mode with APPROVED verdict: status IS marked done (regression)."""
     panel.PANEL_FEATURE = "F006: approved-next"
     panel.PROJECT_DIR = tmpdir_path
     panel.REPO = "test/test"

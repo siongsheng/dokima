@@ -53,8 +53,10 @@ def _run_pipeline(panel, project_dir, spawn_mock, extra_patches=None, is_continu
     """Run main() with standard patches + optional extras."""
     old = sys.argv
     try:
-        flag = "--continuous" if is_continuous else "--next"
-        sys.argv = ["dokima", flag, project_dir]
+        if is_continuous:
+            sys.argv = ["dokima", "next", "--continuous", project_dir]
+        else:
+            sys.argv = ["dokima", "next", project_dir]
         panel.spawn_agent = spawn_mock
 
         mock_run = type("RunResult", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
