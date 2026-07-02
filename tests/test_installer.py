@@ -444,3 +444,36 @@ class TestEndToEnd:
         # Should indicate it pulled rather than cloned
         assert "pull" in output.lower() or "exists" in output.lower() or "already" in output.lower()
 
+
+class TestInstallShSubcommandReferences:
+    """Task 14: install.sh must preserve --help reference and have no deprecated --flags."""
+
+    DEPRECATED_FLAGS = [
+        "--add", "--next", "--fix", "--status", "--stop", "--kill",
+        "--list-crons", "--version", "--upgrade", "--release",
+    ]
+
+    def test_help_flag_preserved(self):
+        """install.sh must preserve 'dokima --help' reference (not subcommand-ized)."""
+        content = open(INSTALLER).read()
+        assert "dokima --help" in content, (
+            "'dokima --help' reference must be preserved in install.sh"
+        )
+
+    def test_no_deprecated_flag_references(self):
+        """install.sh must NOT reference deprecated --flag forms of subcommands."""
+        content = open(INSTALLER).read()
+        for flag in self.DEPRECATED_FLAGS:
+            assert flag not in content, (
+                "install.sh must not reference deprecated flag: {}".format(flag)
+            )
+
+    def test_valid_bash_syntax(self):
+        """install.sh must be a valid bash script."""
+        result = subprocess.run(
+            ["bash", "-n", INSTALLER], capture_output=True, text=True,
+        )
+        assert result.returncode == 0, (
+            "install.sh has bash syntax errors:\n{}".format(result.stderr)
+        )
+
