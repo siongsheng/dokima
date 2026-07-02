@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "bf9a3f968f7c2b06e5027ad0537a6d61",
+    "hash": "cfa41db79dd639a4cf3952576efa0a32",
     "desc": ""
   },
   "AGENTS.md": {
@@ -24,11 +24,11 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "60297acaaf175d2315c66eebf95983d6",
+    "hash": "d26940eedf64d036bbc24ce01a16366d",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "0e674ce502784c0031a1525a713dc44a",
+    "hash": "88b2b6138af348018305b2e49794220d",
     "desc": "Exports: parse_roadmap"
   },
   "status.py": {
@@ -40,11 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "6c7c26288a065f08e9fea34ca5db5eae",
-    "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
-  },
-  "utils_debug.py": {
-    "hash": "83196f1e4c81455b0be8f0ab61eecda6",
+    "hash": "9cf349354b9939d6c1c370e5c67a213b",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
@@ -104,7 +100,7 @@
     "desc": "Exports: TestCleanSpecContent"
   },
   "tests/test_codebase_map.py": {
-    "hash": "3a9560d467214c01517ee32ed21fadec",
+    "hash": "6dc4fcbf35f1a11ef8706e944bec5d3a",
     "desc": "assert \"Fetch user data\" in desc"
   },
   "tests/test_conftest_fixtures.py": {
@@ -180,7 +176,7 @@
     "desc": "Exports: test_detect_provider_failure_none, test_detect_provider_failure_empty_nonzero, test_detect_provider_failure_timeout_pattern, test_detect_provider_failure_503, test_detect_provider_failure_429"
   },
   "tests/test_f022_pipeline.py": {
-    "hash": "ad97a9cc1a022a150d857ed601e86332",
+    "hash": "002eb913fcfdda216f897096b40148ec",
     "desc": "Exports: test_pipeline_module_importable, test_pipeline_has_run_pipeline, test_pipeline_has_run_phase1_strategist, test_pipeline_has_run_phase2_coder, test_pipeline_has_run_phase3_vet"
   },
   "tests/test_f022_roadmap.py": {
@@ -290,6 +286,10 @@
   "tests/test_safe_run.py": {
     "hash": "3eb69dcc4fb08a10846006e4e578e715",
     "desc": "Exports: test_simple_echo, test_command_fails, test_shell_metachar_not_injected, test_complex_command, test_unsplittable_falls_back_to_bash"
+  },
+  "tests/test_sandbox_fixes.py": {
+    "hash": "0e7aadc2a23f991b6c6e5c9c7131fedd",
+    "desc": "Exports: TestDokimaMain, TestSkillSourcePath"
   },
   "tests/test_slugify.py": {
     "hash": "4408cde97f3a1c91cb556dca039bc4ae",

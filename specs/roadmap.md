@@ -122,7 +122,7 @@
 ### F027: Upgrade codebase-map.md to domain-aware format with Start Here, Domain Map, Impact Map, and Test Map sections. Inject map into strategist, coder-worktree, and tech-lead prompts.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [~] In Progress
+**Status:** [x] Done Progress
 **User Story:** As a user, I can upgrade codebase-map.md to domain-aware format with start here, domain map, impact map, and test map sections. inject map into strategist, coder-worktree, and tech-lead prompts.
 
 ### F011: Installer Script

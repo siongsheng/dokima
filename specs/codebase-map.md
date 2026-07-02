@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-01 00:53:10 (incremental | 83 files)
+## Generated: 2026-07-02 20:04:08 (incremental | 83 files)
 
 ## Tree
 ├── .pipeline-status.json
@@ -13,8 +13,7 @@
 ├── roadmap.py  — Exports: parse_roadmap
 ├── status.py  — Exports: TaskStatus, PhaseTiming, PipelineStatus
 ├── tasks.py  — Exports: WorktreeManager
-├── utils.py  — shutil imported dynamically where needed (deploy_profile_skills)
-└── utils_debug.py  — shutil imported dynamically where needed (deploy_profile_skills)
+└── utils.py  — shutil imported dynamically where needed (deploy_profile_skills)
 ├── docs/
 ├── pipeline.md  — Dokima — Pipeline Reference
 └── setup.md  — Dokima — Deployment & Setup Guide
@@ -86,6 +85,7 @@
 ├── test_roadmap_update.py  — Exports: test_pending_to_in_progress, test_in_progress_to_done, test_done_to_pending_revert, test_feature_not_found_no_change, test_file_not_found_no_crash
 ├── test_root_cause_regressions.py  — Exports: TestSpecPathDetection
 ├── test_safe_run.py  — Exports: test_simple_echo, test_command_fails, test_shell_metachar_not_injected, test_complex_command, test_unsplittable_falls_back_to_bash
+├── test_sandbox_fixes.py  — Exports: TestDokimaMain, TestSkillSourcePath
 ├── test_slugify.py  — Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash
 ├── test_spec_quality_gates.py  — Sample well-formed spec with all required sections
 ├── test_status_md.py  — Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated
