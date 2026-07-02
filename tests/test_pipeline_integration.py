@@ -161,7 +161,7 @@ class TestStrategistCoderHandoff:
         old = sys.argv
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = _mock_capturing_spawn
             _patch_and_run(panel)
 
@@ -215,7 +215,7 @@ class TestStrategistCoderHandoff:
         old = sys.argv
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = _mock_capturing_spawn
             _patch_and_run(panel)
 
@@ -375,7 +375,7 @@ class TestModeDrivenDispatch:
         os.environ["PANEL_PARALLEL"] = "1"
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
 
             # Return the single_session spec from spawn_agent
             def _mock_spawn_single(profile, skills, prompt, timeout=600, cwd=None, model=None, **kwargs):
@@ -454,7 +454,7 @@ class TestModeDrivenDispatch:
         os.environ["PANEL_PARALLEL"] = "1"
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
 
             def _mock_spawn_parallel(profile, skills, prompt, timeout=600, cwd=None, model=None, **kwargs):
                 _spawn_calls.append({"profile": profile, "skills": skills,
@@ -530,7 +530,7 @@ class TestModeDrivenDispatch:
         os.environ["PANEL_FORCE_EXECUTION_MODE"] = "single_session"
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
 
             def _mock_spawn_per(profile, skills, prompt, timeout=600, cwd=None, model=None, **kwargs):
                 _spawn_calls.append({"profile": profile, "skills": skills,

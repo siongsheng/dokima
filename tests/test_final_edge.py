@@ -106,7 +106,7 @@ class TestContinuousDecisions:
 
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--continuous", project_dir]
+            sys.argv = ["dokima", "next", "--continuous", project_dir]
             panel.spawn_agent = mock
             os.environ["PANEL_MAX_RETRIES"] = "0"
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
@@ -150,7 +150,7 @@ class TestContinuousDecisions:
 
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--continuous", project_dir]
+            sys.argv = ["dokima", "next", "--continuous", project_dir]
             panel.spawn_agent = mock
             os.environ["PANEL_MAX_RETRIES"] = "0"
             os.environ["PANEL_SKIP_HUMAN_GATE"] = "1"
