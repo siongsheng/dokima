@@ -60,3 +60,37 @@ def test_pipeline_has_extract_blockers_from_pr():
     import pipeline
     assert hasattr(pipeline, "extract_blockers_from_pr")
     assert callable(pipeline.extract_blockers_from_pr)
+
+
+# ── F027: Codebase map hint injection ────────────────────────────
+
+def test_make_map_hint_exists(tmp_path):
+    """When map file exists, _make_map_hint returns a hint string."""
+    import pipeline
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    map_path = specs_dir / "codebase-map.md"
+    map_path.write_text("# Test Map\n\nSome content here.")
+
+    hint = pipeline._make_map_hint(str(tmp_path))
+    assert "codebase-map.md" in hint
+    assert str(os.path.getsize(str(map_path))) in hint
+
+
+def test_make_map_hint_missing(tmp_path):
+    """When map file does not exist, _make_map_hint returns empty string."""
+    import pipeline
+    hint = pipeline._make_map_hint(str(tmp_path))
+    assert hint == ""
+
+
+def test_make_map_hint_empty_file(tmp_path):
+    """When map file is 0 bytes, _make_map_hint returns empty string."""
+    import pipeline
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    map_path = specs_dir / "codebase-map.md"
+    map_path.write_text("")
+
+    hint = pipeline._make_map_hint(str(tmp_path))
+    assert hint == ""

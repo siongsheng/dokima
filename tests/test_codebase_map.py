@@ -115,6 +115,12 @@ def test_map_includes_mdx(tmp_project, panel):
     assert "globals.css" in content
     assert "guide.mdx" in content, f"MDX file missing from map!\n{content}"
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_tech_detection(tmp_project, panel):
     """Tech stack should be detected from package.json."""
@@ -127,6 +133,12 @@ def test_map_tech_detection(tmp_project, panel):
     assert "TypeScript" in content
     assert "Vitest" in content
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_commands_from_agents(tmp_project, panel):
     """Commands should be extracted from AGENTS.md."""
@@ -137,6 +149,12 @@ def test_map_commands_from_agents(tmp_project, panel):
     assert "pytest" in content
     assert "npm run build" in content
     assert "eslint" in content
+
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
 
 
 def test_map_incremental_no_change(tmp_project, panel):
@@ -192,6 +210,12 @@ def test_map_file_count(tmp_project, panel):
     # 7 source files: AGENTS.md, package.json, layout.tsx, Header.tsx, page.tsx, globals.css, guide.mdx
     assert "7 files" in content
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_cache_written(tmp_project, panel):
     """Incremental cache should be written with hashes and descriptions."""
@@ -224,9 +248,15 @@ def test_map_no_agents_md(tmp_project, panel):
     map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
     with open(map_path) as f:
         content = f.read()
-    assert "test: ?" in content
-    assert "build: ?" in content
-    assert "lint: ?" in content
+    assert "Test: `?`" in content
+    assert "Build: `?`" in content
+    assert "Lint: `?`" in content
+
+    # F027: Verify 4-section format still produced
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
 
 
 def test_map_full_rebuild(tmp_project, panel):
@@ -240,3 +270,156 @@ def test_map_full_rebuild(tmp_project, panel):
     with open(cache_path) as f:
         cache = json.load(f)
     assert len(cache) >= 7  # AGENTS.md + package.json + 5 source files (exact count depends on walk order)
+
+
+# ── F027: Domain-aware map format ─────────────────────────────────
+
+def test_map_domain_aware_sections(tmp_project, panel):
+    """F027: Map must output 4 domain-aware sections instead of flat Tree + Commands."""
+    panel.generate_codebase_map(tmp_project, full=True)
+    map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+    with open(map_path) as f:
+        content = f.read()
+
+    # New section headers must exist
+    assert "## Start Here" in content, f"Missing Start Here section\n{content}"
+    assert "## Domain Map" in content, f"Missing Domain Map section\n{content}"
+    assert "## Impact Map" in content, f"Missing Impact Map section\n{content}"
+    assert "## Test Map" in content, f"Missing Test Map section\n{content}"
+
+    # Old format headers must NOT exist
+    assert "## Tree" not in content, f"Old ## Tree header still present\n{content}"
+    assert "## Commands" not in content, f"Old ## Commands header still present\n{content}"
+
+
+def test_domain_map_groups_files(tmp_project, panel):
+    """F027: Domain Map groups files under correct domain headers."""
+    panel.generate_codebase_map(tmp_project, full=True)
+    map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+    with open(map_path) as f:
+        content = f.read()
+
+    # Source files should appear under "Source Code" domain (src/ directory)
+    assert "### Source Code" in content
+    assert "layout.tsx" in content
+    assert "Header.tsx" in content
+    assert "globals.css" in content
+
+    # Content files (MDX) should appear under "Documentation"
+    assert "### Documentation" in content
+    assert "guide.mdx" in content
+    assert "AGENTS.md" in content
+
+    # Config files
+    assert "### Configuration" in content
+    assert "package.json" in content
+
+
+def test_impact_map_has_dependencies(panel):
+    """F027: Impact Map lists file dependencies for Python projects."""
+    with tempfile.TemporaryDirectory() as d:
+        specs_dir = os.path.join(d, "specs")
+        os.makedirs(specs_dir, exist_ok=True)
+
+        # Create python files with imports
+        with open(os.path.join(d, "main.py"), "w") as f:
+            f.write("import utils\nfrom agent import spawn_agent\nimport os\n")
+        with open(os.path.join(d, "utils.py"), "w") as f:
+            f.write("# Standalone utilities\nimport os\n")
+        with open(os.path.join(d, "agent.py"), "w") as f:
+            f.write("import utils\n")
+
+        panel.generate_codebase_map(d, full=True)
+        map_path = os.path.join(d, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+
+        assert "## Impact Map" in content
+        # main.py imports utils and agent (internal)
+        assert "main.py" in content
+        # utils.py is standalone
+        assert "standalone" in content
+
+
+def test_test_map_pairs_modules(panel):
+    """F027: Test Map matches test files to source modules."""
+    with tempfile.TemporaryDirectory() as d:
+        specs_dir = os.path.join(d, "specs")
+        os.makedirs(specs_dir, exist_ok=True)
+
+        # Source files
+        with open(os.path.join(d, "utils.py"), "w") as f:
+            f.write("def slugify(): pass\n")
+        with open(os.path.join(d, "pipeline.py"), "w") as f:
+            f.write("def run(): pass\n")
+
+        # Test files in tests/ directory
+        tests_dir = os.path.join(d, "tests")
+        os.makedirs(tests_dir, exist_ok=True)
+        with open(os.path.join(tests_dir, "test_utils.py"), "w") as f:
+            f.write("from utils import slugify\n")
+        with open(os.path.join(tests_dir, "test_pipeline.py"), "w") as f:
+            f.write("from pipeline import run\n")
+        # Test with no matching source
+        with open(os.path.join(tests_dir, "test_unknown.py"), "w") as f:
+            f.write("# no matching source\n")
+
+        panel.generate_codebase_map(d, full=True)
+        map_path = os.path.join(d, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+
+        assert "## Test Map" in content
+        assert "test_utils.py" in content
+        assert "test_pipeline.py" in content
+
+
+def test_start_here_has_commands(tmp_project, panel):
+    """F027: Start Here includes project description and commands."""
+    panel.generate_codebase_map(tmp_project, full=True)
+    map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+    with open(map_path) as f:
+        content = f.read()
+
+    # Start Here section
+    assert "## Start Here" in content
+    assert "Test:" in content
+    assert "Build:" in content
+    assert "Lint:" in content
+    assert "Key files:" in content
+
+
+def test_empty_project_valid_map(panel):
+    """F027: Empty project produces valid 4-section map with placeholders."""
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, "specs"), exist_ok=True)
+        panel.generate_codebase_map(d, full=True)
+        map_path = os.path.join(d, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+
+        assert "## Start Here" in content
+        assert "## Domain Map" in content
+        assert "## Impact Map" in content
+        assert "## Test Map" in content
+
+
+def test_incremental_regenerates_all_sections(tmp_project, panel):
+    """F027: Incremental mode regenerates all 4 sections."""
+    panel.generate_codebase_map(tmp_project, full=True)
+
+    # Change a file to trigger incremental update
+    with open(os.path.join(tmp_project, "src", "layout.tsx"), "a") as f:
+        f.write("\n// changed\n")
+
+    result = panel.generate_codebase_map(tmp_project, full=False)
+    assert result is True
+
+    map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+    with open(map_path) as f:
+        content = f.read()
+
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
