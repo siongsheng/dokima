@@ -115,6 +115,12 @@ def test_map_includes_mdx(tmp_project, panel):
     assert "globals.css" in content
     assert "guide.mdx" in content, f"MDX file missing from map!\n{content}"
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_tech_detection(tmp_project, panel):
     """Tech stack should be detected from package.json."""
@@ -127,6 +133,12 @@ def test_map_tech_detection(tmp_project, panel):
     assert "TypeScript" in content
     assert "Vitest" in content
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_commands_from_agents(tmp_project, panel):
     """Commands should be extracted from AGENTS.md."""
@@ -137,6 +149,12 @@ def test_map_commands_from_agents(tmp_project, panel):
     assert "pytest" in content
     assert "npm run build" in content
     assert "eslint" in content
+
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
 
 
 def test_map_incremental_no_change(tmp_project, panel):
@@ -192,6 +210,12 @@ def test_map_file_count(tmp_project, panel):
     # 7 source files: AGENTS.md, package.json, layout.tsx, Header.tsx, page.tsx, globals.css, guide.mdx
     assert "7 files" in content
 
+    # F027: Verify 4-section format
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
+
 
 def test_map_cache_written(tmp_project, panel):
     """Incremental cache should be written with hashes and descriptions."""
@@ -224,9 +248,15 @@ def test_map_no_agents_md(tmp_project, panel):
     map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
     with open(map_path) as f:
         content = f.read()
-    assert "test: ?" in content
-    assert "build: ?" in content
-    assert "lint: ?" in content
+    assert "Test: `?`" in content
+    assert "Build: `?`" in content
+    assert "Lint: `?`" in content
+
+    # F027: Verify 4-section format still produced
+    assert "## Start Here" in content
+    assert "## Domain Map" in content
+    assert "## Impact Map" in content
+    assert "## Test Map" in content
 
 
 def test_map_full_rebuild(tmp_project, panel):
