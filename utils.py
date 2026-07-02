@@ -1666,6 +1666,9 @@ def _classify_domain(rel_path):
     basename = os.path.basename(rel_path)
     name_lower = basename.lower()
 
+    # Specific well-known filenames first (before substring matches)
+    if basename == 'AGENTS.md' or basename == 'README.md' or basename == 'MAINTAINERS.md' or basename == 'CONTRIBUTING.md':
+        return 'Documentation'
     if basename == 'dokima' or basename == 'main.py' or basename == 'index.js' or basename == 'index.ts':
         return 'Entry Point'
     if 'pipeline' in name_lower or 'workflow' in name_lower or 'orchestrat' in name_lower:
@@ -1678,8 +1681,6 @@ def _classify_domain(rel_path):
         return 'Utilities'
     if 'config' in name_lower or 'setting' in name_lower or basename.endswith('.toml') or basename.endswith('.yaml') or basename.endswith('.yml'):
         return 'Configuration'
-    if basename == 'README.md' or basename == 'MAINTAINERS.md' or basename == 'AGENTS.md' or basename == 'CONTRIBUTING.md':
-        return 'Documentation'
 
     ext = os.path.splitext(basename)[1]
     if ext in ('.css', '.scss'):
