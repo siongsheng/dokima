@@ -53,7 +53,7 @@ def _run_pipeline(panel, project_dir, spawn_mock, extra_patches=None, is_continu
     """Run main() with standard patches + optional extras."""
     old = sys.argv
     try:
-        flag = "--continuous" if is_continuous else "--next"
+        flag = "continuous" if is_continuous else "next"
         sys.argv = ["dokima", flag, project_dir]
         panel.spawn_agent = spawn_mock
 

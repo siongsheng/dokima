@@ -15,7 +15,7 @@ class TestDokimaMain:
         count = content.count('if __name__ == "__main__":')
         assert count == 1, (
             f"Expected exactly 1 main() call, found {count}. "
-            "Duplicate causes double-execution bugs (--release, init, etc.)"
+            "Duplicate causes double-execution bugs (release, init, etc.)"
         )
 
 

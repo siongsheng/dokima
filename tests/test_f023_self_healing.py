@@ -391,7 +391,7 @@ def test_vet_hash_cycle_different_output_proceeds(panel, tmpdir_path, monkeypatc
     assert result.get("pr_url") is not None
 
 
-# ── Task 4: Lock-age auto-cleanup in _get_lock_state (--status) ─────────
+# ── Task 4: Lock-age auto-cleanup in _get_lock_state (status) ─────────
 
 def test_get_lock_state_old_lock_cleaned(panel, tmpdir_path, monkeypatch):
     """_get_lock_state removes lock file older than threshold even if PID alive."""
