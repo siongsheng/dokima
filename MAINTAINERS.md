@@ -2,7 +2,7 @@
 
 > Everything you need to remember about Dokima's internals. Update this doc when you discover new gotchas.
 
-Last updated: 2026-06-29
+Last updated: 2026-07-03
 
 ---
 
@@ -144,7 +144,7 @@ git branch -D feat/<feature-slug>-t* 2>/dev/null
 git push origin --delete feat/<feature-slug> 2>/dev/null
 
 # Re-run
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
+python3 dokima next --skip-human-gate .
 ```
 
 ---
@@ -171,7 +171,7 @@ PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
 
 | Test File | What It Covers |
 |-----------|---------------|
-| `test_add_to_roadmap.py` | `--add` command: auto-priority, deps, section placement |
+| `test_add_to_roadmap.py` | `add` subcommand: auto-priority, deps, section placement |
 | `test_roadmap_parse.py` | Roadmap parsing + feature extraction |
 | `test_pick_next_feature.py` | Feature ordering: priority sort, deps, in_progress inclusion |
 | `test_root_cause_regressions.py` | Bug 1-8 regression tests (DAG thinking, verdict, anti-creep, etc.) |
@@ -198,22 +198,22 @@ python3 -m pytest tests/test_f003_robustness.py -v   # single file verbose
 
 ```bash
 # Run next pending feature
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
+python3 dokima next --skip-human-gate .
 
 # Add feature to roadmap
-python3 dokima --add "Feature description"
+python3 dokima add "Feature description"
 
 # Fix a BLOCKED PR
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --fix --fix-all .
+python3 dokima fix --fix-all --skip-human-gate .
 
 # Show pipeline state
-python3 dokima --status .
+python3 dokima status .
 
 # Full sprint loop (runs continuously)
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --continuous .
+python3 dokima next --continuous --skip-human-gate .
 
 # Force full pipeline (ignore depth gating)
-python3 dokima --next --force-full .
+python3 dokima next --force-full .
 ```
 
 ---
@@ -262,8 +262,8 @@ PR body must have sections in order: `## Why` → `## Impact` → `## What Chang
 
 ## Environment Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `PANEL_SKIP_ORCHESTRATOR_REVIEW` | Skip human gate (set to `1` for automated runs) |
-| `PANEL_FORCE_FULL` | Force full pipeline depth regardless of confidence/impact |
-| `PANEL_MAX_PARALLEL` | Max concurrent coder worktrees (default from profile config) |
+| Flag / Env Var | Purpose |
+|----------------|---------|
+| `--skip-human-gate` / `PANEL_SKIP_HUMAN_GATE=1` | Skip human gate for automated runs |
+| `--force-full` / `PANEL_FORCE_FULL=1` | Force full pipeline depth regardless of confidence/impact |
+| `--max-parallel=N` / `PANEL_MAX_PARALLEL=N` | Max concurrent coder worktrees (default from profile config) |
