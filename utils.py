@@ -59,7 +59,7 @@ COMMANDS:
   dokima --add "Feature" [--priority=P1] [dir]  Add feature to roadmap (auto-priority, auto-deps)
   dokima --next [dir]                    Build next feature from roadmap
   dokima --continuous [dir]              Full sprint: build + auto-merge + loop
-  dokima --fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
+  dokima fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
 
 CONTROL:
   dokima --status [dir]                  Show pipeline state
@@ -91,7 +91,7 @@ EXAMPLES:
   dokima --add "Dark mode toggle" ~/huat
   dokima --next ~/huat
   dokima --continuous ~/huat
-  dokima --fix ~/huat
+  dokima fix ~/huat
   dokima --status ~/huat"""
 # KEEP IN SYNC with HELP_TEXT — add any new command/flag/env_var here too
 CLI_METADATA = {
@@ -103,7 +103,7 @@ CLI_METADATA = {
         {"name": "--add", "syntax": "dokima --add \"Feature\" [--priority=P1] [dir]", "description": "Add feature to roadmap (auto-priority, auto-deps)"},
         {"name": "--next", "syntax": "dokima --next [dir]", "description": "Build next feature from roadmap"},
         {"name": "--continuous", "syntax": "dokima --continuous [dir]", "description": "Full sprint: build + auto-merge + loop"},
-        {"name": "--fix", "syntax": "dokima --fix [dir]", "description": "Fix BLOCKED PR: detect blockers, fix, verify"},
+        {"name": "fix", "syntax": "dokima fix [dir]", "description": "Fix BLOCKED PR: detect blockers, fix, verify"},
         {"name": "--status", "syntax": "dokima --status [dir]", "description": "Show pipeline state"},
         {"name": "--stop", "syntax": "dokima --stop [dir]", "description": "Graceful stop after current feature"},
         {"name": "--kill", "syntax": "dokima --kill [dir]", "description": "Emergency kill (SIGTERM then SIGKILL)"},

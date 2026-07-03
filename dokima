@@ -84,7 +84,7 @@ def main():
     global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME
     import shutil
     if len(sys.argv) < 2:
-        print("Usage: dokima [--next|--continuous|--fix] [--fix-all] [--skip-autofix] [--force-full] [--skip-auto-archive] [--skip-human-gate] [--resume|--no-resume] [--max-parallel=N] [--interactive] [--answers <json>] 'Feature' [dir]")
+        print("Usage: dokima [--next|--continuous|fix] [--fix-all] [--skip-autofix] [--force-full] [--skip-auto-archive] [--skip-human-gate] [--resume|--no-resume] [--max-parallel=N] [--interactive] [--answers <json>] 'Feature' [dir]")
         print("  dokima --next [project_dir]             # one feature, manual merge")
         print("  dokima --continuous [project_dir]       # full sprint, auto-merge, loop")
         print("  dokima init 'description' [project_dir]")
@@ -176,6 +176,9 @@ def main():
             skip_next = True
             continue
         if arg == "--fix":
+            is_fix = True
+            continue
+        if arg == "fix":
             is_fix = True
             continue
         if arg == "--map":
