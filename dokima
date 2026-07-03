@@ -87,9 +87,9 @@ def main():
 
     # ── Top-level flag pre-scan ──
     # --help, --help-json, --map, --map-full are top-level flags
+    # Only intercept at top level (before subcommand routing).
+    # Once a subcommand is detected, let argparse handle --help internally.
     for arg in sys.argv[1:]:
-        if arg in ("--help", "-h"):
-            show_help()
         if arg == "--help-json":
             show_help_json()
 
@@ -110,6 +110,12 @@ def main():
             break
 
     is_subcommand = first_pos in KNOWN_SUBCOMMANDS
+
+    # ── Top-level --help/-h (only if NOT a subcommand — for subcommands, argparse handles it) ──
+    if not is_subcommand:
+        for arg in sys.argv[1:]:
+            if arg in ("--help", "-h"):
+                show_help()
 
     if is_subcommand:
         # ── Build argparse for subcommands ──
@@ -194,8 +200,9 @@ def main():
 
         try:
             args = parser.parse_args()
-        except SystemExit:
-            return
+        except SystemExit as e:
+            # Re-raise SystemExit to preserve argparse's exit code (0 for --help, 2 for errors)
+            raise
 
         cmd = args.command
 
