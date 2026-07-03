@@ -6,7 +6,7 @@ Flow: Strategist → User Clarifications → Strategist Refine → TL Spec Pre-R
 Output: Live to terminal + saved to /tmp/dokima-output.txt
 """
 
-import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime, argparse
 
 # ── F022 Modular Architecture ───────────────────
 # Module imports for state propagation (mutable globals flow FROM dokima TO modules).
@@ -79,6 +79,144 @@ except OSError:
     VERSION = "unknown"
 
 from utils import HELP_TEXT
+
+
+def _build_parser():
+    """Build argparse parser with subcommands for F030 CLI redesign."""
+
+    parser = argparse.ArgumentParser(
+        prog="dokima",
+        description="Dokima — Multi-Agent Orchestration Engine",
+        add_help=False,  # We handle --help/-h manually for compatibility
+    )
+
+    # Top-level flags (no subcommand required)
+    parser.add_argument("--help", "-h", action="store_true", dest="show_help",
+                        help="Show help message and exit")
+    parser.add_argument("--help-json", action="store_true",
+                        help="Output CLI reference as JSON")
+    parser.add_argument("--map", action="store_true", dest="map_mode",
+                        help="Generate CODEBASE-MAP.md")
+    parser.add_argument("--map-full", action="store_true",
+                        help="Generate full CODEBASE-MAP.md (all files)")
+
+    subparsers = parser.add_subparsers(dest="command", title="subcommands")
+
+    # ── version subcommand ──
+    subparsers.add_parser("version", help="Print version and exit")
+
+    # ── upgrade subcommand ──
+    subparsers.add_parser("upgrade", help="Check for newer version and show upgrade instructions")
+
+    # ── list-crons subcommand ──
+    subparsers.add_parser("list-crons", help="List all scheduled pipelines")
+
+    # ── status subcommand ──
+    status_p = subparsers.add_parser("status", help="Show pipeline state")
+    status_p.add_argument("dir", nargs="?", default=None,
+                          help="Project directory (default: cwd)")
+
+    # ── stop subcommand ──
+    stop_p = subparsers.add_parser("stop", help="Graceful stop after current feature")
+    stop_p.add_argument("dir", nargs="?", default=None,
+                        help="Project directory (default: cwd)")
+
+    # ── kill subcommand ──
+    kill_p = subparsers.add_parser("kill", help="Emergency kill (SIGTERM then SIGKILL)")
+    kill_p.add_argument("dir", nargs="?", default=None,
+                        help="Project directory (default: cwd)")
+
+    # ── add subcommand ──
+    add_p = subparsers.add_parser("add", help="Add feature to roadmap")
+    add_p.add_argument("feature", nargs="?", default=None,
+                       help="Feature description")
+    add_p.add_argument("dir", nargs="?", default=None,
+                       help="Project directory (default: cwd)")
+    add_p.add_argument("--priority", choices=["P0", "P1", "P2", "P3"], default=None,
+                       help="Feature priority (default: auto-assigned)")
+
+    # ── next subcommand ──
+    next_p = subparsers.add_parser("next", help="Build next feature from roadmap")
+    next_p.add_argument("feature", nargs="?", default=None,
+                        help="Feature hint (if two args: feature + dir; if one: dir)")
+    next_p.add_argument("dir", nargs="?", default=None,
+                        help="Project directory (default: cwd)")
+    next_p.add_argument("--continuous", action="store_true",
+                        help="Full sprint: build + auto-merge + loop")
+    next_p.add_argument("--interactive", action="store_true",
+                        help="Show human gate")
+    next_p.add_argument("--force-full", action="store_true",
+                        help="Run all 5 phases regardless of depth gating")
+    next_p.add_argument("--skip-autofix", action="store_true",
+                        help="Disable auto-fix loopback (nm + TL phases)")
+    next_p.add_argument("--skip-auto-archive", action="store_true",
+                        help="Don't auto-archive merged specs")
+    next_p.add_argument("--skip-human-gate", action="store_true",
+                        help="Skip Human Gate prompt (for automation)")
+    next_p.add_argument("--resume", action="store_true", default=None, dest="resume_flag",
+                        help="Resume from last checkpoint")
+    next_p.add_argument("--no-resume", action="store_false", default=None, dest="resume_flag",
+                        help="Ignore existing checkpoint, start fresh")
+    next_p.add_argument("--max-parallel", type=int, default=None,
+                        help="Max parallel coder agents (default: 5)")
+
+    # ── fix subcommand ──
+    fix_p = subparsers.add_parser("fix", help="Fix BLOCKED PR: detect blockers, fix, verify")
+    fix_p.add_argument("dir", nargs="?", default=None,
+                       help="Project directory (default: cwd)")
+    fix_p.add_argument("--fix-all", action="store_true",
+                       help="Include SHOULD FIX items")
+    fix_p.add_argument("--skip-autofix", action="store_true",
+                       help="Disable auto-fix loopback")
+    fix_p.add_argument("--force-full", action="store_true",
+                       help="Run all 5 phases regardless of depth gating")
+    fix_p.add_argument("--skip-auto-archive", action="store_true",
+                       help="Don't auto-archive merged specs")
+    fix_p.add_argument("--skip-human-gate", action="store_true",
+                       help="Skip Human Gate prompt")
+    fix_p.add_argument("--answers", default=None,
+                       help="Path to saved interview state JSON")
+
+    # ── release subcommand ──
+    release_p = subparsers.add_parser("release", help="Bump version, tag, changelog, and GitHub Release")
+    release_p.add_argument("bump", choices=["patch", "minor", "major"],
+                           help="Version bump type")
+    release_p.add_argument("--dry-run", action="store_true",
+                           help="Print plan without committing")
+    release_p.add_argument("dir", nargs="?", default=None,
+                           help="Project directory (default: cwd)")
+
+    # ── Default path (no subcommand): positional feature + dir + flags ──
+    parser.add_argument("feature", nargs="?", default=None,
+                        help="Feature description (or 'init' for project setup)")
+    parser.add_argument("dir", nargs="?", default=None,
+                        help="Project directory (default: cwd)")
+    # Flags shared across default pipeline
+    parser.add_argument("--interactive", action="store_true",
+                        help="Show human gate")
+    parser.add_argument("--answers", default=None,
+                        help="Path to saved interview state JSON")
+    parser.add_argument("--fix-all", action="store_true",
+                        help="Include SHOULD FIX items")
+    parser.add_argument("--skip-autofix", action="store_true",
+                        help="Disable auto-fix loopback (nm + TL phases)")
+    parser.add_argument("--force-full", action="store_true",
+                        help="Run all 5 phases regardless of depth gating")
+    parser.add_argument("--skip-auto-archive", action="store_true",
+                        help="Don't auto-archive merged specs")
+    parser.add_argument("--skip-human-gate", action="store_true",
+                        help="Skip Human Gate prompt (for automation)")
+    parser.add_argument("--resume", action="store_true", default=None, dest="resume_flag",
+                        help="Resume from last checkpoint")
+    parser.add_argument("--no-resume", action="store_false", default=None, dest="resume_flag",
+                        help="Ignore existing checkpoint, start fresh")
+    parser.add_argument("--max-parallel", type=int, default=None,
+                        help="Max parallel coder agents (default: 5)")
+    parser.add_argument("--base-branch", default=None,
+                        help="Override default branch for PR base")
+
+    return parser
+
 
 def main():
     global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME
