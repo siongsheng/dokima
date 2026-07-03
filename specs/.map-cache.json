@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "32fff5701af3fd5e3b5dd8e65c39e94d",
+    "hash": "899af33ca982a0e04722ea7f1058adad",
     "desc": ""
   },
   "AGENTS.md": {
@@ -8,11 +8,11 @@
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
-    "hash": "4f8ebdf6eaae97c5bba45b9507f016dd",
+    "hash": "8dda33aca6ffabbd1d53db7797e14d16",
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
-    "hash": "f2a1d64ab72dba2ca8a6b838e94ce4fa",
+    "hash": "9129b686dd383918a0f8e4a71d7a684c",
     "desc": "Dokima"
   },
   "agent.py": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "40dc8efd6a624bdcec0192278ebdb75c",
+    "hash": "7a04a857c500528d40afa074324feddb",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -36,11 +36,11 @@
     "desc": "Exports: TaskStatus, PhaseTiming, PipelineStatus"
   },
   "tasks.py": {
-    "hash": "8b653a9c1cd477939e965ea657fe7d8b",
+    "hash": "3b40fddc14111b0928ad689556e78572",
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "9cf349354b9939d6c1c370e5c67a213b",
+    "hash": "9cf7222786ee3ffa3b7e927bea6fa7d3",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
@@ -108,7 +108,7 @@
     "desc": "Exports: TestTestRepoFixture, TestMockOrchestratorFixture"
   },
   "tests/test_continuous.py": {
-    "hash": "236058ce2cdc86499a720b4c02b3f2e4",
+    "hash": "d07201819631738b11f23e9626076fa7",
     "desc": "Exports: _setup_two_features, test_continuous_loop_two_features"
   },
   "tests/test_control_panel.py": {
@@ -124,7 +124,7 @@
     "desc": "Exports: test_first_acquisition_succeeds, test_second_acquisition_blocked, test_stale_lock_dead_pid"
   },
   "tests/test_edge_cases.py": {
-    "hash": "80e2d8e5bd44d3b4e074b202f905c8cd",
+    "hash": "165d75ceca156a8f5e5230772bcaeaea",
     "desc": "Exports: _setup"
   },
   "tests/test_execution_mode_dispatch.py": {
@@ -164,11 +164,11 @@
     "desc": "Exports: TestCheckpointPath, TestSaveCheckpoint"
   },
   "tests/test_f020_help_json.py": {
-    "hash": "23a911e39071f42b8e04945bda6199cf",
+    "hash": "a4e56ee4be5fbb9ac8b7317541c7edd3",
     "desc": "Exports: run_help_json, TestHelpJsonOutput"
   },
   "tests/test_f021_version.py": {
-    "hash": "ccaeb077ae577fecf0e93f9888bd59b6",
+    "hash": "32f4dbe199e1e690a37db987352d6aaf",
     "desc": "Exports: _run, test_version_flag_prints_version_and_exits_0, test_help_includes_version_command, test_help_includes_upgrade_command, test_help_json_includes_version"
   },
   "tests/test_f022_agent.py": {
@@ -200,23 +200,35 @@
     "desc": "Exports: _git_with_source_diff, test_lock_age_old_lock_with_live_pid_removed"
   },
   "tests/test_f024_release.py": {
-    "hash": "98ce59477d868774fc111a2d4a6d99d5",
+    "hash": "845d00e9c8b6d72b5988c88e69135ea1",
     "desc": "Ensure the project root is on the path so we can import utils"
   },
   "tests/test_f025_dashboard.py": {
     "hash": "0a2035004d5dfca30a5d4ba0dd47f449",
     "desc": "Exports: TestPipelineStatus, TestSaveLoad"
   },
+  "tests/test_f030_cli_metadata.py": {
+    "hash": "2542b556cb29daf855afcf1a10dfdbf6",
+    "desc": "Exports: _run, test_cli_metadata_commands_use_subcommand_names, test_cli_metadata_syntax_uses_subcommand_format"
+  },
+  "tests/test_f030_help_text.py": {
+    "hash": "98df794e63c4094890469e2d1cdd7163",
+    "desc": "Exports: _run, test_help_shows_subcommand_syntax, test_help_shows_next_subcommand, test_help_shows_fix_subcommand, test_help_shows_status_subcommand"
+  },
+  "tests/test_f030_red.py": {
+    "hash": "354efb8365adf8b4339b29eb92eb2e65",
+    "desc": "Exports: test_version_subcommand_prints_version, test_version_subcommand_help_json_first_wins"
+  },
   "tests/test_final_coverage.py": {
-    "hash": "fce4946929107bbda29ff535a543a3ec",
+    "hash": "63bd93c57437b723a16f02ca7faee1ed",
     "desc": "Exports: _setup"
   },
   "tests/test_final_edge.py": {
-    "hash": "be69fd3971e166c1dbd22211710a37fa",
+    "hash": "597be6e6057d1c2c1bff76d163460342",
     "desc": "Exports: _setup"
   },
   "tests/test_fix_mode.py": {
-    "hash": "086600e0ba2e87f5370f795565133d9b",
+    "hash": "58ac22a011ba1a00de9447bfb5b04c56",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
   "tests/test_functions_unit.py": {
@@ -240,7 +252,7 @@
     "desc": "Exports: test_explicit_project_dir_lock, test_explicit_project_dir_stop, test_implicit_from_global, test_trailing_slash_normalized, test_no_project_dir_no_arg"
   },
   "tests/test_main_integration.py": {
-    "hash": "94f4d320ac216a922334464de73559d8",
+    "hash": "b386d0c62ab4b65826b6ca2336234496",
     "desc": "Exports: _git_with_source_diff, _make_safe_run_result, _setup_test_project"
   },
   "tests/test_parallel_robustness.py": {
@@ -260,7 +272,7 @@
     "desc": "Exports: test_check_live_pid, test_check_dead_pid, test_check_non_numeric, test_check_empty_string, test_verify_owner_on_self"
   },
   "tests/test_pipeline_integration.py": {
-    "hash": "1f102ffcc9a0a3fddfff37e8f2629a4b",
+    "hash": "9d833691466ba94d8408f1ed0d961382",
     "desc": "Exports: _setup_test_project"
   },
   "tests/test_profile_templates.py": {
@@ -268,7 +280,7 @@
     "desc": "Exports: _fresh_panel, TestEnsureProfiles"
   },
   "tests/test_rich_pipeline.py": {
-    "hash": "e865ddf31da4c36e4afeba0eb29c5fce",
+    "hash": "9d55fac5c3bbbf33df1f95f3cf6d35c1",
     "desc": "Exports: _setup_project"
   },
   "tests/test_roadmap_parse.py": {

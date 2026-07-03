@@ -1485,7 +1485,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     1. DECISION TABLE: For novel/complex features, compare ≥2 approaches. For features with an obvious pattern match (visual change, config, docs, standard CRUD), use "SINGLE APPROACH: <one sentence>" — skip the comparison table.
 
-    2. ## N. Impact — a section header (e.g., ## 3. Impact) with a paragraph describing what changes for users/developers. Use a real section header, not "Impact: MEDIUM" inline metadata. Example:
+    2. ## N. Impact — MANDATORY SECTION. You MUST start this line with "## " followed by a number, a dot, and the word "Impact". DO NOT write "3. Impact Assessment" without ##. DO NOT write "Impact: MEDIUM". Only "## N. Impact" is accepted. Example:
        ## 3. Impact
 
        Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs. No more manual tagging.
