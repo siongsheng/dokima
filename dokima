@@ -90,7 +90,7 @@ def main():
         print("  dokima init 'description' [project_dir]")
         sys.exit(1)
 
-    # ── FLAG SCANNING ──
+    # ── INITIALISE BOOLEANS ──
     is_next = False
     is_continuous = False
     is_interactive = False
@@ -121,7 +121,69 @@ def main():
     user_answers_prefill = None
     filtered_argv = []
     skip_next = False
-    for arg in sys.argv[1:]:
+
+    # ── SUBCOMMAND ROUTING ──
+    # Check if sys.argv[1] is a subcommand (dokima next, dokima add, etc.)
+    # Subcommands are positional — no -- prefix
+    subcommand_consumed = False
+    arg_start = 1
+    sub = sys.argv[1]
+    if sub == "next":
+        is_next = True
+        subcommand_consumed = True
+    elif sub == "continuous":
+        is_continuous = True
+        is_next = True
+        subcommand_consumed = True
+    elif sub == "add":
+        is_add = True
+        subcommand_consumed = True
+    elif sub == "fix":
+        is_fix = True
+        subcommand_consumed = True
+    elif sub == "status":
+        is_status = True
+        subcommand_consumed = True
+    elif sub == "stop":
+        is_stop = True
+        subcommand_consumed = True
+    elif sub == "kill":
+        is_kill = True
+        subcommand_consumed = True
+    elif sub == "map":
+        is_map = True
+        subcommand_consumed = True
+    elif sub == "list-crons":
+        is_list_crons = True
+        subcommand_consumed = True
+    elif sub in ("version", "-v"):
+        is_version = True
+        subcommand_consumed = True
+    elif sub == "upgrade":
+        is_upgrade = True
+        subcommand_consumed = True
+    elif sub == "release":
+        is_release = True
+        subcommand_consumed = True
+        if len(sys.argv) > 2:
+            release_bump = sys.argv[2]
+            if release_bump not in ("patch", "minor", "major"):
+                print(f"  ⚠ Invalid release bump: {release_bump!r} (expected patch, minor, or major)", flush=True)
+                sys.exit(1)
+            arg_start = 3
+    elif sub == "help":
+        is_help = True
+        subcommand_consumed = True
+    elif sub == "init":
+        # init stays as before — falls through to feature parsing
+        pass
+
+    if subcommand_consumed:
+        if sub != "release":
+            arg_start = 2
+
+    # ── FLAG SCANNING ──
+    for arg in sys.argv[arg_start:]:
         if skip_next:
             if is_release and release_bump is None:
                 # The arg after --release is the bump type
