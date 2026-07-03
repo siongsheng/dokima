@@ -114,3 +114,43 @@ def test_version_file_is_valid():
     assert version, "VERSION file is empty"
     import re
     assert re.match(r'^\d+\.\d+\.\d+$', version), f"VERSION not semver: {version!r}"
+
+
+# ── Task 14: Backward-Compatible Deprecation Warnings ──
+# F030 spec §11 Test Plan requires old --flag forms to print deprecation
+# warnings to stderr while still functioning correctly.
+
+def _has_deprecation(text):
+    """True if text contains a deprecation-related keyword."""
+    lower = text.lower()
+    return "deprecat" in lower or "use 'dokima" in lower
+
+
+def test_backward_compat_version_warns():
+    """dokima --version prints deprecation warning to stderr, exits 0."""
+    rc, out, err = _run("--version")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert out.startswith("dokima v"), f"Expected version output, got: {out}"
+    assert _has_deprecation(err), (
+        f"Expected deprecation warning on stderr for --version, got: {err!r}"
+    )
+
+
+def test_backward_compat_v_shorthand_warns():
+    """dokima -v prints deprecation warning to stderr, exits 0."""
+    rc, out, err = _run("-v")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert out.startswith("dokima v"), f"Expected version output, got: {out}"
+    assert _has_deprecation(err), (
+        f"Expected deprecation warning on stderr for -v, got: {err!r}"
+    )
+
+
+def test_backward_compat_help_warns():
+    """dokima --help prints deprecation warning to stderr, exits 0."""
+    rc, out, err = _run("--help")
+    assert rc == 0, f"Expected exit 0, got {rc}"
+    assert "Dokima" in out, f"Expected help content, got: {out[:100]}"
+    assert _has_deprecation(err), (
+        f"Expected deprecation warning on stderr for --help, got: {err!r}"
+    )
