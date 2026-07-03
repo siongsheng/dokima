@@ -82,8 +82,28 @@ from utils import HELP_TEXT
 
 def main():
     global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME
-    import shutil
     import argparse
+    import shutil
+
+    # ── Initialize all locals that may be used in shared paths ──
+    feature = ""
+    is_next = False
+    is_continuous = False
+    is_interactive = False
+    is_fix = False
+    is_map = False
+    map_full = False
+    force_full = False
+    skip_autofix = False
+    skip_auto_archive = False
+    skip_human_gate = False
+    fix_all = False
+    max_parallel_override = None
+    base_branch_override = None
+    user_answers_prefill = None
+    answers_path = None
+    filtered_argv = []
+    add_priority = None
 
     # ── Top-level flag pre-scan ──
     # --help, --help-json, --map, --map-full are top-level flags
@@ -118,6 +138,7 @@ def main():
                 show_help()
 
     if is_subcommand:
+        filtered_argv = []  # ensure defined for NEXT MODE block below
         # ── Build argparse for subcommands ──
         parser = argparse.ArgumentParser(prog="dokima", add_help=False)
         subparsers = parser.add_subparsers(dest="command")
