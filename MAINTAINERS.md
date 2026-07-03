@@ -144,7 +144,7 @@ git branch -D feat/<feature-slug>-t* 2>/dev/null
 git push origin --delete feat/<feature-slug> 2>/dev/null
 
 # Re-run
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
+PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima next .
 ```
 
 ---
@@ -171,7 +171,7 @@ PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
 
 | Test File | What It Covers |
 |-----------|---------------|
-| `test_add_to_roadmap.py` | `--add` command: auto-priority, deps, section placement |
+| `test_add_to_roadmap.py` | `add` command: auto-priority, deps, section placement |
 | `test_roadmap_parse.py` | Roadmap parsing + feature extraction |
 | `test_pick_next_feature.py` | Feature ordering: priority sort, deps, in_progress inclusion |
 | `test_root_cause_regressions.py` | Bug 1-8 regression tests (DAG thinking, verdict, anti-creep, etc.) |
@@ -198,22 +198,22 @@ python3 -m pytest tests/test_f003_robustness.py -v   # single file verbose
 
 ```bash
 # Run next pending feature
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --next .
+PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima next .
 
 # Add feature to roadmap
-python3 dokima --add "Feature description"
+python3 dokima add "Feature description"
 
 # Fix a BLOCKED PR
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --fix --fix-all .
+PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima fix --fix-all .
 
 # Show pipeline state
-python3 dokima --status .
+python3 dokima status .
 
 # Full sprint loop (runs continuously)
-PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima --continuous .
+PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima next --continuous .
 
 # Force full pipeline (ignore depth gating)
-python3 dokima --next --force-full .
+python3 dokima next .-force-full .
 ```
 
 ---
