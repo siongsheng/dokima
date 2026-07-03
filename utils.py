@@ -82,6 +82,8 @@ FLAGS:
   --no-resume          Ignore any existing checkpoint and start fresh
   --max-parallel=N     Max parallel coder agents (env: PANEL_MAX_PARALLEL, default: 5)
   --base-branch <b>    Override default branch for PR base (default: detected from origin/HEAD)
+  --map                Generate codebase map and exit (standalone, no pipeline)
+  --map-full           Generate full codebase map with descriptions and exit
 
   All flags also accept their legacy PANEL_* env var equivalents
   (e.g., PANEL_FORCE_FULL=1). Flags take priority.
