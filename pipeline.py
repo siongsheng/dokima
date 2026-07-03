@@ -635,7 +635,10 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
             except Exception:
                 pass  # Best-effort — not critical
 
-            coder_prompt = f"""Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).{map_hint}{file_hints}{code_context}
+            coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
+
+{map_hint}{file_hints}{code_context}
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).
 FIRST: Create and switch to branch '{branch}':
   git checkout -b {branch} 2>/dev/null || git checkout {branch}
   git push -u origin {branch}
@@ -649,7 +652,6 @@ CRITICAL: Two distinct commits, RED before GREEN, different timestamps. NEVER bu
 BEFORE PUSHING: After ALL tasks done, check if the spec requires a README update. If yes, update README.md and commit as \"docs: update README for <feature>\". Then run lint ({LINT_CMD}) + FULL test suite ({TEST_CMD}). If either fails, fix and retry. Only git push when clean.
 
 CRITICAL RULES:
-- YOU ARE THE CODER — your job is to IMPLEMENT working code, not to write specs or planning documents. The strategist already wrote the spec. You must produce actual code changes that pass tests.
 - ONLY modify files listed in the current task's **Files:** field. DO NOT delete, rename, or touch any other files — even if they look stale, unused, or mergeable.
 - DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
 - DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.

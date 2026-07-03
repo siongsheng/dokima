@@ -328,7 +328,9 @@ def spawn_coder_in_worktree(task: Task, worktree_path: str, spec_path: str,
     """Spawn a coder agent in an isolated worktree. Returns the Popen process."""
     spec_ref = tasks_extract_path if tasks_extract_path else spec_path
     spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
-    coder_prompt = f"""Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
+    coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT Task {task.id}. Do NOT explore. Do NOT ask questions. Start NOW.
+
+Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
 
 You are working on Task {task.id}: {task.description}
 Files to create/modify: {', '.join(task.files) if task.files else 'determine from spec'}
