@@ -127,7 +127,7 @@ class TestHelpUnchanged:
         cmd = [sys.executable, PANEL_PATH, "--help"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         assert result.returncode == 0
-        assert "COMMANDS:" in result.stdout
+        assert "BUILD:" in result.stdout
 
 
 class TestNoRegression:
