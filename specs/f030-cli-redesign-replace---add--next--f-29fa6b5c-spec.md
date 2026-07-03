@@ -1,11 +1,5 @@
 # F030: CLI redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). Flags (--force-full, --max-parallel) keep -- prefix. Update all tests, scripts, AGENTS.md, roadmap, and docs.
 
-Now I have all the verified data. Here is the complete corrected spec with all quality fixes applied:
-    
-    
-    
-    Position: Complete F030 CLI redesign spec — all quality issues fixed. (High confidence)
-    
     SPEC: F030 — CLI Subcommand Redesign
     
     Version: 1.2.0 (corrected — converted Task N: → ### Task N: headers, Impact grounded in codebase evidence, test count updated to 755)
