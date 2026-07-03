@@ -67,7 +67,7 @@ def test_continuous_loop_two_features(tmpdir):
 
     old_argv = sys.argv
     try:
-        sys.argv = ["dokima", "--continuous", project_dir]
+        sys.argv = ["dokima", "continuous", project_dir]
         panel.spawn_agent = mock
 
         def gh_se(*args, **kwargs):

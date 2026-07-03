@@ -158,7 +158,7 @@ class TestParallelCoders:
     def _run(self, panel, project_dir, mock_spawn_fn, argv=None):
         old = sys.argv
         try:
-            sys.argv = argv or ["dokima", "--next", project_dir]
+            sys.argv = argv or ["dokima", "next", project_dir]
             panel.spawn_agent = mock_spawn_fn
             try:
                 panel.main()
@@ -219,7 +219,7 @@ class TestVetFailure:
 
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = mock
 
             # _safe_run returns failure for test → triggers fix loop
