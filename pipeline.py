@@ -1536,7 +1536,13 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     orig_strat_output = strat_output  # save in case re-prompt produces garbage
     # Check DAG on extracted agent messages, not raw output (which has <thinking> blocks)
     agent_text_for_dag = extract_agent_messages(strat_output)
+    _dag_on_fallback = "[strategist:fallback]" in strat_output or "[fallback]" in strat_output
     if not re.search(r'^\s*(?:###\s*)?Task\s*\d+:', agent_text_for_dag, re.MULTILINE):
+        if _dag_on_fallback:
+            print("  ⚠ No DAG-format tasks — strategist ran on fallback. Halting.", flush=True)
+            print("  Primary provider returned 503. Fallback model can't produce valid task headers.", flush=True)
+            print("  Wait for provider to recover, then run `dokima --next` again.", flush=True)
+            sys.exit(1)
         print("  ⚠ No DAG-format tasks (### Task N:) found — re-prompting strategist...", flush=True)
         # Truncate first output to keep re-prompt tokens reasonable (first 4K chars)
         truncated = strat_output[:4096] + ("...[truncated]" if len(strat_output) > 4096 else "")
