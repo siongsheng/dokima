@@ -125,7 +125,7 @@ Token needs: `repo` scope (for `gh pr create`, `gh issue create`, `gh pr review`
 
 ```bash
 # Check panel is executable
-dokima --help 2>&1 | head -5
+dokima help 2>&1 | head -5
 
 # Verify profiles start
 hermes --profile strategist -q "echo ok" --yolo
