@@ -60,14 +60,11 @@ def _make_map_hint(project_dir):
     if size == 0:
         return ""
     return (
-        f"\n\n\u26a1 CODING STARTUP: Read {map_path} FIRST "
-        f"(~{size} bytes). "
-        "It contains the 4-section domain-aware codebase map "
-        "(Start Here, Domain Map, Impact Map, Test Map), "
-        "tech stack, file descriptions, and commands. "
-        "Use it instead of reading every file to understand "
-        "the codebase. Only read individual files when you need "
-        "implementation details."
+        f"\n\nQuick reference: {map_path} "
+        f"(~{size} bytes) has file locations, "
+        "test mappings, tech stack, and commands. "
+        "Consult it only when you need to find a specific file or test — "
+        "do NOT read it as exploration before starting."
     )
 
 
