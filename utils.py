@@ -53,46 +53,51 @@ MAX_CONTINUOUS = 20
 
 HELP_TEXT = """Dokima — Multi-Agent Orchestration Engine
 
-COMMANDS:
+BUILD:
   dokima "Feature description" [dir]     Run full pipeline for a feature
   dokima init "description" [dir]        Project discovery & constitution
-  dokima --add "Feature" [--priority=P1] [dir]  Add feature to roadmap (auto-priority, auto-deps)
-  dokima --next [dir]                    Build next feature from roadmap
-  dokima --continuous [dir]              Full sprint: build + auto-merge + loop
-  dokima --fix [dir]                     Fix BLOCKED PR: detect blockers, fix, verify
+  dokima add "Feature" [-p P1] [dir]     Add feature to roadmap (auto-priority, auto-deps)
+
+MANAGE:
+  dokima next [dir]                      Build next feature from roadmap
+  dokima next --continuous [dir]         Full sprint: build + auto-merge + loop
+  dokima fix [dir]                       Fix BLOCKED PR: detect blockers, fix, verify
 
 CONTROL:
-  dokima --status [dir]                  Show pipeline state
-  dokima --stop [dir]                    Graceful stop after current feature
-  dokima --kill [dir]                    Emergency kill (SIGTERM then SIGKILL)
-  dokima --list-crons                    List all scheduled pipelines
-  dokima --version                       Print version and exit
-  dokima --upgrade                       Check for newer version and show upgrade instructions
-  dokima --release [patch|minor|major] [--dry-run] [dir]  Bump version, tag, changelog, and GitHub Release
+  dokima status [dir]                    Show pipeline state
+  dokima stop [dir]                      Graceful stop after current feature
+  dokima kill [dir]                      Emergency kill (SIGTERM then SIGKILL)
+  dokima list-crons                      List all scheduled pipelines
+  dokima version                         Print version and exit
+  dokima upgrade                         Check for newer version and show upgrade instructions
+  dokima release <patch|minor|major> [--dry-run] [dir]  Bump version, tag, changelog, and GitHub Release
 
-FLAGS:
-  --interactive        Show human gate (with --next/--continuous)
-  --answers <file>     Resume from saved interview state
-  --fix-all            Include SHOULD FIX items (with --fix)
-  --skip-autofix       Disable auto-fix loopback (nm + TL phases)
+MODIFIER FLAGS (apply across subcommands):
   --force-full         Run all 5 phases regardless of depth gating
+  --skip-autofix       Disable auto-fix loopback (nm + TL phases)
   --skip-auto-archive  Don't auto-archive merged specs
   --skip-human-gate    Skip Human Gate prompt (for automation)
-  --resume             Resume from last checkpoint (re-runs incomplete phases only)
-  --no-resume          Ignore any existing checkpoint and start fresh
   --max-parallel=N     Max parallel coder agents (env: PANEL_MAX_PARALLEL, default: 5)
   --base-branch <b>    Override default branch for PR base (default: detected from origin/HEAD)
+  --interactive        Show human gate (with next)
+  --answers <file>     Resume from saved interview state
+  --fix-all            Include SHOULD FIX items (with fix)
+  --resume             Resume from last checkpoint (re-runs incomplete phases only)
+  --no-resume          Ignore any existing checkpoint and start fresh
 
   All flags also accept their legacy PANEL_* env var equivalents
   (e.g., PANEL_FORCE_FULL=1). Flags take priority.
 
+  LEGACY: --add, --next, --fix, --status, --stop, --kill, --list-crons,
+  --version, --upgrade, --release flags have been replaced by subcommands.
+
 EXAMPLES:
   dokima init "trading dashboard" ~/huat
-  dokima --add "Dark mode toggle" ~/huat
-  dokima --next ~/huat
-  dokima --continuous ~/huat
-  dokima --fix ~/huat
-  dokima --status ~/huat"""
+  dokima add "Dark mode toggle" ~/huat
+  dokima next ~/huat
+  dokima next --continuous ~/huat
+  dokima fix ~/huat
+  dokima status ~/huat"""
 # KEEP IN SYNC with HELP_TEXT — add any new command/flag/env_var here too
 CLI_METADATA = {
     "tool": "dokima",
