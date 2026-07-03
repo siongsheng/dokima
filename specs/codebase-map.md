@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-03 18:32:20 (incremental | 83 files)
+## Generated: 2026-07-03 19:23:41 (incremental | 86 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -72,6 +72,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f023_self_healing.py  — Exports: _git_with_source_diff, test_lock_age_old_lock_with_live_pid_removed
 - tests/test_f024_release.py  — Ensure the project root is on the path so we can import utils
 - tests/test_f025_dashboard.py  — Exports: TestPipelineStatus, TestSaveLoad
+- tests/test_f030_cli_metadata.py  — Exports: _run, test_cli_metadata_commands_use_subcommand_names, test_cli_metadata_syntax_uses_subcommand_format
+- tests/test_f030_help_text.py  — Exports: _run, test_help_shows_subcommand_syntax, test_help_shows_next_subcommand, test_help_shows_fix_subcommand, test_help_shows_status_subcommand
+- tests/test_f030_red.py  — Exports: test_version_subcommand_prints_version, test_version_subcommand_help_json_first_wins
 - tests/test_final_coverage.py  — Exports: _setup
 - tests/test_final_edge.py  — Exports: _setup
 - tests/test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
@@ -145,6 +148,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f023_self_healing.py → external: pytest, unittest
 - tests/test_f024_release.py → imports from utils; external: io, unittest
 - tests/test_f025_dashboard.py → imports from status; external: pytest
+- tests/test_f030_cli_metadata.py → standalone (stdlib only)
+- tests/test_f030_help_text.py → standalone (stdlib only)
+- tests/test_f030_red.py → standalone (stdlib only)
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
 - tests/test_fix_mode.py → imports from conftest; external: contextlib, io, unittest
@@ -206,6 +212,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f023_self_healing.py → (no matching source module)
 - tests/test_f024_release.py → (no matching source module)
 - tests/test_f025_dashboard.py → (no matching source module)
+- tests/test_f030_cli_metadata.py → (no matching source module)
+- tests/test_f030_help_text.py → (no matching source module)
+- tests/test_f030_red.py → (no matching source module)
 - tests/test_final_coverage.py → (no matching source module)
 - tests/test_final_edge.py → (no matching source module)
 - tests/test_fix_mode.py → (no matching source module)
