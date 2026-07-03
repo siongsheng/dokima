@@ -133,12 +133,15 @@ def main():
             continue
         if arg in ("--help", "-h"):
             is_help = True
+            print("  ⚠ '--help' is deprecated, use 'dokima help' instead", file=sys.stderr)
             continue
         if arg == "--help-json":
             is_help_json = True
+            print("  ⚠ '--help-json' is deprecated, use 'dokima help --json' instead", file=sys.stderr)
             continue
         if arg in ("--version", "-v"):
             is_version = True
+            print("  ⚠ '--version' / '-v' is deprecated, use 'dokima version' instead", file=sys.stderr)
             continue
         if arg == "--upgrade":
             is_upgrade = True
