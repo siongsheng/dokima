@@ -1,0 +1,40 @@
+{
+  "feature": "F030: CLI redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). Flags (--force-full, --max-parallel) keep -- prefix. Update all tests, scripts, AGENTS.md, roadmap, and docs.",
+  "project": "/home/opc/dokima",
+  "branch": "feat/f030-cli-redesign-replace---add--next--f-29fa6b5c",
+  "depth": "full",
+  "risk": "HIGH",
+  "mode": "passive",
+  "log_path": "/tmp/dokima-output-20260703-181847.txt",
+  "started_at": "2026-07-02T19:42:33.093216",
+  "current_phase": "init",
+  "phases": {
+    "strategist": {
+      "started_at": null,
+      "completed_at": null
+    },
+    "coder": {
+      "started_at": null,
+      "completed_at": null
+    },
+    "vet": {
+      "started_at": null,
+      "completed_at": null
+    },
+    "nm": {
+      "started_at": null,
+      "completed_at": null
+    },
+    "tech-lead": {
+      "started_at": null,
+      "completed_at": null
+    }
+  },
+  "tasks": [],
+  "task_total": 0,
+  "task_completed": 0,
+  "task_failed": 0,
+  "verdict": "",
+  "pr_url": "",
+  "errors": []
+}
