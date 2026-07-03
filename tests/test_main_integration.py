@@ -91,7 +91,7 @@ class TestMainEarlyExits:
         panel = _load()
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--help"]
+            sys.argv = ["dokima", "help"]
             with pytest.raises(SystemExit) as exc:
                 panel.main()
             assert exc.value.code == 0
@@ -133,13 +133,13 @@ class TestMainInitPath:
 class TestPipelineExecution:
 
     def test_strategist_called(self, tmpdir):
-        """--next should call strategist then coder."""
+        """next should call strategist then coder."""
         panel = _load()
         project_dir = _setup_test_project(panel, str(tmpdir))
         old = sys.argv
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = _mock_spawn
             _patch_and_run(panel)
             assert len(_spawn_calls) >= 2, f"Expected >=2 calls, got {_spawn_calls}"
@@ -158,7 +158,7 @@ class TestPipelineExecution:
         old = sys.argv
         try:
             _spawn_calls.clear()
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = _mock_spawn
             _patch_and_run(panel)
             # Stop file should be consumed
@@ -180,7 +180,7 @@ class TestPipelineExecution:
             return "Mock"
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = check_lock
             _patch_and_run(panel, mock_lock=False)  # test REAL lock behavior
             assert any(lock_seen), f"Lock never seen. Calls: {lock_seen}"
@@ -199,7 +199,7 @@ class TestPipelineExecution:
             return "Mock"
         old = sys.argv
         try:
-            sys.argv = ["dokima", "--next", project_dir]
+            sys.argv = ["dokima", "next", project_dir]
             panel.spawn_agent = fail_coder
             _patch_and_run(panel)
             roadmap_path = os.path.join(project_dir, "specs", "roadmap.md")
