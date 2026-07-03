@@ -70,11 +70,15 @@ ln -sf ~/dokima/dokima ~/bin/dokima
 # Run on any project with AGENTS.md + git remote
 dokima "Add rate limiting middleware" ~/project
 
+# Roadmap-driven: add feature, then build next
+dokima add "Add rate limiting middleware" ~/project
+dokima next ~/project
+
 # Fix a BLOCKED PR: detect blockers, fix, verify
 dokima fix ~/project
 
 # Force all 5 phases (even for low-risk changes)
-PANEL_FORCE_FULL=1 dokima "Add payment webhook" ~/project
+dokima --force-full "Add payment webhook" ~/project
 
 # Resume after strategist interview
 dokima --answers /tmp/dokima-interview.json "Add API key auth" ~/project
