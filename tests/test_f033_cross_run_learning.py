@@ -7,6 +7,7 @@ to specs/conventions.md under ## Cross-Run Learning section.
 import os
 import tempfile
 import pytest
+import inspect
 from datetime import date
 from conftest import _load_panel as _load
 
@@ -225,3 +226,38 @@ class TestAppendConventionRules:
         new_pos = content.index("new rule")
         existing_pos = content.index("existing rule")
         assert new_pos > existing_pos, "New rule should appear after existing rule"
+
+
+class TestConventionRulesPipelineWiring:
+    """Verify pipeline.py imports and calls the convention functions."""
+
+    def test_pipeline_imports_convention_functions(self, panel):
+        """pipeline module should import _extract_convention_rules and _append_convention_rules."""
+        import pipeline
+        assert hasattr(pipeline, '_extract_convention_rules'), \
+            "pipeline module must import _extract_convention_rules"
+        assert hasattr(pipeline, '_append_convention_rules'), \
+            "pipeline module must import _append_convention_rules"
+
+    def test_phase5_calls_convention_extraction(self, panel):
+        """run_phase5_tech_lead should call _extract_convention_rules after blocker extraction."""
+        source = inspect.getsource(panel.run_phase5_tech_lead)
+        # Verify the convention extraction call exists
+        assert '_extract_convention_rules' in source, \
+            "run_phase5_tech_lead must call _extract_convention_rules"
+        assert '_append_convention_rules' in source, \
+            "run_phase5_tech_lead must call _append_convention_rules"
+        # Verify it's called after _extract_tl_blockers
+        blocker_pos = source.find('_extract_tl_blockers')
+        convention_pos = source.find('_extract_convention_rules')
+        assert convention_pos > blocker_pos, \
+            "_extract_convention_rules must be called after _extract_tl_blockers"
+        # Verify best-effort: try/except wrapping
+        assert 'try:' in source[blocker_pos:], \
+            "convention extraction must be wrapped in try/except (best-effort)"
+
+    def test_phase5_prints_convention_summary(self, panel):
+        """run_phase5_tech_lead should print a summary line after appending rules."""
+        source = inspect.getsource(panel.run_phase5_tech_lead)
+        assert 'convention rule' in source.lower(), \
+            "run_phase5_tech_lead must print convention rule count summary"
