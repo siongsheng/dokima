@@ -33,7 +33,6 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    extract_file_paths, _hash_output, _detect_truncation,
                    _extract_code_context, generate_codebase_map, _describe_file,
                    _extract_tl_verdict, _extract_tl_blockers,
-                   _extract_convention_candidates, _append_convention_rules,
                    halt_and_revert, archive_specs_for_feature,
                    ensure_profiles, deploy_profile_skills)
 from agent import (call_agent, spawn_agent, _run_agent,
