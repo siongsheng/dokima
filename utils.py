@@ -2574,3 +2574,54 @@ def load_init_interview_state(path=None):
 
     return data
 
+
+def save_init_interview_state(feature, project_dir, round_num, confidence,
+                              questions, original_prompt, answers=None, path=None):
+    """Save init interview state to JSON file.
+
+    Persists the interview state with all required fields. Answers defaults
+    to an empty list if not provided. File is created with chmod 0o600.
+    """
+    if path is None:
+        path = INTERVIEW_SAVE_PATH
+    if answers is None:
+        answers = []
+
+    state = {
+        "feature": feature,
+        "project_dir": project_dir,
+        "round": round_num,
+        "max_rounds": 3,
+        "confidence": confidence,
+        "questions": questions,
+        "answers": answers,
+        "original_prompt": original_prompt,
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+
+    with open(path, 'w') as f:
+        json.dump(state, f)
+    os.chmod(path, 0o600)
+
+
+def has_init_interview_triggers(text):
+    """Check if strategist output contains init interview triggers.
+
+    Returns True if the text contains structured CLARIFICATION N: lines
+    at line-start or a DECISION: INTERVIEW MODE marker. Returns False
+    for prose that merely mentions 'CLARIFICATION' or 'INTERVIEW MODE'
+    without the structured format.
+    """
+    if not text or not text.strip():
+        return False
+
+    # Structured CLARIFICATION N: at line start (init-specific format)
+    if re.search(r'^\s*CLARIFICATION\s+\d+:', text, re.MULTILINE):
+        return True
+
+    # DECISION: INTERVIEW MODE marker
+    if 'DECISION: INTERVIEW MODE' in text:
+        return True
+
+    return False
+
