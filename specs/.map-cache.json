@@ -8,7 +8,7 @@
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
-    "hash": "8dda33aca6ffabbd1d53db7797e14d16",
+    "hash": "ae7c5f91a55d288df53a994672efc80e",
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
@@ -24,11 +24,11 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "8839b748808d1bceee66e0061873ffdc",
+    "hash": "51162a60561bd0ec0221cae110854b9c",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "9c4d9018279fe1aafe96615cd89e7cb7",
+    "hash": "9f9ba5abdcd537028d7095ffe7d7d980",
     "desc": "Exports: parse_roadmap"
   },
   "status.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "f7ad67b0303bba5719859808de0374b3",
+    "hash": "564bae389d06877751461ea96876984e",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
@@ -220,28 +220,32 @@
     "desc": "Exports: test_version_subcommand_prints_version, test_version_subcommand_help_json_first_wins"
   },
   "tests/test_f031_collect_answers.py": {
-    "hash": "4d240a80ad095c283755094aad8633ff",
-    "desc": "Exports: test_collect_interview_answers_exists, test_collect_interview_answers_non_tty, test_collect_interview_answers_empty_clarifications, test_collect_interview_answers_timeout_returns_partial"
+    "hash": "4293ea032acd497f2f9d4df7cc32e977",
+    "desc": "Exports: test_collect_interview_answers_exists, test_collect_interview_answers_non_tty"
   },
   "tests/test_f031_init_interview.py": {
-    "hash": "4317c86dddea6b9a52512c45141e55f3",
-    "desc": "Exports: test_one_shot_high_confidence_no_interview, test_interview_mode_detected_full_loop"
+    "hash": "cb6f09bc8ec8325fe5cdd2251834ea23",
+    "desc": "Exports: _mock_spawn_strategist, test_one_shot_high_confidence_no_interview"
   },
   "tests/test_f031_init_loop.py": {
-    "hash": "05ba8f46c90df1b3cc5e145daa5a719b",
-    "desc": "Exports: test_run_init_has_interview_loop, test_run_init_has_max_rounds_guard, test_run_init_non_interactive_exit"
+    "hash": "3af13610312dc6679278ffa2e1dab7a0",
+    "desc": "Exports: test_run_init_has_interview_loop, test_run_init_has_max_rounds_guard"
   },
   "tests/test_f031_pipeline_refactor.py": {
-    "hash": "ac3147e5487549142c7985b8ba332c43",
-    "desc": "Exports: test_pipeline_refactored_to_use_shared_helper, test_collect_interview_answers_behavior_preserved"
+    "hash": "234c544c70fbb442888d8d88dbef02da",
+    "desc": "Exports: test_pipeline_refactored_to_use_shared_helper, test_collect_interview_answers_behavior_preserved, test_init_answers_routing"
   },
   "tests/test_f031_utils_helpers.py": {
-    "hash": "9b7ab1ffd10cd74dfeed8488bbd4afaa",
-    "desc": "Exports: test_interview_save_path_constant_exists, test_has_init_interview_triggers_clarification_block, test_has_init_interview_triggers_interview_mode_only, test_has_init_interview_triggers_no_triggers, test_has_init_interview_triggers_empty"
+    "hash": "20a7fb171e5b074c8a6ab61bed023bf6",
+    "desc": "Exports: test_interview_save_path_constant_exists, test_load_init_interview_state_from_file"
   },
   "tests/test_f032_self_assessment.py": {
     "hash": "cf43f3c1b16c4d58d924df27abc5b807",
     "desc": "Exports: _load_fresh_panel, test_coder_prompt_contains_self_assessment"
+  },
+  "tests/test_f033_cross_run_learning.py": {
+    "hash": "e6995211d8e67a927f444510001a8054",
+    "desc": "Exports: panel, TestExtractConventionRules"
   },
   "tests/test_final_coverage.py": {
     "hash": "63bd93c57437b723a16f02ca7faee1ed",

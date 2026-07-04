@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-04 16:46:14 (incremental | 92 files)
+## Generated: 2026-07-04 23:44:16 (incremental | 93 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -75,12 +75,13 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f030_cli_metadata.py  — Exports: _run, test_cli_metadata_commands_use_subcommand_names, test_cli_metadata_syntax_uses_subcommand_format
 - tests/test_f030_help_text.py  — Exports: _run, test_help_shows_subcommand_syntax, test_help_shows_next_subcommand, test_help_shows_fix_subcommand, test_help_shows_status_subcommand
 - tests/test_f030_red.py  — Exports: test_version_subcommand_prints_version, test_version_subcommand_help_json_first_wins
-- tests/test_f031_collect_answers.py  — Exports: test_collect_interview_answers_exists, test_collect_interview_answers_non_tty, test_collect_interview_answers_empty_clarifications, test_collect_interview_answers_timeout_returns_partial
-- tests/test_f031_init_interview.py  — Exports: test_one_shot_high_confidence_no_interview, test_interview_mode_detected_full_loop
-- tests/test_f031_init_loop.py  — Exports: test_run_init_has_interview_loop, test_run_init_has_max_rounds_guard, test_run_init_non_interactive_exit
-- tests/test_f031_pipeline_refactor.py  — Exports: test_pipeline_refactored_to_use_shared_helper, test_collect_interview_answers_behavior_preserved
-- tests/test_f031_utils_helpers.py  — Exports: test_interview_save_path_constant_exists, test_has_init_interview_triggers_clarification_block, test_has_init_interview_triggers_interview_mode_only, test_has_init_interview_triggers_no_triggers, test_has_init_interview_triggers_empty
+- tests/test_f031_collect_answers.py  — Exports: test_collect_interview_answers_exists, test_collect_interview_answers_non_tty
+- tests/test_f031_init_interview.py  — Exports: _mock_spawn_strategist, test_one_shot_high_confidence_no_interview
+- tests/test_f031_init_loop.py  — Exports: test_run_init_has_interview_loop, test_run_init_has_max_rounds_guard
+- tests/test_f031_pipeline_refactor.py  — Exports: test_pipeline_refactored_to_use_shared_helper, test_collect_interview_answers_behavior_preserved, test_init_answers_routing
+- tests/test_f031_utils_helpers.py  — Exports: test_interview_save_path_constant_exists, test_load_init_interview_state_from_file
 - tests/test_f032_self_assessment.py  — Exports: _load_fresh_panel, test_coder_prompt_contains_self_assessment
+- tests/test_f033_cross_run_learning.py  — Exports: panel, TestExtractConventionRules
 - tests/test_final_coverage.py  — Exports: _setup
 - tests/test_final_edge.py  — Exports: _setup
 - tests/test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
@@ -157,12 +158,13 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f030_cli_metadata.py → standalone (stdlib only)
 - tests/test_f030_help_text.py → standalone (stdlib only)
 - tests/test_f030_red.py → standalone (stdlib only)
-- tests/test_f031_collect_answers.py → imports from utils; external: io, pytest, select
-- tests/test_f031_init_interview.py → imports from utils; external: io, pytest, shutil, unittest
-- tests/test_f031_init_loop.py → imports from roadmap, utils; external: io, pytest, shutil
-- tests/test_f031_pipeline_refactor.py → imports from utils; external: inspect, pytest, unittest
-- tests/test_f031_utils_helpers.py → imports from utils; external: pytest, shutil
+- tests/test_f031_collect_answers.py → imports from utils; external: pytest
+- tests/test_f031_init_interview.py → imports from roadmap, utils; external: unittest
+- tests/test_f031_init_loop.py → imports from roadmap, utils; external: pytest, unittest
+- tests/test_f031_pipeline_refactor.py → imports from roadmap, utils; external: inspect, unittest
+- tests/test_f031_utils_helpers.py → imports from utils; external: pytest
 - tests/test_f032_self_assessment.py → imports from conftest; external: pytest, unittest
+- tests/test_f033_cross_run_learning.py → imports from conftest, pipeline; external: inspect, pytest
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
 - tests/test_fix_mode.py → imports from conftest; external: contextlib, io, unittest
@@ -233,6 +235,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_pipeline_refactor.py → (no matching source module)
 - tests/test_f031_utils_helpers.py → (no matching source module)
 - tests/test_f032_self_assessment.py → (no matching source module)
+- tests/test_f033_cross_run_learning.py → (no matching source module)
 - tests/test_final_coverage.py → (no matching source module)
 - tests/test_final_edge.py → (no matching source module)
 - tests/test_fix_mode.py → (no matching source module)
