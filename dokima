@@ -157,6 +157,7 @@ def main():
         # next
         next_p = subparsers.add_parser("next", add_help=False)
         next_p.add_argument("dir", nargs="?", default=None)
+        next_p.add_argument("--feature", default=None, help="Target specific feature by ID (e.g., F031)")
         next_p.add_argument("--continuous", action="store_true")
         next_p.add_argument("--interactive", action="store_true")
         next_p.add_argument("--force-full", action="store_true")
@@ -642,7 +643,7 @@ def main():
     if is_next:
         git("checkout", DEFAULT_BRANCH)
         git("pull", "origin", DEFAULT_BRANCH)
-        feature_hint = filtered_argv[0] if len(filtered_argv) >= 2 else None
+        feature_hint = getattr(args, "feature", None) or (filtered_argv[0] if len(filtered_argv) >= 2 else None)
         feature = run_next_setup(interactive=is_interactive, feature_hint=feature_hint)
         if feature is None:
             print("Nothing to do.")
