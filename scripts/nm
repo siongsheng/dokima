@@ -18,15 +18,15 @@ DIFF=$(git diff -- . ':(exclude)*.tsbuildinfo' ':(exclude)package-lock.json' 2>/
 COMMITTED=false
 
 if [ -z "$DIFF" ]; then
-    # No uncommitted changes — validate the most recent commit
-    DIFF=$(git diff HEAD~1 -- . ':(exclude)*.tsbuildinfo' ':(exclude)package-lock.json' 2>/dev/null | head -500 || echo "")
-    FILES=$(git diff HEAD~1 --name-only 2>/dev/null | tr '\n' ' ' || echo "")
+    # No uncommitted changes — validate all commits on this branch vs main
+    DIFF=$(git diff main...HEAD -- . ':(exclude)*.tsbuildinfo' ':(exclude)package-lock.json' 2>/dev/null | head -500 || echo "")
+    FILES=$(git diff main...HEAD --name-only 2>/dev/null | tr '\n' ' ' || echo "")
     if [ -z "$DIFF" ]; then
         echo "nm: no changes to validate (no uncommitted changes and no prior commit)"
         exit 0
     fi
     COMMITTED=true
-    echo "nm: validating most recent commit (already committed)"
+    echo "nm: validating all commits on branch vs main"
 else
     echo "nm: validating uncommitted changes"
 fi
