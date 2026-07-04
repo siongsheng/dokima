@@ -6,6 +6,9 @@ Imports from utils, agent, and tasks.
 import sys, os, json, re, subprocess, time
 
 from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
+                   collect_interview_answers, has_init_interview_triggers,
+                   save_init_interview_state, INTERVIEW_SAVE_PATH,
+                   extract_agent_messages,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
                    clean_spec_content, verify_spec_quality, generate_codebase_map,
@@ -756,6 +759,99 @@ CRITICAL RULES:
         cwd=PROJECT_DIR,
         fallback_model=FALLBACK_MODELS.get("strategist")
     )
+
+    # ── F031: Interview loop ──
+    max_rounds = 3
+    interview_round = 0
+    while interview_round < max_rounds:
+        agent_text = extract_agent_messages(strat_output)
+        if not has_init_interview_triggers(agent_text):
+            break  # No interview needed — proceed to doc writing
+
+        interview_round += 1
+
+        # Non-interactive mode: save state and exit
+        if not sys.stdin.isatty():
+            clarification_blocks = []
+            for line in agent_text.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("CLARIFICATION"):
+                    clarification_blocks.append(stripped)
+            save_init_interview_state(description, PROJECT_DIR, clarification_blocks, strat_prompt)
+            print(f"\n{'═' * 55}", flush=True)
+            print(f"  STRATEGIST NEEDS CLARIFICATION (round {interview_round}/{max_rounds})", flush=True)
+            print(f"{'═' * 55}", flush=True)
+            if "DECISION: INTERVIEW MODE" in agent_text:
+                print(f"\n  ⚠  Interview mode — constitution cannot be written without answers.", flush=True)
+            print(f"\n  Questions ({len(clarification_blocks)}):", flush=True)
+            for i, q in enumerate(clarification_blocks, 1):
+                lines = q.split("\n")
+                header = lines[0].replace("CLARIFICATION", "").lstrip(" 0123456789: ").strip()
+                print(f"\n  ┌─ Q{i}: {header}", flush=True)
+                for ctx in lines[1:]:
+                    if ctx.strip():
+                        print(f"  │  {ctx.strip()}", flush=True)
+                print(f"  └{'─' * 40}", flush=True)
+            print(f"\n  State saved: {INTERVIEW_SAVE_PATH}", flush=True)
+            print(f"  Re-run with: dokima init --answers {INTERVIEW_SAVE_PATH}", flush=True)
+            print(f"{'═' * 55}", flush=True)
+            sys.exit(2)
+
+        # Interactive mode: collect answers and re-spawn
+        print("\n" + "=" * 60, flush=True)
+        print(f"  STRATEGIST INTERVIEW — Clarifications Needed (round {interview_round}/{max_rounds})", flush=True)
+        print("=" * 60, flush=True)
+        if "DECISION: INTERVIEW MODE" in agent_text:
+            print("\n⚠️  The strategist flagged this as INTERVIEW MODE — your requirements need refining.", flush=True)
+        else:
+            print("\nThe strategist identified ambiguities in your project description.", flush=True)
+        print("Answer these questions to refine the constitution. Blank line = accept assumptions.\n", flush=True)
+
+        clarification_lines = []
+        for line in agent_text.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("CLARIFICATION"):
+                clarification_lines.append(stripped)
+        for i, c in enumerate(clarification_lines, 1):
+            print(f"\n  Q{i}: {c}", flush=True)
+        print("\n" + "-" * 60, flush=True)
+        print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
+        print("-" * 60, flush=True)
+
+        user_answers = collect_interview_answers(clarification_lines)
+
+        if user_answers:
+            print(f"\n  ✓ Got {len(user_answers)} answer(s). Re-running strategist with your clarifications...", flush=True)
+            clarif_context = "\n".join(
+                f"Clarification: {c}\nUser's answer: {a}"
+                for c, a in zip(clarification_lines, user_answers)
+            )
+            strat_output = spawn_agent(
+                "strategist",
+                init_skills,
+                strat_prompt + f"\n\nUSER CLARIFICATIONS (round {interview_round}):\n{clarif_context}\n\nTHEN — produce the constitution documents:",
+                timeout=1200,
+                cwd=PROJECT_DIR,
+                fallback_model=FALLBACK_MODELS.get("strategist")
+            )
+            print(f"\n✓ Refined constitution finished ({len(strat_output)} chars)", flush=True)
+        else:
+            print("\n  ✓ No answers provided — proceeding with assumptions as-is.", flush=True)
+            if "DECISION: INTERVIEW MODE" in agent_text:
+                print("\n  ⚠️  WARNING: Strategist entered INTERVIEW MODE but no clarifications were provided.", flush=True)
+                print("  The constitution below is based on UNVERIFIED ASSUMPTIONS. Review carefully.", flush=True)
+            strat_output = spawn_agent(
+                "strategist",
+                init_skills,
+                strat_prompt,
+                timeout=1200,
+                cwd=PROJECT_DIR,
+                fallback_model=FALLBACK_MODELS.get("strategist")
+            )
+
+    if interview_round >= max_rounds and has_init_interview_triggers(extract_agent_messages(strat_output)):
+        print("\n  ⚠️  WARNING: Interview did not reach High confidence after 3 rounds.", flush=True)
+        print("  Producing best-effort constitution — review carefully before proceeding.", flush=True)
 
     # ── Restore config ──
     if orig_yaml and os.path.exists(strat_config):
