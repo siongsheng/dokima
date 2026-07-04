@@ -914,6 +914,7 @@ def show_help_json():
 
 def check_upgrade():
     """--upgrade handler: check for newer version on GitHub."""
+    import shutil
     install_dir = os.path.join(REAL_HOME, ".local", "share", "dokima")
     git_dir = os.path.join(install_dir, ".git")
     if not os.path.isdir(git_dir):
