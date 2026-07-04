@@ -137,7 +137,7 @@
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [~] In Progress
+**Status:** [x] Done Progress
 **User Story:** As a user, I can agent-as-judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am i least confident about, what would tl flag. catches empty prs at source.
 
 
@@ -146,6 +146,13 @@
 **Dependencies:** None
 **Status:** [ ] Pending
 **User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
+
+
+### F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.
+**Priority:** P2
+**Dependencies:** F032
+**Status:** [ ] Pending
+**User Story:** As a user, I can dokima fix --issue n: pull github issue body, extract file/line/fix/verify from structured format, spawn coder to implement. also upgrade should fix issue creation to include what/fix/verify sections for coder-readability.
 
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
 **Priority:** P2

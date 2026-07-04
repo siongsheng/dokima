@@ -14,7 +14,6 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
-- **F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.** — in progress since 2026-07-04 15:03, branch `feat/f032-agent-as-judge-self-assessment-code-99fe357b` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
@@ -44,3 +43,4 @@
 - **F030: CLI redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). Flags (--force-full, --max-parallel) keep -- prefix. Update all tests, scripts, AGENTS.md, roadmap, and docs.** — done 2026-07-03 19:23, PR [#67](https://github.com/siongsheng/dokima/pull/67) [panel]
 - **F031: dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. Loops until confidence is High, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.** — done 2026-07-04 13:56, PR [#68](https://github.com/siongsheng/dokima/pull/68) [panel]
 - **F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.** — done 2026-07-04 14:46 [panel]
+- **F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.** — done 2026-07-04 15:17, PR [#69](https://github.com/siongsheng/dokima/pull/69) [panel]
