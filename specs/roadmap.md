@@ -139,6 +139,13 @@
 **Status:** [x] Done Progress
 **User Story:** As a user, I can auto-generate cli reference page from cli-help.json during vercel build instead of hand-written mdx. new flags and commands appear in docs automatically on every release.
 
+
+### F031: dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. Loops until confidence is High, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.
+**Priority:** P2
+**Dependencies:** None
+**Status:** [~] In Progress
+**User Story:** As a user, I can dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. loops until confidence is high, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.
+
 ### F011: Installer Script
 **Priority:** P2
 **Dependencies:** None
