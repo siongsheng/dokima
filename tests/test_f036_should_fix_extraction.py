@@ -322,7 +322,7 @@ class TestExtractShouldFixFromTextIntegration:
         assert len(result) >= 1
         details = [r["detail"] for r in result]
         assert any("rename variable" in d for d in details)
-        assert any("update AGENTS.md" in d.lower() for d in details)
+        assert any("update agents.md" in d.lower() for d in details)
 
     def test_nm_stdout_style(self, panel):
         """nm-style output with table findings — should extract SHOULD FIX rows."""
