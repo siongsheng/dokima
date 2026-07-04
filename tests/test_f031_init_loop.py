@@ -11,6 +11,8 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+import pytest
+
 
 def test_run_init_has_interview_loop():
     """run_init() implements an interview loop (calls spawn_agent multiple times
@@ -48,16 +50,16 @@ Impact if wrong: Wrong tech stack
          patch.object(roadmap, 'detect_repo', return_value='test/test'), \
          patch.object(roadmap.os.path, 'isdir', return_value=True), \
          patch.object(roadmap.os.path, 'exists', return_value=False), \
-         patch.object(roadmap.os, 'makedirs', return_value=None), \
          patch.object(roadmap.subprocess, 'run') as mock_run, \
          patch.object(roadmap, 'ensure_profiles', return_value=None), \
          patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
          patch.object(roadmap, 'spawn_agent', side_effect=always_clarify), \
          patch.object(roadmap.sys.stdin, 'isatty', return_value=True), \
-         patch.object(_utils, 'collect_init_interview_answers', side_effect=mock_collect):
+         patch.object(roadmap, 'collect_init_interview_answers', side_effect=mock_collect):
         mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
             # Should not loop forever — max_rounds=3 guard should prevent infinite loop
             roadmap.run_init("Test project", tmpdir)
 
@@ -87,17 +89,19 @@ Impact if wrong: Wrong scope
          patch.object(roadmap, 'detect_repo', return_value='test/test'), \
          patch.object(roadmap.os.path, 'isdir', return_value=True), \
          patch.object(roadmap.os.path, 'exists', return_value=False), \
-         patch.object(roadmap.os, 'makedirs', return_value=None), \
          patch.object(roadmap.subprocess, 'run') as mock_run, \
          patch.object(roadmap, 'ensure_profiles', return_value=None), \
          patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
          patch.object(roadmap, 'spawn_agent', return_value=clarification_output), \
          patch.object(roadmap.sys.stdin, 'isatty', return_value=True), \
-         patch.object(_utils, 'collect_init_interview_answers', side_effect=mock_collect_non_tty):
+         patch.object(roadmap, 'collect_init_interview_answers', side_effect=mock_collect_non_tty):
         mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            roadmap.run_init("Test project", tmpdir)
+            os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
+            with pytest.raises(SystemExit) as exc_info:
+                roadmap.run_init("Test project", tmpdir)
+            assert exc_info.value.code == 2
 
             # After collect returns exit_code=2, run_init should NOT call
             # a second strategist for doc production — it should exit
@@ -150,7 +154,6 @@ Impact content.
              patch.object(roadmap, 'detect_repo', return_value='test/test'), \
              patch.object(roadmap.os.path, 'isdir', return_value=True), \
              patch.object(roadmap.os.path, 'exists', return_value=False), \
-             patch.object(roadmap.os, 'makedirs', return_value=None), \
              patch.object(roadmap.subprocess, 'run') as mock_run, \
              patch.object(roadmap, 'ensure_profiles', return_value=None), \
              patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
@@ -158,11 +161,12 @@ Impact content.
             mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
             with tempfile.TemporaryDirectory() as tmpdir:
+                os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
                 roadmap.run_init("Resume test", tmpdir, answers_path=answers_path)
 
-                # With answers pre-filled and spec output, should produce docs
-                # in one shot (no CLARIFICATION loop)
-                assert roadmap.spawn_agent.call_count == 1
+                # With answers pre-filled and current_round > 1,
+                # initial strategist produces docs, then final doc production runs
+                assert roadmap.spawn_agent.call_count == 2
     finally:
         os.unlink(answers_path)
 
@@ -223,20 +227,20 @@ Done.
              patch.object(roadmap, 'detect_repo', return_value='test/test'), \
              patch.object(roadmap.os.path, 'isdir', return_value=True), \
              patch.object(roadmap.os.path, 'exists', return_value=False), \
-             patch.object(roadmap.os, 'makedirs', return_value=None), \
              patch.object(roadmap.subprocess, 'run') as mock_run, \
              patch.object(roadmap, 'ensure_profiles', return_value=None), \
              patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
              patch.object(roadmap, 'spawn_agent', side_effect=sequential_spawn), \
              patch.object(roadmap.sys.stdin, 'isatty', return_value=True), \
-             patch.object(_utils, 'collect_init_interview_answers', side_effect=mock_collect):
+             patch.object(roadmap, 'collect_init_interview_answers', side_effect=mock_collect):
             mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
             with tempfile.TemporaryDirectory() as tmpdir:
+                os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
                 roadmap.run_init("Round test", tmpdir, answers_path=answers_path)
 
                 # Starting round=2, one CLARIFICATION round -> round 3
-                # Then final spec production -> 2 spawn_agent calls total
-                assert roadmap.spawn_agent.call_count == 2
+                # Then final spec production -> 3 spawn_agent calls total
+                assert roadmap.spawn_agent.call_count == 3
     finally:
         os.unlink(answers_path)

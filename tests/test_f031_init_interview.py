@@ -47,7 +47,6 @@ Impact content here.
          patch.object(roadmap, 'detect_repo', return_value='test/test'), \
          patch.object(roadmap.os.path, 'isdir', return_value=True), \
          patch.object(roadmap.os.path, 'exists', return_value=False), \
-         patch.object(roadmap.os, 'makedirs', return_value=None), \
          patch.object(roadmap.subprocess, 'run') as mock_run, \
          patch.object(roadmap, 'ensure_profiles', return_value=None), \
          patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
@@ -55,6 +54,7 @@ Impact content here.
         mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
             roadmap.run_init("Test project description", tmpdir)
 
             # No CLARIFICATION triggers -> spawn_agent called once (interview)
@@ -121,22 +121,23 @@ Impact section content.
          patch.object(roadmap, 'detect_repo', return_value='test/test'), \
          patch.object(roadmap.os.path, 'isdir', return_value=True), \
          patch.object(roadmap.os.path, 'exists', return_value=False), \
-         patch.object(roadmap.os, 'makedirs', return_value=None), \
          patch.object(roadmap.subprocess, 'run') as mock_run, \
          patch.object(roadmap, 'ensure_profiles', return_value=None), \
          patch.object(roadmap, 'deploy_profile_skills', return_value=None), \
          patch.object(roadmap, 'spawn_agent', side_effect=sequential_spawn), \
          patch.object(roadmap.sys.stdin, 'isatty', return_value=True), \
-         patch.object(_utils, 'collect_init_interview_answers', side_effect=mock_collect):
+         patch.object(roadmap, 'collect_init_interview_answers', side_effect=mock_collect):
         mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "specs"), exist_ok=True)
             roadmap.run_init("Test project", tmpdir)
 
-            # Should have spawned strategist twice:
-            # 1st: interview with CLARIFICATION
-            # 2nd: final spec production
-            assert roadmap.spawn_agent.call_count == 2
+            # Should have spawned strategist three times:
+            # 1st: interview CLARIFICATION output
+            # 2nd: re-evaluation with answers (produced docs)
+            # 3rd: final dedicated constitution production
+            assert roadmap.spawn_agent.call_count == 3
 
 
 def test_max_rounds_exhausted_produces_docs_with_warning():
