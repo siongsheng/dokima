@@ -635,9 +635,8 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
 
 {map_hint}{file_hints}{code_context}
-Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Create and switch to branch '{branch}':
-  git checkout -b {branch} 2>/dev/null || git checkout {branch}
-  git push -u origin {branch}
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
+  git fetch origin {branch} && git checkout {branch} && git pull origin {branch}
 
 Implement ALL tasks from the spec, ONE AT A TIME. Before each: check if another task remains. Do not stop until ALL tasks done — including trivial ones (docs, imports, config).
 
