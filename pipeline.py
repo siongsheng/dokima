@@ -9,7 +9,6 @@ import sys, os, json, re, subprocess, time
 _IMPORTING_PANEL = None
 
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
-                   collect_interview_answers,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
                    _extract_convention_candidates, _append_convention_rules,
@@ -1685,7 +1684,21 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         print("\n" + "-" * 60, flush=True)
         print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
         print("-" * 60, flush=True)
-        user_answers = collect_interview_answers(clarification_lines)
+        user_answers = []
+        try:
+            import select
+            for i in range(len(clarification_lines)):
+                print(f"\n  A{i+1}: ", end="", flush=True)
+                ready, _, _ = select.select([sys.stdin], [], [], 60.0)
+                if not ready:
+                    print("(timed out \u2014 accepting assumptions)", flush=True)
+                    break
+                answer = sys.stdin.readline().strip()
+                if not answer:
+                    break
+                user_answers.append(answer)
+        except (EOFError, KeyboardInterrupt):
+            print("\n  \u26a0 No input available \u2014 proceeding with assumptions", flush=True)
         if user_answers:
             print(f"\n  \u2713 Got {len(user_answers)} answer(s). Re-running strategist with your clarifications...", flush=True)
             clarif_context = "\n".join(
@@ -2133,7 +2146,6 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
     pr_url = None
     verdict = None
     nm_output = ""
-    nm_stdout = ""
     tl_output = ""
 
     # Reconstruct pr_url from checkpoint if coder was completed
@@ -2279,7 +2291,6 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
     # Phase 4: nm
     if not coder_failed and depth in ("vet+nm", "full"):
         nm_result = run_phase4_nm(feature, branch, impact, pr_url)
-        nm_stdout = nm_result.get("nm_stdout", "")
         pr_url = nm_result["pr_url"]
         # Save checkpoint after nm
         if resume is not False:
@@ -2308,20 +2319,6 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
             print("\n── Phase 5: Tech Lead — SKIPPED (coder failed) ──", flush=True)
         if verdict is None:
             verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
-
-    # If TL was skipped, extract SHOULD FIX from nm output and create issues
-    if not coder_failed and depth != "full" and nm_stdout:
-        should_fix_lines = [l for l in nm_stdout.split("\n") if "SHOULD FIX" in l.upper() and "\u2014" in l]
-        if should_fix_lines:
-            print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items (from nm) ──", flush=True)
-            for line in should_fix_lines[:5]:
-                parts = line.split("\u2014", 1)
-                desc = parts[1].strip() if len(parts) > 1 else line.strip()
-                title = f"SHOULD FIX: {desc[:80]}"
-                body = f"## Adversarial Review Finding\n\n**Feature:** {feature}\n**Branch:** {branch}\n**PR:** {pr_url or 'N/A'}\n**Verdict:** {verdict}\n**Spec:** {spec_path}\n\n### Finding\n{line.strip()}\n\n### Context\nFound during adversarial review. See the PR for full details."
-                stdout, stderr, rc = gh("issue", "create", "--repo", REPO, "--title", title, "--body", body)
-                if rc == 0:
-                    print(f"  Created: {stdout}", flush=True)
 
     # Post pipeline
     continue_loop = True
