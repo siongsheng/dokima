@@ -95,6 +95,31 @@ class TestExtractConventionRules:
         rules = panel._extract_convention_rules(blockers)
         assert rules == []
 
+    def test_none_input_returns_empty(self, panel):
+        """None input should return empty list (defensive guard)."""
+        assert panel._extract_convention_rules(None) == []
+
+    def test_file_path_directory_pattern_filtered(self, panel):
+        """Lines with 'file:', 'path:', or 'directory:' should be filtered as file-specific."""
+        blockers = [
+            "1. Missing guard — file: src/main.py has no null check",
+            "2. Bad import — path: lib/helpers uses relative imports",
+            "3. Stale ref — directory: config/ references removed schema",
+        ]
+        rules = panel._extract_convention_rules(blockers)
+        assert rules == [], f"Expected empty, got {rules}"
+
+    def test_blank_line_in_blockers_skipped(self, panel):
+        """Empty or whitespace-only blocker lines should be skipped."""
+        blockers = [
+            "   ",
+            "",
+            "1. Convention pattern — all functions must have type hints",
+        ]
+        rules = panel._extract_convention_rules(blockers)
+        assert len(rules) == 1
+        assert "type hints" in rules[0]
+
 
 class TestAppendConventionRules:
     """_append_convention_rules appends rules to specs/conventions.md."""
@@ -226,6 +251,48 @@ class TestAppendConventionRules:
         new_pos = content.index("new rule")
         existing_pos = content.index("existing rule")
         assert new_pos > existing_pos, "New rule should appear after existing rule"
+
+    def test_none_rules_returns_zero(self, panel, tmp_path):
+        """None input should return 0 (defensive guard)."""
+        self._setup_conventions(str(tmp_path), "# Test\n")
+        assert panel._append_convention_rules(str(tmp_path), None) == 0
+
+    def test_empty_string_rule_filtered(self, panel, tmp_path):
+        """Empty-string rules in the list should be skipped, not written."""
+        self._setup_conventions(str(tmp_path), "# Test\n")
+        count = panel._append_convention_rules(
+            str(tmp_path), ["valid rule", "", "   ", "another rule"]
+        )
+        assert count == 2
+        conventions_path = os.path.join(str(tmp_path), "specs", "conventions.md")
+        with open(conventions_path) as f:
+            content = f.read()
+        assert "valid rule" in content
+        assert "another rule" in content
+
+    def test_internal_batch_dedup(self, panel, tmp_path):
+        """Duplicate rules within a single call should only be appended once."""
+        self._setup_conventions(str(tmp_path), "# Test\n")
+        count = panel._append_convention_rules(
+            str(tmp_path), ["same rule", "same rule", "unique rule"]
+        )
+        assert count == 2  # "same rule" counted once + "unique rule"
+        conventions_path = os.path.join(str(tmp_path), "specs", "conventions.md")
+        with open(conventions_path) as f:
+            content = f.read()
+        assert content.count("same rule") == 1
+
+    def test_specs_dir_created_when_absent(self, panel, tmp_path):
+        """When specs/ directory does NOT exist, _append_convention_rules creates it."""
+        # tmp_path has no specs/ dir at all
+        count = panel._append_convention_rules(str(tmp_path), ["learned rule"])
+        assert count == 1
+        conventions_path = os.path.join(str(tmp_path), "specs", "conventions.md")
+        assert os.path.exists(conventions_path)
+        with open(conventions_path) as f:
+            content = f.read()
+        assert "## Cross-Run Learning" in content
+        assert "learned rule" in content
 
 
 class TestConventionRulesPipelineWiring:
