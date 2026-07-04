@@ -2625,3 +2625,93 @@ def has_init_interview_triggers(text):
 
     return False
 
+
+def collect_init_interview_answers(questions, interview_state, path=None):
+    """Collect answers to interview questions interactively or via state save.
+
+    In TTY mode: prompts user for each question with 60s timeout per question.
+    Empty input (Enter with no text) breaks the loop — all subsequent questions
+    get their assumptions accepted.
+
+    In non-TTY mode: saves interview_state to JSON and returns exit code 2.
+    The caller should propagate this exit code to the process.
+
+    Args:
+        questions: list of question dicts with 'id' and 'question' keys.
+                   None or empty list returns immediately.
+        interview_state: dict with current interview state for non-TTY save.
+        path: path to save state JSON (default: INTERVIEW_SAVE_PATH).
+
+    Returns:
+        (answers: list[dict], exit_code: int)
+        answers: list of {"question_id": int, "answer": str} dicts.
+        exit_code: 0 = success (or assumptions accepted), 2 = non-TTY saved.
+    """
+    import select
+
+    if path is None:
+        path = INTERVIEW_SAVE_PATH
+
+    # Empty/null questions -> nothing to collect
+    if not questions:
+        return ([], 0)
+
+    # Non-TTY: save state and exit
+    if not sys.stdin.isatty():
+        save_init_interview_state(
+            feature=interview_state.get("feature", ""),
+            project_dir=interview_state.get("project_dir", ""),
+            round_num=interview_state.get("round", 1),
+            confidence=interview_state.get("confidence", "Low"),
+            questions=questions,
+            original_prompt=interview_state.get("original_prompt", ""),
+            answers=interview_state.get("answers", []),
+            path=path,
+        )
+        print(f"\n{'=' * 55}", flush=True)
+        print("  STRATEGIST NEEDS CLARIFICATION (init)", flush=True)
+        print(f"{'=' * 55}", flush=True)
+        print(f"\n  State saved: {path}", flush=True)
+        print(f"  Re-run with: dokima init --answers {path}", flush=True)
+        return ([], 2)
+
+    # TTY: interactively collect answers
+    print(f"\n{'=' * 60}", flush=True)
+    print("  INIT INTERVIEW — Clarifications Needed", flush=True)
+    print(f"{'=' * 60}", flush=True)
+    print("\nAnswer these questions to refine the project constitution.", flush=True)
+    print("Blank line = accept assumptions and proceed.\n", flush=True)
+
+    for i, q in enumerate(questions, 1):
+        q_text = q.get("question", str(q))
+        print(f"\n  Q{i}: {q_text}", flush=True)
+
+    print(f"\n{'-' * 60}", flush=True)
+    print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
+    print(f"{'-' * 60}", flush=True)
+
+    user_answers = []
+    try:
+        for i, q in enumerate(questions, 1):
+            print(f"\n  A{i}: ", end="", flush=True)
+            ready, _, _ = select.select([sys.stdin], [], [], 60.0)
+            if not ready:
+                print("(timed out — accepting assumptions)", flush=True)
+                break
+            answer = sys.stdin.readline().strip()
+            if not answer:
+                break
+            user_answers.append({
+                "question_id": q.get("id", i),
+                "answer": answer,
+            })
+    except (EOFError, KeyboardInterrupt):
+        print("\n  ⚠ No input available — proceeding with assumptions", flush=True)
+
+    if user_answers:
+        print(f"\n  ✓ Got {len(user_answers)} answer(s).", flush=True)
+    else:
+        print("\n  ✓ No answers provided — proceeding with assumptions as-is.", flush=True)
+
+    return (user_answers, 0)
+
