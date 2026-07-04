@@ -156,7 +156,7 @@ PANEL_SKIP_ORCHESTRATOR_REVIEW=1 python3 dokima next .
 | `dokima` | The entire panel — single script |
 | `specs/roadmap.md` | Feature backlog with status markers |
 | `specs/codebase-map.md` | Auto-generated directory tree + file descriptions |
-| `specs/conventions.md` | Coding conventions and anti-patterns |
+| `specs/conventions.md` | Coding conventions and anti-patterns. Includes `## Cross-Run Learning` section auto-populated by the Tech Lead phase with pattern-violation rules from blocked PRs. |
 | `specs/<feature>-spec.md` | Strategist output for a feature |
 | `specs/<feature>-tasks.md` | Task breakdown (DAG format) |
 | `tests/` | 495+ tests (pytest) |
