@@ -654,6 +654,22 @@ CRITICAL RULES:
 - DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
 - DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.
 - If a pre-existing test fails, report it — do NOT fix it unless the task explicitly says to.
+SELF-ASSESSMENT (Agent-as-Judge) — Before pushing, answer these 3 questions in your output:
+
+Q1: SPEC COVERAGE — Does every requirement in the spec have corresponding code?
+    List any spec requirement that has NO implementation yet.
+    If every requirement is implemented, say "All requirements covered."
+
+Q2: CONFIDENCE — What implementation detail are you LEAST confident about?
+    Be specific: name the file and behavior you're unsure about.
+    If fully confident in everything, say "All confident — no weak spots."
+
+Q3: TL PREDICTION — If a Tech Lead reviewed this PR, what would they flag?
+    Think adversarially: missing tests, unclear error handling, scope creep,
+    spec non-compliance, architecture violations.
+    If nothing, say "Nothing — this is clean."
+
+Answer all 3 questions before running git push.
 Report: both commit hashes, files changed, test results, lint status, branch name.
 """
 
