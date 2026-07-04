@@ -138,7 +138,7 @@
 ### F036: Fix SHOULD FIX issue creation: extract from PR review text (not just nm_stdout), handle table-format findings (R1 | RELIABILITY | ... | SHOULD FIX). Add tests for all extraction formats.
 **Priority:** P2
 **Dependencies:** F034
-**Status:** [~] In Progress
+**Status:** [x] Done Progress
 **User Story:** As a user, I can fix should fix issue creation: extract from pr review text (not just nm_stdout), handle table-format findings (r1 | reliability | ... | should fix). add tests for all extraction formats.
 
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.

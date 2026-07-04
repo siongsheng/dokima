@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-04 23:44:16 (incremental | 93 files)
+## Generated: 2026-07-05 01:29:47 (incremental | 94 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -82,6 +82,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py  — Exports: test_interview_save_path_constant_exists, test_load_init_interview_state_from_file
 - tests/test_f032_self_assessment.py  — Exports: _load_fresh_panel, test_coder_prompt_contains_self_assessment
 - tests/test_f033_cross_run_learning.py  — Exports: panel, TestExtractConventionRules
+- tests/test_f036_should_fix_extraction.py  — Exports: panel
 - tests/test_final_coverage.py  — Exports: _setup
 - tests/test_final_edge.py  — Exports: _setup
 - tests/test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
@@ -165,6 +166,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py → imports from utils; external: pytest
 - tests/test_f032_self_assessment.py → imports from conftest; external: pytest, unittest
 - tests/test_f033_cross_run_learning.py → imports from conftest, pipeline; external: inspect, pytest
+- tests/test_f036_should_fix_extraction.py → imports from conftest; external: pytest, types, unittest
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
 - tests/test_fix_mode.py → imports from conftest; external: contextlib, io, unittest
@@ -236,6 +238,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py → (no matching source module)
 - tests/test_f032_self_assessment.py → (no matching source module)
 - tests/test_f033_cross_run_learning.py → (no matching source module)
+- tests/test_f036_should_fix_extraction.py → (no matching source module)
 - tests/test_final_coverage.py → (no matching source module)
 - tests/test_final_edge.py → (no matching source module)
 - tests/test_fix_mode.py → (no matching source module)
