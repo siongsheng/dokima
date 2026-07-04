@@ -80,9 +80,9 @@ class TestExtractConventionRules:
         assert "list args" in rules[0].lower()
 
     def test_file_ref_with_line_number_filtered(self, panel):
-        """Lines with 'line N' pattern should be filtered as file-specific."""
+        """Lines with 'line N' pattern (but no file extension) should be filtered as file-specific."""
         blockers = [
-            "1. Null check — src/lib.rs line 42: Option unwrap without check",
+            "1. Null check — the method at line 42 has no Option unwrap check",
         ]
         rules = panel._extract_convention_rules(blockers)
         assert rules == []
