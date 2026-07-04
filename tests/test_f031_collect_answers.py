@@ -48,22 +48,25 @@ def test_collect_interview_answers_empty_clarifications():
 def test_collect_interview_answers_timeout_returns_partial():
     """When timeout occurs, returns answers collected so far."""
     import utils
+    import select as select_module
     original_isatty = sys.stdin.isatty
     try:
         sys.stdin.isatty = lambda: True
-        # Supply answers via a mock stdin
         fake_stdin = io.StringIO("answer1\nanswer2 timeout\n")
+        fake_stdin.isatty = lambda: True
         original_stdin = sys.stdin
         sys.stdin = fake_stdin
+        # Mock select to always return ready (StringIO has no fileno)
+        original_select = select_module.select
+        select_module.select = lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
         try:
-            # We can't easily force a timeout, but StringIO won't block
-            # so answers should be collected without hitting real timeout
             result = utils.collect_interview_answers(
                 ["CLARIFICATION 1: Q1", "CLARIFICATION 2: Q2"],
                 timeout=1
             )
             assert len(result) <= 2
         finally:
+            select_module.select = original_select
             sys.stdin = original_stdin
     finally:
         sys.stdin.isatty = original_isatty
@@ -72,18 +75,24 @@ def test_collect_interview_answers_timeout_returns_partial():
 def test_collect_interview_answers_all_answered():
     """Collects all answers when user answers all questions."""
     import utils
+    import select as select_module
     original_isatty = sys.stdin.isatty
     try:
         sys.stdin.isatty = lambda: True
         fake_stdin = io.StringIO("answer one\nanswer two\nanswer three\n")
+        fake_stdin.isatty = lambda: True
         original_stdin = sys.stdin
         sys.stdin = fake_stdin
+        # Mock select to always return ready (StringIO has no fileno)
+        original_select = select_module.select
+        select_module.select = lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
         try:
             result = utils.collect_interview_answers(
                 ["CLARIFICATION 1: Q1", "CLARIFICATION 2: Q2", "CLARIFICATION 3: Q3"]
             )
             assert result == ["answer one", "answer two", "answer three"]
         finally:
+            select_module.select = original_select
             sys.stdin = original_stdin
     finally:
         sys.stdin.isatty = original_isatty
@@ -92,18 +101,24 @@ def test_collect_interview_answers_all_answered():
 def test_collect_interview_answers_stops_on_empty():
     """Stops collecting when user provides an empty answer."""
     import utils
+    import select as select_module
     original_isatty = sys.stdin.isatty
     try:
         sys.stdin.isatty = lambda: True
         fake_stdin = io.StringIO("answer one\n\n")
+        fake_stdin.isatty = lambda: True
         original_stdin = sys.stdin
         sys.stdin = fake_stdin
+        # Mock select to always return ready (StringIO has no fileno)
+        original_select = select_module.select
+        select_module.select = lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
         try:
             result = utils.collect_interview_answers(
                 ["CLARIFICATION 1: Q1", "CLARIFICATION 2: Q2", "CLARIFICATION 3: Q3"]
             )
             assert result == ["answer one"]  # stopped at Q2 (empty)
         finally:
+            select_module.select = original_select
             sys.stdin = original_stdin
     finally:
         sys.stdin.isatty = original_isatty
