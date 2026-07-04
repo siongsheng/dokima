@@ -9,6 +9,7 @@ import sys, os, json, re, subprocess, time
 _IMPORTING_PANEL = None
 
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
+                   collect_interview_answers,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
@@ -1667,21 +1668,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         print("\n" + "-" * 60, flush=True)
         print("  Type your answers (one per line). Empty input = accept all assumptions.", flush=True)
         print("-" * 60, flush=True)
-        user_answers = []
-        try:
-            import select
-            for i in range(len(clarification_lines)):
-                print(f"\n  A{i+1}: ", end="", flush=True)
-                ready, _, _ = select.select([sys.stdin], [], [], 60.0)
-                if not ready:
-                    print("(timed out \u2014 accepting assumptions)", flush=True)
-                    break
-                answer = sys.stdin.readline().strip()
-                if not answer:
-                    break
-                user_answers.append(answer)
-        except (EOFError, KeyboardInterrupt):
-            print("\n  \u26a0 No input available \u2014 proceeding with assumptions", flush=True)
+        user_answers = collect_interview_answers(clarification_lines)
         if user_answers:
             print(f"\n  \u2713 Got {len(user_answers)} answer(s). Re-running strategist with your clarifications...", flush=True)
             clarif_context = "\n".join(
