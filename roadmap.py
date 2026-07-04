@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, and tasks.
 """
-import sys, os, json, re, subprocess, time
+import sys, os, json, re, subprocess, time, datetime
 
 from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
@@ -15,7 +15,12 @@ from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _clean
                    PROFILES, OUTPUT_LOG, FALLBACK_MODELS, PANEL_PORT, API_KEY,
                    SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override,
                    RESUME, MAX_CONTINUOUS, _LOG_FILE_HANDLE, _LOCK_FD,
-                   VERSION, HELP_TEXT, TEST_CMD, BUILD_CMD, LINT_CMD)
+                   VERSION, HELP_TEXT, TEST_CMD, BUILD_CMD, LINT_CMD,
+                   extract_agent_messages,
+                   INTERVIEW_SAVE_PATH,
+                   load_init_interview_state,
+                   has_init_interview_triggers,
+                   collect_init_interview_answers)
 from tasks import RoadmapFeature
 from agent import spawn_agent
 
@@ -556,8 +561,19 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 
 
-def run_init(description, project_dir):
-    """Discovery & constitution phase. Strategist produces spec-kit docs, no pipeline."""
+def run_init(description, project_dir, answers_path=None):
+    """Discovery & constitution phase. Strategist produces spec-kit docs.
+
+    F031: Implements a back-and-forth interview loop. The strategist identifies
+    gaps in the project description, asks CLARIFICATION questions, the user
+    answers, and the loop continues until High confidence or max 3 rounds.
+    Only then are constitution docs produced.
+
+    Args:
+        description: User's project description.
+        project_dir: Absolute path to the project.
+        answers_path: Optional path to saved interview state JSON for resume.
+    """
     global API_KEY, PROJECT_DIR, REPO
 
     PROJECT_DIR = project_dir
@@ -637,9 +653,9 @@ def run_init(description, project_dir):
                 f"{mt_match.group(1)}300")
             with open(strat_config, "w") as f:
                 f.write(new_yaml)
-            print(f"  max_turns: {orig_max_turns} → 300 (init needs deeper exploration)", flush=True)
+            print(f"  max_turns: {orig_max_turns} -> 300 (init needs deeper exploration)", flush=True)
 
-    # ── Build strategist prompt ──
+    # ── Build interview-capable strategist prompt ──
     audit_section = ""
     if not is_greenfield:
         audit_section = f"""\nCODEBASE AUDIT (do this FIRST):
@@ -649,25 +665,38 @@ def run_init(description, project_dir):
 4. Catalog: tech debt, duplicated logic, undocumented behavior, test coverage gaps.
 5. Your constitution must reflect these findings — add "fix" features to the roadmap for critical debt."""
 
-    strat_prompt = f"""You are the Strategist doing PROJECT DISCOVERY for a {'new' if is_greenfield else 'existing'} project at {PROJECT_DIR}.
+    interview_preamble = f"""You are the Strategist doing PROJECT DISCOVERY for a {'new' if is_greenfield else 'existing'} project at {PROJECT_DIR}.
 
-YOUR JOB: Produce the four spec-kit constitution documents. No code. No implementation. Discovery only.
+YOUR JOB: Produce the four spec-kit constitution documents. But FIRST, assess whether you have enough information.
 
 DESCRIPTION FROM USER: {description}
 
-PHASE 1 — INTERROGATE THE USER:
-- Who are the users? What decisions does this product drive?
-- What does "done" look like? What are the success criteria?
-- What are the ANTI-GOALS? (what will this NOT do?)
-- What are the consequences of wrong/stale output?
-- For existing projects: what's wrong with the current state?
+BEFORE PRODUCING DOCS — INTERVIEW THE USER:
+If the description is vague or missing critical details (users, goals, anti-goals, constraints, success criteria), you MUST output CLARIFICATION questions BEFORE writing any docs. Output:
 
-PHASE 2 — DOMAIN RESEARCH:
+DECISION: INTERVIEW MODE
+Confidence: Low
+
+CLARIFICATION 1: <specific question>
+Assumption: <what you're assuming>
+Impact if wrong: <consequence of being wrong>
+
+CLARIFICATION 2: <next question>
+Assumption: <assumption>
+Impact if wrong: <consequence>
+
+... up to 5 questions for the most critical unknowns.
+
+If the description is detailed enough that confidence is High, skip CLARIFICATION and proceed directly to producing the constitution docs.
+
+WHEN PRODUCING DOCS — follow these phases:
+
+PHASE 1 — DOMAIN RESEARCH:
 - Who are the competitors? What do they do well/poorly?
 - What are common pitfalls in this domain?
 - What market/regulatory constraints apply?
 {audit_section}
-PHASE 3 — PRODUCE THE CONSTITUTION:
+PHASE 2 — PRODUCE THE CONSTITUTION:
 
 Create {PROJECT_DIR}/specs/mission.md:
 - Problem statement, target users, success criteria, anti-goals
@@ -698,7 +727,7 @@ RULES:
 - Acceptance Criteria: concrete, testable bullets.
 - Group features under ## Phase headers (Phase 1: Core Stability, Phase 2: Pipeline Intelligence, Phase 3: Distribution, Icebox).
 - Each feature must trace to a user need in mission.md.
-- EXECUTION ORDER (CRITICAL): Within each Phase, order features by what must be built FIRST — not by F-number. The execution order is: infrastructure/tests → critical bugs → resilience → security → features → docs → distribution → icebox. A P0 integration test framework (F002) comes before a P0 security hardening (F001) because you cannot verify security without tests. The panel's `dokima --next` picks the first pending feature in order — make that order correct.
+- EXECUTION ORDER (CRITICAL): Within each Phase, order features by what must be built FIRST — not by F-number. The execution order is: infrastructure/tests -> critical bugs -> resilience -> security -> features -> docs -> distribution -> icebox. A P0 integration test framework (F002) comes before a P0 security hardening (F001) because you cannot verify security without tests. The panel's `dokima --next` picks the first pending feature in order — make that order correct.
 
 Create {PROJECT_DIR}/specs/conventions.md:
 - Code style, patterns, anti-patterns, boundaries
@@ -711,11 +740,10 @@ Create {PROJECT_DIR}/AGENTS.md:
 - Non-obvious conventions agents need to know
 - Keep it minimal — only what agents cannot infer from reading code
 
-PHASE 4 — VALIDATION LOOP:
+PHASE 3 — VALIDATION LOOP:
 - Review ALL four documents. Find gaps.
 - Are there features missing from roadmap? Unjustified tech choices?
-- Present gap analysis. If anything is uncertain, use best judgment and note the assumption. Do NOT ask questions — make decisions and document them.
-- Self-correct before final output.
+- If anything is uncertain, use best judgment and note the assumption. Do NOT ask questions — make decisions and document them.
 
 CRITICAL RULES:
 - Every tech choice justified. Every feature traceable to user need.
@@ -724,14 +752,12 @@ CRITICAL RULES:
 - For existing projects with AGENTS.md: read it, respect it, do NOT overwrite it.
 - Exit message: summary of what was created + recommended next steps."""
 
-    # ── Spawn strategist ──
-    print("── Phase: Strategist (init) ──", flush=True)
+    # ── F031: Interview loop ──
     os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
 
     init_skills = ["spec-strategist-lite", "saas-ideation"]
     missing_skills = []
     for skill in init_skills:
-        # Check if skill exists in profile or global skills dirs
         skill_found = False
         for base in [os.path.join(PROFILES, "strategist", "skills"),
                      os.path.join(HERMES, "skills")]:
@@ -748,27 +774,201 @@ CRITICAL RULES:
         print(f"  Run the setup script first: scripts/setup-linux.sh (or setup-windows.ps1)")
         print(f"  Or deploy manually to ~/.hermes/skills/software-development/")
 
-    strat_output = spawn_agent(
-        "strategist",
-        init_skills,
-        strat_prompt,
-        timeout=1200,  # 20 min for deep discovery
-        cwd=PROJECT_DIR,
-        fallback_model=FALLBACK_MODELS.get("strategist")
-    )
+    MAX_INTERVIEW_ROUNDS = 3
+    current_round = 1
+    accumulated_answers = []
+    interview_state = {
+        "feature": description,
+        "project_dir": PROJECT_DIR,
+        "round": current_round,
+        "max_rounds": MAX_INTERVIEW_ROUNDS,
+        "confidence": "Low",
+        "questions": [],
+        "answers": [],
+        "original_prompt": interview_preamble,
+        "timestamp": "",
+    }
+
+    # ── Resume from saved state if --answers provided ──
+    if answers_path:
+        saved_state = load_init_interview_state(answers_path)
+        if saved_state:
+            current_round = saved_state.get("round", 1)
+            accumulated_answers = saved_state.get("answers", [])
+            interview_state = saved_state
+            interview_state["original_prompt"] = interview_preamble
+            print(f"  Resumed from {answers_path} (round {current_round})", flush=True)
+        else:
+            print(f"  WARNING: Could not load state from {answers_path} — starting fresh", flush=True)
+
+    print("-- Phase: Strategist (init interview) --", flush=True)
+
+    # ── Interview loop ──
+    while current_round <= MAX_INTERVIEW_ROUNDS:
+        # Build the prompt with accumulated Q&A context
+        prompt = interview_preamble
+        if accumulated_answers:
+            qa_context = "\n".join(
+                f"USER ANSWER (question {a.get('question_id', i+1)}): {a.get('answer', '')}"
+                for i, a in enumerate(accumulated_answers)
+            )
+            prompt += f"\n\nUSER CLARIFICATIONS (from the user, treat as authoritative):\n{qa_context}"
+            prompt += f"\n\nBased on the above answers, re-evaluate confidence. If High, produce the constitution docs. If not, output more CLARIFICATION questions."
+
+        print(f"\n  [Round {current_round}/{MAX_INTERVIEW_ROUNDS}] Spawning strategist...", flush=True)
+
+        strat_output = spawn_agent(
+            "strategist",
+            init_skills,
+            prompt,
+            timeout=600,  # 10 min per interview round
+            cwd=PROJECT_DIR,
+            fallback_model=FALLBACK_MODELS.get("strategist")
+        )
+
+        # Clean agent messages for trigger detection
+        agent_text = extract_agent_messages(strat_output)
+
+        # Check for CLARIFICATION triggers
+        if has_init_interview_triggers(agent_text):
+            # Parse questions from output
+            questions = []
+            for match in re.finditer(
+                r'^\s*CLARIFICATION\s+(\d+):\s*(.+?)(?=\n\s*(?:CLARIFICATION\s+\d+:|Assumption:|Impact if wrong:|DECISION|Confidence|$))',
+                agent_text, re.DOTALL | re.MULTILINE
+            ):
+                q_id = int(match.group(1))
+                q_text = match.group(2).strip()
+                questions.append({
+                    "id": q_id,
+                    "question": q_text,
+                    "assumption": "",
+                    "impact_if_wrong": "",
+                })
+
+            # Extract assumption and impact_if_wrong inline
+            for q_block in re.finditer(
+                r'CLARIFICATION\s+(\d+):\s*(.+?)(?=\n\s*CLARIFICATION\s+\d+:|\n\s*DECISION|\n\s*Confidence|$)',
+                agent_text, re.DOTALL | re.MULTILINE
+            ):
+                block = q_block.group(2)
+                assumption_m = re.search(r'Assumption:\s*(.+)', block)
+                impact_m = re.search(r'Impact if wrong:\s*(.+)', block)
+                q_id = int(q_block.group(1))
+                for q in questions:
+                    if q["id"] == q_id:
+                        if assumption_m:
+                            q["assumption"] = assumption_m.group(1).strip()
+                        if impact_m:
+                            q["impact_if_wrong"] = impact_m.group(1).strip()
+                        break
+
+            if not questions:
+                # Fallback: collect lines starting with CLARIFICATION
+                for line in agent_text.split("\n"):
+                    stripped = line.strip()
+                    if stripped.startswith("CLARIFICATION"):
+                        questions.append({
+                            "id": len(questions) + 1,
+                            "question": stripped,
+                            "assumption": "",
+                            "impact_if_wrong": "",
+                        })
+
+            if not questions:
+                print("  WARNING: CLARIFICATION trigger detected but no questions parsed. Proceeding with doc production.", flush=True)
+                break
+
+            # Update interview state
+            interview_state["round"] = current_round
+            interview_state["questions"] = questions
+            interview_state["answers"] = accumulated_answers
+            interview_state["timestamp"] = datetime.datetime.now().isoformat()
+
+            # Extract confidence from output
+            conf_match = re.search(r'Confidence:\s*(High|Medium|Low)', agent_text)
+            if conf_match:
+                interview_state["confidence"] = conf_match.group(1)
+
+            # Collect answers
+            answers, exit_code = collect_init_interview_answers(
+                questions, interview_state
+            )
+
+            if exit_code == 2:
+                # Non-TTY: state already saved by collect_init_interview_answers
+                # Restore config before exit
+                if orig_yaml and os.path.exists(strat_config):
+                    with open(strat_config, "w") as f:
+                        f.write(orig_yaml)
+                    if orig_max_turns:
+                        print(f"  max_turns restored -> {orig_max_turns}", flush=True)
+                sys.exit(2)
+
+            # Accumulate answers
+            accumulated_answers.extend(answers)
+            current_round += 1
+
+        else:
+            # No CLARIFICATION triggers — strategist produced docs (or something else)
+            print(f"  [Round {current_round}] No CLARIFICATION triggers — strategist produced docs.", flush=True)
+            break
+
+    # ── Max rounds check ──
+    if current_round > MAX_INTERVIEW_ROUNDS:
+        print(f"\n  WARNING: Max interview rounds ({MAX_INTERVIEW_ROUNDS}) reached.", flush=True)
+        print("  Confidence may not be High — producing constitution docs with best available information.", flush=True)
+        interview_state["round"] = current_round - 1
+        interview_state["answers"] = accumulated_answers
+        interview_state["timestamp"] = datetime.datetime.now().isoformat()
+
+    # ── Final strategist invocation for doc production ──
+    if current_round > 1:
+        # We've been through interview rounds — do a final doc production run
+        final_prompt = interview_preamble
+        if accumulated_answers:
+            qa_context = "\n".join(
+                f"USER ANSWER (question {a.get('question_id', i+1)}): {a.get('answer', '')}"
+                for i, a in enumerate(accumulated_answers)
+            )
+            final_prompt += f"\n\nUSER CLARIFICATIONS (from the user, treat as authoritative):\n{qa_context}"
+
+        if current_round > MAX_INTERVIEW_ROUNDS:
+            final_prompt += "\n\nIMPORTANT: Max interview rounds exhausted. Produce the constitution docs NOW with best available information. Document assumptions clearly."
+
+        final_prompt += "\n\nNOW PRODUCE THE CONSTITUTION DOCS. No more questions. Write the files."
+
+        print("\n-- Phase: Strategist (constitution production) --", flush=True)
+        strat_output = spawn_agent(
+            "strategist",
+            init_skills,
+            final_prompt,
+            timeout=1200,  # 20 min for doc writing
+            cwd=PROJECT_DIR,
+            fallback_model=FALLBACK_MODELS.get("strategist")
+        )
+    else:
+        # First-round High confidence — strat_output already has the docs
+        pass
 
     # ── Restore config ──
     if orig_yaml and os.path.exists(strat_config):
         with open(strat_config, "w") as f:
             f.write(orig_yaml)
         if orig_max_turns:
-            print(f"  max_turns restored → {orig_max_turns}", flush=True)
+            print(f"  max_turns restored -> {orig_max_turns}", flush=True)
+
+    # ── Clean up interview state file on success ──
+    if os.path.exists(INTERVIEW_SAVE_PATH):
+        try:
+            os.unlink(INTERVIEW_SAVE_PATH)
+        except OSError:
+            pass
 
     # ── Post-init: greenfield setup ──
     if is_greenfield:
         # Create AGENTS.md if strategist didn't
         if not os.path.exists(agents_path):
-            # Try to detect tech stack from strategist output
             with open(agents_path, "w") as f:
                 f.write(f"# {description.split('for ')[-1] if 'for ' in description else description}\n\n")
                 f.write(f"{description}\n\n")
@@ -805,14 +1005,14 @@ CRITICAL RULES:
         print("  STATUS.md initialized", flush=True)
 
     # ── Done ──
-    print("\n─── init complete ───")
+    print("\n--- init complete ---")
     print(f"\n  Created in {PROJECT_DIR}/specs/:")
     for fname in ["mission.md", "tech-stack.md", "roadmap.md", "conventions.md"]:
         fp = os.path.join(PROJECT_DIR, "specs", fname)
         if os.path.exists(fp):
-            print(f"    ✓ {fname}")
+            print(f"    \u2713 {fname}")
         else:
-            print(f"    ✗ {fname} (missing — strategist may have skipped)")
+            print(f"    \u2717 {fname} (missing — strategist may have skipped)")
     print()
     print("  Next: review the constitution, then:")
     print(f"    dokima 'F001: first feature' {PROJECT_DIR}")
