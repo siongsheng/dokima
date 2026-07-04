@@ -635,8 +635,7 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
 
 {map_hint}{file_hints}{code_context}
-Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).
-FIRST: Create and switch to branch '{branch}':
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Create and switch to branch '{branch}':
   git checkout -b {branch} 2>/dev/null || git checkout {branch}
   git push -u origin {branch}
 
@@ -2059,6 +2058,8 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
             _, _, rc = git("checkout", "-b", branch, DEFAULT_BRANCH)
             if rc != 0:
                 git("checkout", branch)
+            if not os.path.exists(spec_path):
+                print(f"  ⚠ Spec file missing: {spec_path} — coder will have no tasks", flush=True)
             git("add", spec_path)
             if tasks_extract_path and os.path.exists(tasks_extract_path):
                 git("add", tasks_extract_path)
