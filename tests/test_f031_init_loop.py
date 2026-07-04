@@ -110,3 +110,41 @@ Impact text.
 **Parallelizable:** yes
 **Description:** Setup project."""
     assert utils.has_init_interview_triggers(clean_spec) is False
+
+
+def test_init_prompt_has_interview_mode_instructions():
+    """The init strategist prompt includes INTERVIEW MODE instructions."""
+    import roadmap
+    source = roadmap.__doc__  # trigger import to get source later
+    with open(os.path.join(os.path.dirname(__file__), '..', 'roadmap.py')) as f:
+        source = f.read()
+
+    run_init_source = source.split('def run_init')[1].split('\ndef ')[0] if 'def run_init' in source else ''
+
+    # After prompt enhancement, the init strategist prompt should instruct strategist
+    # about interview mode protocol
+    assert 'DECISION: INTERVIEW MODE' in run_init_source, \
+        "run_init() prompt must reference DECISION: INTERVIEW MODE"
+    assert 'CLARIFICATION' in run_init_source, \
+        "run_init() prompt must reference CLARIFICATION block format"
+
+
+def test_init_answers_flag_supported():
+    """run_init() supports --answers flag for pre-filling interview state."""
+    source = open(os.path.join(os.path.dirname(__file__), '..', 'roadmap.py')).read()
+    run_init_source = source.split('def run_init')[1].split('\ndef ')[0] if 'def run_init' in source else ''
+
+    # After --answers flag support, run_init should handle an answers parameter
+    assert 'answers' in run_init_source.lower(), \
+        "run_init() must reference answers handling"
+
+
+def test_max_turns_restore_on_all_exit_paths():
+    """max_turns is restored via try/finally covering all exit paths."""
+    source = open(os.path.join(os.path.dirname(__file__), '..', 'roadmap.py')).read()
+    run_init_source = source.split('def run_init')[1].split('\ndef ')[0] if 'def run_init' in source else ''
+
+    # After max_turns refactoring, there should be a try/finally wrapping the
+    # strategist spawn + interview loop, to ensure restore happens even on exit(2)
+    assert 'try:' in run_init_source and 'finally:' in run_init_source, \
+        "run_init() must use try/finally for max_turns restore"
