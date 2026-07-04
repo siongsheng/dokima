@@ -2595,6 +2595,38 @@ def save_init_interview_state(feature, project_dir, questions, prompt):
     return INTERVIEW_SAVE_PATH
 
 
+def collect_interview_answers(clarification_lines, timeout=60):
+    """Collect user answers to interview clarification questions interactively.
+
+    Args:
+        clarification_lines: List of CLARIFICATION N: question strings.
+        timeout: Seconds to wait per question before accepting assumptions.
+
+    Returns:
+        List of answer strings. Returns empty list if stdin is not a tty
+        (non-interactive mode). Breaks on empty input (accept assumptions)
+        or timeout per question.
+    """
+    if not sys.stdin.isatty():
+        return []
+    import select
+    user_answers = []
+    try:
+        for i, c in enumerate(clarification_lines):
+            print(f"\n  A{i+1}: ", end="", flush=True)
+            ready, _, _ = select.select([sys.stdin], [], [], timeout)
+            if not ready:
+                print("(timed out \u2014 accepting assumptions)", flush=True)
+                break
+            answer = sys.stdin.readline().strip()
+            if not answer:
+                break
+            user_answers.append(answer)
+    except (EOFError, KeyboardInterrupt):
+        print("\n  \u26a0 No input available \u2014 proceeding with assumptions", flush=True)
+    return user_answers
+
+
 # Module-level original references for delegation checks (F022 modular refactor)
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
