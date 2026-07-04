@@ -14,6 +14,7 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
+- **F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.** — in progress since 2026-07-04 15:27, branch `feat/f033-cross-run-learning-via-conventionsm-a639b200` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
