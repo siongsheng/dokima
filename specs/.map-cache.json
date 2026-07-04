@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "899af33ca982a0e04722ea7f1058adad",
+    "hash": "1c9294877fda5dd8b6c52b4122ce18bf",
     "desc": ""
   },
   "AGENTS.md": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "7a04a857c500528d40afa074324feddb",
+    "hash": "96fb0f4c0d31cddfc3621e55dd964859",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "9cf7222786ee3ffa3b7e927bea6fa7d3",
+    "hash": "b803165ef91f29ab4aa471dd9a944619",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
