@@ -940,7 +940,7 @@ Report: what was broken, what you fixed, commit hash."""
 
     # 4. Verify coder produced actual code changes (not just spec/docs)
     print("  ⏳ Checking diff for code changes...", flush=True)
-    diff_stat, _, _ = git("diff", "--stat", DEFAULT_BRANCH + "..." + branch)
+    diff_stat, _, _ = git("diff", "--stat=200", DEFAULT_BRANCH + "..." + branch)
     source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
     spec_only = re.findall(r'^\s*specs/[\w/.-]+\.(?:md)\s*\|', diff_stat, re.MULTILINE)
     if not source_files and (spec_only or not diff_stat.strip()):
