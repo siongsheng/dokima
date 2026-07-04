@@ -10,7 +10,8 @@ _IMPORTING_PANEL = None
 
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
-                   _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
+                   _extract_tl_verdict, _extract_tl_blockers, extract_should_fix_from_text,
+                   extract_pr_sections,
                    _extract_convention_rules, _append_convention_rules,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
                    generate_codebase_map, extract_file_paths, load_github_token,
@@ -1368,24 +1369,56 @@ Report: what you fixed, commit hash."""
             print(f"  ⚠ Could not update PR body (gh api rc={edit_rc}): {edit_err[:200]}", flush=True)
 
     # Create GitHub Issues for SHOULD FIX items
-    should_fix_lines = [l for l in tl_output.split("\n") if "SHOULD FIX" in l.upper() and "—" in l]
-    if should_fix_lines:
-        print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items ──", flush=True)
-        for line in should_fix_lines[:5]:
-            parts = line.split("—", 1)
-            desc = parts[1].strip() if len(parts) > 1 else line.strip()
-            title = f"SHOULD FIX: {desc[:80]}"
-            body = (
-                f"## Tech Lead Review Finding\n\n"
-                f"**Feature:** {feature}\n"
-                f"**Branch:** {branch}\n"
-                f"**PR:** {pr_url or 'N/A'}\n"
-                f"**Verdict:** {verdict}\n"
-                f"**Spec:** {spec_path}\n\n"
-                f"### Finding\n{line.strip()}\n\n"
-                f"### Context\nFound during adversarial review of `{branch}` against the spec. "
-                f"See the PR for full review details and other findings."
-            )
+    # ── Source selection: PR review comment (authoritative) → tl_output (fallback) ──
+    source_text = tl_output
+    if pr_url:
+        pr_num = pr_url.split("/")[-1]
+        review_stdout, review_stderr, review_rc = gh(
+            "pr", "view", str(pr_num), "--repo", REPO,
+            "--comments", "--json", "reviews", "--jq", ".[-1].body"
+        )
+        if review_rc == 0 and review_stdout and review_stdout.strip():
+            source_text = review_stdout
+        else:
+            print(f"  ⚠ Could not fetch PR review comment (rc={review_rc}), falling back to TL output", flush=True)
+
+    findings = extract_should_fix_from_text(source_text)
+    if findings:
+        print(f"\n── Creating GitHub Issues for {len(findings)} SHOULD FIX items ──", flush=True)
+        for finding in findings[:5]:
+            desc = finding['detail']
+            # Build enhanced title with dimension prefix when available
+            dim = finding.get('dimension', '')
+            title_prefix = f"[{dim}] " if dim else ""
+            title = f"SHOULD FIX {title_prefix}: {desc[:72]}"
+
+            # Build enhanced body with table data when available
+            body_lines = [
+                f"## Tech Lead Review Finding",
+                f"",
+                f"**Feature:** {feature}",
+                f"**Branch:** {branch}",
+                f"**PR:** {pr_url or 'N/A'}",
+                f"**Verdict:** {verdict}",
+                f"**Spec:** {spec_path}",
+            ]
+            if finding.get('id'):
+                body_lines.append(f"**ID:** {finding['id']}")
+            if finding.get('dimension'):
+                body_lines.append(f"**Dimension:** {finding['dimension']}")
+            if finding.get('location'):
+                body_lines.append(f"**Location:** {finding['location']}")
+            body_lines.extend([
+                "",
+                f"### Finding",
+                desc,
+                "",
+                f"### Context",
+                f"Found during adversarial review of `{branch}` against the spec. "
+                f"See the PR for full review details and other findings.",
+            ])
+            body = "\n".join(body_lines)
+
             stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
                                     "--title", title, "--body", body)
             if rc == 0:
