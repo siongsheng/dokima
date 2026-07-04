@@ -14,6 +14,7 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
+- **F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.** — in progress since 2026-07-04 15:03, branch `feat/f032-agent-as-judge-self-assessment-code-99fe357b` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
