@@ -133,6 +133,20 @@
 **Status:** [x] Done Progress Progress Progress
 **User Story:** As a user, I can cli redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). flags (--force-full, --max-parallel) keep -- prefix. update all tests, scripts, agents.md, roadmap, and docs.
 
+
+### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
+**Priority:** P2
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I can agent-as-judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am i least confident about, what would tl flag. catches empty prs at source.
+
+
+### F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.
+**Priority:** P2
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
+
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
 **Priority:** P2
 **Dependencies:** None
@@ -201,6 +215,6 @@
 ### F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.
 **Priority:** P3
 **Dependencies:** F027
-**Status:** [~] In Progress Progress Progress
+**Status:** [x] Done Progress Progress Progress
 **User Story:** As a user, I can strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. map accumulates real-world rationale across features with zero extra llm calls.
 
