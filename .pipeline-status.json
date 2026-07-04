@@ -1,11 +1,11 @@
 {
-  "feature": "F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing \u2014 does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.",
+  "feature": "F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction \u2014 human-readable rules that compound.",
   "project": "/home/opc/dokima",
-  "branch": "feat/f032-agent-as-judge-self-assessment-code-29ca6e3a",
+  "branch": "feat/f033-cross-run-learning-via-conventionsm-966bee6e",
   "depth": "vet+nm",
   "risk": "MEDIUM",
   "mode": "passive",
-  "log_path": "/tmp/dokima-output-20260704-150254.txt",
+  "log_path": "/tmp/dokima-output-20260704-152745.txt",
   "started_at": "2026-07-02T19:42:33.093216",
   "current_phase": "init",
   "phases": {
