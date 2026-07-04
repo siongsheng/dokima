@@ -14,7 +14,7 @@
 | F003: Edge Case & Robustness Tests | [x] Done | #13 | 2026-06-28 |
 | F001: Security Hardening | [~] In Progress | — | 2026-06-27 |
 - **F006: Error Recovery & Resume** — in progress since 2026-06-28 23:56, branch `feat/f006-error-recovery--resume` [panel]
-- **F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.** — in progress since 2026-07-04 14:07, branch `feat/f028-strategist-enriches-codebase-mapmd--a52dfa82` [panel]
+- **F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.** — in progress since 2026-07-04 14:30, branch `feat/f028-strategist-enriches-codebase-mapmd--a52dfa82` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |

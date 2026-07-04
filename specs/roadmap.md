@@ -201,6 +201,6 @@
 ### F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.
 **Priority:** P3
 **Dependencies:** F027
-**Status:** [~] In Progress
+**Status:** [~] In Progress Progress
 **User Story:** As a user, I can strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. map accumulates real-world rationale across features with zero extra llm calls.
 
