@@ -2546,3 +2546,31 @@ def do_release(bump, project_dir, dry_run=False):
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
 
+# ── F031: Init interview mode ──────────────────────
+
+INTERVIEW_SAVE_PATH = "/tmp/dokima-init-interview.json"
+
+
+def load_init_interview_state(path=None):
+    """Load init interview state from JSON file.
+
+    Reads the interview state from INTERVIEW_SAVE_PATH (or a custom path),
+    validates the JSON structure, and returns the parsed dict.
+
+    Returns None if the file is missing, empty, or contains invalid JSON.
+    """
+    if path is None:
+        path = INTERVIEW_SAVE_PATH
+
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, IOError):
+        return None
+
+    # Validate it looks like an interview state dict (has expected keys)
+    if not isinstance(data, dict):
+        return None
+
+    return data
+
