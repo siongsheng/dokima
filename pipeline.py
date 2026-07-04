@@ -2261,6 +2261,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
     # Phase 4: nm
     if not coder_failed and depth in ("vet+nm", "full"):
         nm_result = run_phase4_nm(feature, branch, impact, pr_url)
+        nm_stdout = nm_result.get("nm_stdout", "")
         pr_url = nm_result["pr_url"]
         # Save checkpoint after nm
         if resume is not False:
@@ -2289,6 +2290,20 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
             print("\n── Phase 5: Tech Lead — SKIPPED (coder failed) ──", flush=True)
         if verdict is None:
             verdict = "APPROVED" if not coder_failed else "CODER_FAILED"
+
+    # If TL was skipped, extract SHOULD FIX from nm output and create issues
+    if not coder_failed and depth != "full" and nm_stdout:
+        should_fix_lines = [l for l in nm_stdout.split("\n") if "SHOULD FIX" in l.upper() and "\u2014" in l]
+        if should_fix_lines:
+            print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items (from nm) ──", flush=True)
+            for line in should_fix_lines[:5]:
+                parts = line.split("\u2014", 1)
+                desc = parts[1].strip() if len(parts) > 1 else line.strip()
+                title = f"SHOULD FIX: {desc[:80]}"
+                body = f"## Adversarial Review Finding\n\n**Feature:** {feature}\n**Branch:** {branch}\n**PR:** {pr_url or 'N/A'}\n**Verdict:** {verdict}\n**Spec:** {spec_path}\n\n### Finding\n{line.strip()}\n\n### Context\nFound during adversarial review. See the PR for full details."
+                stdout, stderr, rc = gh("issue", "create", "--repo", REPO, "--title", title, "--body", body)
+                if rc == 0:
+                    print(f"  Created: {stdout}", flush=True)
 
     # Post pipeline
     continue_loop = True
