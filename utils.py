@@ -2542,6 +2542,59 @@ def do_release(bump, project_dir, dry_run=False):
                 break
 
 
+# ── F031: init interview helpers ──
+
+INTERVIEW_SAVE_PATH = "/tmp/dokima-init-interview.json"
+
+def has_init_interview_triggers(text):
+    """Detect CLARIFICATION or INTERVIEW MODE in strategist output for init.
+
+    Returns True if the output contains CLARIFICATION N: blocks or a
+    DECISION: INTERVIEW MODE declaration, indicating the strategist needs
+    more information before writing constitution docs.
+
+    False-positive guard: if the output already has ### Task N: headers
+    (meaning it's a full spec, not an interview request), returns False
+    even if the trigger strings appear in prose/task descriptions.
+    """
+    if not text:
+        return False
+    # Guard: if output has task headers, it's a full spec, not an interview
+    has_tasks = bool(re.search(r'^\s*(?:###\s*)?Task\s*\d+:', text, re.MULTILINE))
+    if has_tasks:
+        return False
+    # Check for interview mode or clarification blocks
+    if "DECISION: INTERVIEW MODE" in text:
+        return True
+    if re.search(r'^\s*CLARIFICATION\s+\d+:', text, re.MULTILINE):
+        return True
+    return False
+
+
+def save_init_interview_state(feature, project_dir, questions, prompt):
+    """Persist interview state to JSON for non-interactive / --answers recovery.
+
+    Args:
+        feature: Feature description string.
+        project_dir: Path to the project directory.
+        questions: List of CLARIFICATION N: question strings.
+        prompt: The strategist prompt that produced the interview.
+
+    Returns:
+        Path to the saved JSON file (INTERVIEW_SAVE_PATH).
+    """
+    interview_state = {
+        "feature": feature,
+        "project_dir": project_dir,
+        "questions": questions,
+        "prompt": prompt
+    }
+    with open(INTERVIEW_SAVE_PATH, "w") as f:
+        json.dump(interview_state, f)
+    os.chmod(INTERVIEW_SAVE_PATH, 0o600)
+    return INTERVIEW_SAVE_PATH
+
+
 # Module-level original references for delegation checks (F022 modular refactor)
 _ENSURE_PROFILES_ORIGINAL = ensure_profiles
 _DEPLOY_PROFILE_SKILLS_ORIGINAL = deploy_profile_skills
