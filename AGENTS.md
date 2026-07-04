@@ -34,3 +34,4 @@ python3 -m pytest tests/test_slugify.py -v
 - No absolute dollar amounts in docs — provider-agnostic percentages only
 - Skills are SKILL.md files with YAML frontmatter
 - Panel spawns agents via `hermes --profile <role> --yolo -s <skill> chat -q "..."`
+- F033: TL-blocked pattern violations append to specs/conventions.md — check it before designing

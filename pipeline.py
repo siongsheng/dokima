@@ -12,6 +12,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    collect_interview_answers,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
+                   _extract_convention_candidates, _append_convention_rules,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
                    generate_codebase_map, extract_file_paths, load_github_token,
                    save_checkpoint, load_checkpoint, delete_checkpoint,
@@ -1306,6 +1307,22 @@ Report: what you fixed, commit hash."""
 
     # ── POST-TECH-LEAD GATE ──
     verdict = _extract_tl_verdict(tl_output)
+
+    # ── F033: Cross-run learning via conventions.md ──
+    # When TL blocks or requests changes for a pattern violation, extract
+    # convention-like rules and append to specs/conventions.md so the
+    # strategist picks them up in the next pipeline run.
+    # Best-effort: failures log a warning, never block the pipeline.
+    if verdict in ("BLOCKED", "CHANGES REQUESTED"):
+        try:
+            conventions_path = os.path.join(PROJECT_DIR, "specs", "conventions.md")
+            candidates = _extract_convention_candidates(tl_output)
+            if candidates:
+                added = _append_convention_rules(candidates, conventions_path)
+                if added > 0:
+                    print(f"  F033: appended {added} convention rule(s) to conventions.md", flush=True)
+        except Exception as e:
+            print(f"  ⚠ F033: convention extraction failed: {e}", flush=True)
 
     # ── Inject TL review into PR body ──
     if pr_url and verdict not in ("SKIPPED", "UNKNOWN", "TIMED_OUT"):
