@@ -559,8 +559,14 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 
 
-def run_init(description, project_dir):
-    """Discovery & constitution phase. Strategist produces spec-kit docs, no pipeline."""
+def run_init(description, project_dir, answers_path=None):
+    """Discovery & constitution phase. Strategist produces spec-kit docs, no pipeline.
+    
+    Args:
+        description: Project description string.
+        project_dir: Path to the project directory.
+        answers_path: Optional path to saved interview state JSON (from --answers flag).
+    """
     global API_KEY, PROJECT_DIR, REPO
 
     PROJECT_DIR = project_dir
@@ -579,6 +585,19 @@ def run_init(description, project_dir):
     gh_token = load_github_token()
     if gh_token:
         os.environ["GH_TOKEN"] = gh_token
+
+
+    # ── Load answers file if provided (--answers flag) ──
+    user_answers_prefill = None
+    if answers_path:
+        try:
+            with open(answers_path) as f:
+                answers_data = json.load(f)
+            user_answers_prefill = answers_data
+            print(f"  Loaded interview state: {answers_path}", flush=True)
+            print(f"  Questions: {len(answers_data.get('questions', []))}", flush=True)
+        except Exception as e:
+            print(f"  WARNING: Could not load answers from {answers_path}: {e}", flush=True)
 
     # ── Detect project state ──
     agents_path = os.path.join(PROJECT_DIR, "AGENTS.md")
@@ -664,6 +683,12 @@ PHASE 1 — INTERROGATE THE USER:
 - What are the ANTI-GOALS? (what will this NOT do?)
 - What are the consequences of wrong/stale output?
 - For existing projects: what's wrong with the current state?
+
+INTERVIEW MODE PROTOCOL: When you lack sufficient information to reach High confidence,
+enter INTERVIEW MODE: output DECISION: INTERVIEW MODE followed by
+CLARIFICATION N: <question> blocks. Max 4 questions per round.
+When confidence IS High after answers, write the full constitution docs
+without CLARIFICATION blocks and with DECISION: PROCEED.
 
 PHASE 2 — DOMAIN RESEARCH:
 - Who are the competitors? What do they do well/poorly?
@@ -795,6 +820,12 @@ CRITICAL RULES:
             print(f"\n  State saved: {INTERVIEW_SAVE_PATH}", flush=True)
             print(f"  Re-run with: dokima init --answers {INTERVIEW_SAVE_PATH}", flush=True)
             print(f"{'═' * 55}", flush=True)
+            # Restore config before exit
+            if orig_yaml and os.path.exists(strat_config):
+                with open(strat_config, "w") as f:
+                    f.write(orig_yaml)
+                if orig_max_turns:
+                    print(f"  max_turns restored \u2192 {orig_max_turns}", flush=True)
             sys.exit(2)
 
         # Interactive mode: collect answers and re-spawn
