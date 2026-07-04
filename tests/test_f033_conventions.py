@@ -15,7 +15,7 @@ def panel():
 
 PATTERN_TL_OUTPUT = """### BLOCKERS (1)
 
-**1. No hardcoded paths in module code**
+**1. BLOCKER: No hardcoded paths in module code**
 Spec violation: pipeline.py line 42 uses a hardcoded path `/tmp/output`.
 
 VERDICT: BLOCKED
@@ -123,4 +123,94 @@ class TestExtractConventionCandidates:
 
 
 # ── Tests for _append_convention_rules ──
-# (Task 6: added after Task 2 implementation)
+# (Task 6)
+
+
+class TestAppendConventionRules:
+    """Task 6: Test _append_convention_rules() append + dedup logic."""
+
+    def test_creates_file_with_rules_when_missing(self, panel, tmp_path):
+        """New rules + missing conventions.md → creates file with rules."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        rules = ["Never use shell=True", "Always use list args"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 2
+        assert os.path.exists(conventions_path)
+        content = open(conventions_path).read()
+        assert "Never use shell=True" in content
+        assert "Always use list args" in content
+        assert "## Anti-Patterns" in content
+        assert "- " in content
+
+    def test_appends_to_existing_no_overlap(self, panel, tmp_path):
+        """New rules + existing conventions.md with no overlap → appends."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        existing = "# Dokima Conventions\n\n## Anti-Patterns\n\n- No hardcoded paths\n- No shell=True\n"
+        os.makedirs(os.path.dirname(conventions_path), exist_ok=True)
+        with open(conventions_path, "w") as f:
+            f.write(existing)
+        rules = ["Always validate input", "Never trust user data"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 2
+        content = open(conventions_path).read()
+        assert "No hardcoded paths" in content  # preserved
+        assert "Always validate input" in content  # new rule
+        assert "Never trust user data" in content  # new rule
+
+    def test_only_appends_genuinely_new_rules(self, panel, tmp_path):
+        """Some rules overlap → only appends genuinely new ones."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        existing = "## Anti-Patterns\n\n- No hardcoded paths\n- Always use guards\n"
+        os.makedirs(os.path.dirname(conventions_path), exist_ok=True)
+        with open(conventions_path, "w") as f:
+            f.write(existing)
+        rules = ["Always use guards", "Never use os.system"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 1  # only "Never use os.system" is new
+        content = open(conventions_path).read()
+        # "Always use guards" should not be duplicated
+        assert content.count("Always use guards") == 1
+
+    def test_all_rules_exist_returns_zero(self, panel, tmp_path):
+        """All rules already exist → no writes, returns 0."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        existing = "## Anti-Patterns\n\n- No hardcoded paths\n- Always use guards\n"
+        os.makedirs(os.path.dirname(conventions_path), exist_ok=True)
+        with open(conventions_path, "w") as f:
+            f.write(existing)
+        rules = ["No hardcoded paths", "Always use guards"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 0
+
+    def test_missing_anti_patterns_section_creates_it(self, panel, tmp_path):
+        """conventions.md exists but no Anti-Patterns section → creates it."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        existing = "# Dokima Conventions\n\n## Some Other Section\n\n- other stuff\n"
+        os.makedirs(os.path.dirname(conventions_path), exist_ok=True)
+        with open(conventions_path, "w") as f:
+            f.write(existing)
+        rules = ["Must follow TDD"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 1
+        content = open(conventions_path).read()
+        assert "## Anti-Patterns" in content
+        assert "Must follow TDD" in content
+
+    def test_empty_rules_list_returns_zero(self, panel, tmp_path):
+        """Empty rules list → returns 0."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        added = panel._append_convention_rules([], conventions_path)
+        assert added == 0
+
+    def test_empty_file_treated_as_missing(self, panel, tmp_path):
+        """Empty conventions.md → creates file with rules (same as missing)."""
+        conventions_path = os.path.join(str(tmp_path), "conventions.md")
+        os.makedirs(os.path.dirname(conventions_path), exist_ok=True)
+        with open(conventions_path, "w") as f:
+            f.write("")
+        rules = ["No magic numbers"]
+        added = panel._append_convention_rules(rules, conventions_path)
+        assert added == 1
+        content = open(conventions_path).read()
+        assert "No magic numbers" in content
+        assert "## Anti-Patterns" in content
