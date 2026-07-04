@@ -147,6 +147,7 @@ def main():
         init_p = subparsers.add_parser("init", add_help=False)
         init_p.add_argument("description", nargs="?", default="")
         init_p.add_argument("dir", nargs="?", default=None)
+        init_p.add_argument("--answers", default=None)
 
         # add
         add_p = subparsers.add_parser("add", add_help=False)
@@ -259,7 +260,8 @@ def main():
         if cmd == "init":
             desc = getattr(args, "description", "") or ""
             init_dir = os.path.abspath(args.dir) if getattr(args, "dir", None) else os.getcwd()
-            run_init(desc, init_dir)
+            answers = getattr(args, "answers", None)
+            run_init(desc, init_dir, answers_path=answers)
             return
 
         if cmd == "add":
@@ -542,7 +544,7 @@ def main():
 
     # ── INIT MODE: discovery & constitution, no pipeline ──
     if not is_next and feature == "init":
-        # init <description> [project_dir]
+        # init <description> [project_dir] [--answers <path>]
         init_desc = filtered_argv[1] if len(filtered_argv) >= 2 else ""
         init_project_dir = os.path.abspath(filtered_argv[2]) if len(filtered_argv) >= 3 else PROJECT_DIR
         run_init(init_desc, init_project_dir)
