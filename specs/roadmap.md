@@ -111,7 +111,7 @@
 ### F026: Auto-Update Docs CLI Cache on Release
 **Priority:** P2
 **Dependencies:** F021, F024, dokima-docs repo
-**Status:** [x] Done Progress Progress
+**Status:** [ ] Pending Progress
 **User Story:** Running `dokima --release` auto-updates the docs site's CLI reference cache. No manual `--help-json > scripts/cli-help.json` step needed.
 
 ---
@@ -122,7 +122,7 @@
 ### F027: Upgrade codebase-map.md to domain-aware format with Start Here, Domain Map, Impact Map, and Test Map sections. Inject map into strategist, coder-worktree, and tech-lead prompts.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [ ] Pending
 **User Story:** As a user, I can upgrade codebase-map.md to domain-aware format with start here, domain map, impact map, and test map sections. inject map into strategist, coder-worktree, and tech-lead prompts.
 
 
@@ -130,41 +130,41 @@
 ### F030: CLI redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). Flags (--force-full, --max-parallel) keep -- prefix. Update all tests, scripts, AGENTS.md, roadmap, and docs.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress Progress Progress
+**Status:** [ ] Pending Progress Progress
 **User Story:** As a user, I can cli redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). flags (--force-full, --max-parallel) keep -- prefix. update all tests, scripts, agents.md, roadmap, and docs.
 
 
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [ ] Pending
 **User Story:** As a user, I can agent-as-judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am i least confident about, what would tl flag. catches empty prs at source.
 
 
 ### F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [ ] Pending
 **User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
 
 
 ### F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.
 **Priority:** P2
 **Dependencies:** F032
-**Status:** [x] Done
+**Status:** [ ] Pending
 **User Story:** As a user, I can dokima fix --issue n: pull github issue body, extract file/line/fix/verify from structured format, spawn coder to implement. also upgrade should fix issue creation to include what/fix/verify sections for coder-readability.
 
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [ ] Pending
 **User Story:** As a user, I can auto-generate cli reference page from cli-help.json during vercel build instead of hand-written mdx. new flags and commands appear in docs automatically on every release.
 
 
 ### F031: dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. Loops until confidence is High, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [~] In Progress
 **User Story:** As a user, I can dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. loops until confidence is high, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.
 
 ### F011: Installer Script
@@ -222,6 +222,13 @@
 ### F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.
 **Priority:** P3
 **Dependencies:** F027
-**Status:** [x] Done
+**Status:** [ ] Pending
 **User Story:** As a user, I can strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. map accumulates real-world rationale across features with zero extra llm calls.
+
+
+### F035: GitLab support: swap gh CLI for glab or abstract VCS layer
+**Priority:** P3
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a user, I can gitlab support: swap gh cli for glab or abstract vcs layer.
 
