@@ -2116,6 +2116,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
     pr_url = None
     verdict = None
     nm_output = ""
+    nm_stdout = ""
     tl_output = ""
 
     # Reconstruct pr_url from checkpoint if coder was completed
