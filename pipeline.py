@@ -1389,8 +1389,8 @@ Report: what you fixed, commit hash."""
             desc = finding['detail']
             # Build enhanced title with dimension prefix when available
             dim = finding.get('dimension', '')
-            title_prefix = f"[{dim}] " if dim else ""
-            title = f"SHOULD FIX {title_prefix}: {desc[:72]}"
+            dim_prefix = f" [{dim}]" if dim else ""
+            title = f"SHOULD FIX{dim_prefix}: {desc[:72]}"
 
             # Build enhanced body with table data when available
             body_lines = [
