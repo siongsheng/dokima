@@ -2020,6 +2020,146 @@ def _extract_tl_blockers(tl_output: str) -> list[str]:
 
     return merged[:10]
 
+
+def _extract_convention_rules(blocker_lines):
+    """Filter TL blocker lines to pattern-violation convention rules.
+
+    Skips file-specific one-time fixes (e.g., 'missing null check in foo.py line 42')
+    and keeps generic convention patterns (e.g., 'all subprocess calls must use list args').
+
+    Each blocker line is expected in _extract_tl_blockers output format:
+    'N. Title' or 'N. Title — detail'.
+
+    Returns a list of clean rule strings (no number prefix, no bullet markers).
+    """
+    if not blocker_lines:
+        return []
+
+    file_ref_pattern = re.compile(
+        r'\.(?:py|js|ts|rs|go|java|rb|php|c|cpp|h|hpp|swift|kt|cs|scala|sh|bash|'
+        r'vue|jsx|tsx|svelte|css|scss|html|sql|yaml|yml|json|xml|toml|cfg|ini|'
+        r'md|rst|txt)\b',
+        re.IGNORECASE
+    )
+
+    rules = []
+    for line in blocker_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Skip file-specific blockers: contain file extension or 'line N' pattern
+        if file_ref_pattern.search(stripped):
+            continue
+        if re.search(r'\bline\s+\d+\b', stripped, re.IGNORECASE):
+            continue
+        if re.search(r'\b(?:file|path|directory):\s', stripped, re.IGNORECASE):
+            continue
+
+        # Extract rule text: after 'N. ' prefix and after ' — ' separator
+        # Format: "1. Title" or "1. Title — detail"
+        # Strip number prefix first
+        rule = re.sub(r'^\d+\.\s*', '', stripped)
+
+        # If no ' — ' separator, skip — malformed blocker line
+        if ' — ' not in rule:
+            continue
+
+        # Take the detail part (after last " — ")
+        parts = rule.rsplit(' — ', 1)
+        detail = parts[-1].strip()
+        if detail:
+            rule = detail
+        else:
+            rule = parts[0].strip()
+
+        if rule and not rule.startswith('—'):
+            rules.append(rule)
+
+    return rules
+
+
+def _append_convention_rules(project_dir, rules):
+    """Append convention rules to specs/conventions.md under ## Cross-Run Learning.
+
+    Creates the ## Cross-Run Learning section if absent. Each new rule gets a
+    <!-- auto: YYYY-MM-DD --> provenance comment. Rules are deduplicated
+    case-insensitively against existing rules in the section.
+
+    Args:
+        project_dir: Path to the project root (must contain specs/ subdirectory).
+        rules: List of rule strings to append.
+
+    Returns:
+        int: Number of newly appended rules (0 if all were duplicates).
+    """
+    if not rules:
+        return 0
+
+    conventions_path = os.path.join(project_dir, "specs", "conventions.md")
+
+    # Read existing content
+    existing_content = ""
+    if os.path.exists(conventions_path):
+        with open(conventions_path) as f:
+            existing_content = f.read()
+
+    # Collect existing rules for dedup (case-insensitive)
+    existing_rules = set()
+    section_header = "## Cross-Run Learning"
+    if section_header in existing_content:
+        # Extract rules from the section — bullet points under the header
+        section_start = existing_content.index(section_header)
+        section_text = existing_content[section_start:]
+        # Match "- rule text" lines
+        for m in re.finditer(r'^-\s+(.+)$', section_text, re.MULTILINE):
+            existing_rules.add(m.group(1).strip().casefold())
+
+    # Determine which rules are new
+    today = datetime.date.today().isoformat()
+    append_lines = []
+    new_count = 0
+
+    for rule in rules:
+        rule = rule.strip()
+        if not rule:
+            continue
+        if rule.casefold() in existing_rules:
+            continue
+        # Mark as seen for this batch too (prevents internal duplicates in one call)
+        existing_rules.add(rule.casefold())
+        append_lines.append(f"<!-- auto: {today} -->")
+        append_lines.append(f"- {rule}")
+        new_count += 1
+
+    if new_count == 0:
+        return 0
+
+    # Build new content
+    result = existing_content.rstrip('\n')
+
+    if section_header not in result:
+        # Add section header
+        if result:
+            result += "\n\n"
+        result += f"{section_header}\n"
+
+    # Append new rules
+    for line in append_lines:
+        result += f"\n{line}"
+
+    result += "\n"
+
+    # Write back
+    specs_dir = os.path.dirname(conventions_path)
+    if not os.path.exists(specs_dir):
+        os.makedirs(specs_dir, exist_ok=True)
+    with open(conventions_path, "w") as f:
+        f.write(result)
+
+    return new_count
+
+
 # ── Profile configuration defaults (F012) ──
 _PROFILE_CONFIGS = {
     "strategist": {

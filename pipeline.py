@@ -11,6 +11,7 @@ _IMPORTING_PANEL = None
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
+                   _extract_convention_rules, _append_convention_rules,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
                    generate_codebase_map, extract_file_paths, load_github_token,
                    save_checkpoint, load_checkpoint, delete_checkpoint,
@@ -1311,6 +1312,19 @@ Report: what you fixed, commit hash."""
         pr_num = pr_url.split("/")[-1]
         # Extract blocker lines using the smart extractor
         blocker_lines = _extract_tl_blockers(tl_output)
+
+        # ── Cross-run learning: extract convention rules from TL blockers ──
+        if blocker_lines and verdict in ("BLOCKED", "CHANGES REQUESTED"):
+            try:
+                convention_rules = _extract_convention_rules(blocker_lines)
+                if convention_rules:
+                    appended = _append_convention_rules(PROJECT_DIR, convention_rules)
+                    if appended > 0:
+                        print(f"  📋 Appended {appended} convention rule(s) to specs/conventions.md", flush=True)
+            except Exception as e:
+                # Best-effort: convention append failure must not block the pipeline
+                print(f"  ⚠ Convention rule append failed (non-blocking): {e}", flush=True)
+
         # Extract risk from TL output or use strategist's impact
         risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', tl_output, re.IGNORECASE)
         tl_risk = risk_match.group(1).upper() if risk_match else impact
