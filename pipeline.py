@@ -2165,8 +2165,18 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
                 verdict = "CODER_FAILED"
 
         if not coder_failed and depth == "vet":
-            print("\n── Creating PR (depth=coder) ──", flush=True)
-            pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+            # Minimal guard: verify coder produced actual code changes
+            diff_stat, _, _ = git("diff", "--stat=200", DEFAULT_BRANCH + "..." + branch)
+            source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
+            if not source_files:
+                print("  🔴 BLOCKED — No source code changes in coder output. Halting.", flush=True)
+                halt_and_revert("nm: coder produced no source code changes (spec-only at depth=vet)", "PHASE 2 (Coder)", branch)
+                coder_failed = True
+                verdict = "CODER_FAILED"
+                continue_loop = False
+            else:
+                print("\n── Creating PR (depth=coder) ──", flush=True)
+                pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
             pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
             stdout, _, rc = gh("pr", "create", "--repo", REPO,
                                "--base", DEFAULT_BRANCH, "--head", branch,
