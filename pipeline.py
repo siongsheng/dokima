@@ -11,6 +11,7 @@ _IMPORTING_PANEL = None
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
+                   _extract_convention_candidates, _append_convention_rules,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
                    generate_codebase_map, extract_file_paths, load_github_token,
                    save_checkpoint, load_checkpoint, delete_checkpoint,
