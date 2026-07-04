@@ -2021,6 +2021,142 @@ def _extract_tl_blockers(tl_output: str) -> list[str]:
     return merged[:10]
 
 
+def extract_should_fix_from_text(text):
+    """Extract SHOULD FIX findings from any text source (TL output, PR review, nm stdout).
+
+    Handles three formats:
+    - Table: | R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |
+    - Prose: SHOULD FIX — description or SHOULD FIX: description
+    - Bullet: - SHOULD FIX: description or * SHOULD FIX — description
+
+    Returns list[dict] with keys: id, dimension, location, detail.
+    Deduplicates by normalized detail text (lowercase, punctuation-stripped).
+    """
+    if not text or not str(text).strip():
+        return []
+
+    lines = str(text).split("\n")
+    findings = []
+
+    should_fix_pat = re.compile(r'SHOULD\s*FIX', re.IGNORECASE)
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # ── Table format: pipe-delimited row with SHOULD FIX in severity column ──
+        # Split by pipe, handle escaped pipes (\\|) by not splitting on them
+        # First, check if the line looks like a table row (starts with pipe or
+        # has pipe characters AND contains SHOULD FIX)
+        if '|' in stripped and should_fix_pat.search(stripped):
+            # Split by unescaped pipe characters
+            cols = []
+            current = ''
+            i = 0
+            while i < len(stripped):
+                ch = stripped[i]
+                if ch == '\\' and i + 1 < len(stripped) and stripped[i + 1] == '|':
+                    # Escaped pipe: keep the backslash-pipe in detail
+                    current += '\\|'
+                    i += 2
+                    continue
+                if ch == '|':
+                    cols.append(current.strip())
+                    current = ''
+                else:
+                    current += ch
+                i += 1
+            cols.append(current.strip())
+
+            # Remove empty first/last columns (from leading/trailing pipes)
+            cols = [c for c in cols if c]
+
+            if not cols:
+                continue
+
+            # Find which column contains SHOULD FIX
+            sf_idx = None
+            for idx, col in enumerate(cols):
+                if should_fix_pat.search(col):
+                    sf_idx = idx
+                    break
+
+            if sf_idx is None or sf_idx == len(cols) - 1:
+                # SHOULD FIX not found or is the last column (no detail)
+                continue
+
+            # Columns before SHOULD FIX: map to id, dimension, location
+            before = cols[:sf_idx]
+            # Columns after SHOULD FIX: detail (may include extra columns)
+            after = cols[sf_idx + 1:]
+
+            col_id = before[0] if len(before) > 0 else ""
+            dimension = before[1] if len(before) > 1 else ""
+            location = before[2] if len(before) > 2 else ""
+            detail = after[0] if after else ""
+            # Append any extra columns to detail
+            for extra in after[1:]:
+                detail = detail + " " + extra
+
+            if detail:
+                findings.append({
+                    "id": col_id,
+                    "dimension": dimension,
+                    "location": location,
+                    "detail": detail,
+                })
+            continue
+
+        # ── Prose/bullet format: SHOULD FIX keyword followed by separator ──
+        prose_re = re.compile(
+            r'(?:^|[-\*])\s*'           # line start or bullet marker with space
+            r'SHOULD\s*FIX\s*'          # keyword (case-insensitive via flag)
+            r'(:|—|–)'
+            r'\s*(.*)$',                # description
+            re.IGNORECASE
+        )
+        p_match = prose_re.match(stripped)
+        if p_match:
+            detail = p_match.group(2).strip()
+            if detail:
+                findings.append({
+                    "id": "",
+                    "dimension": "",
+                    "location": "",
+                    "detail": detail,
+                })
+                continue
+
+        # ── Prose format: SHOULD FIX keyword with em-dash (no bullet prefix) ──
+        em_dash_re = re.compile(
+            r'^SHOULD\s*FIX\s+(?:—|–)\s+(.+)$',
+            re.IGNORECASE
+        )
+        em_match = em_dash_re.match(stripped)
+        if em_match:
+            detail = em_match.group(1).strip()
+            if detail:
+                findings.append({
+                    "id": "",
+                    "dimension": "",
+                    "location": "",
+                    "detail": detail,
+                })
+                continue
+
+    # ── Deduplicate by normalized detail text ──
+    seen = set()
+    deduped = []
+    for f in findings:
+        normalized = f["detail"].lower().strip(".,!?;:\"' \t")
+        if normalized not in seen:
+            seen.add(normalized)
+            deduped.append(f)
+
+    return deduped
+
+
 def _extract_convention_rules(blocker_lines):
     """Filter TL blocker lines to pattern-violation convention rules.
 
