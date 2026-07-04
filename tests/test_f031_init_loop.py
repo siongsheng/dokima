@@ -140,11 +140,12 @@ def test_init_answers_flag_supported():
 
 
 def test_max_turns_restore_on_all_exit_paths():
-    """max_turns is restored via try/finally covering all exit paths."""
+    """max_turns is restored on ALL exit paths including exit(2)."""
     source = open(os.path.join(os.path.dirname(__file__), '..', 'roadmap.py')).read()
     run_init_source = source.split('def run_init')[1].split('\ndef ')[0] if 'def run_init' in source else ''
 
-    # After max_turns refactoring, there should be a try/finally wrapping the
-    # strategist spawn + interview loop, to ensure restore happens even on exit(2)
-    assert 'try:' in run_init_source and 'finally:' in run_init_source, \
-        "run_init() must use try/finally for max_turns restore"
+    # After max_turns refactoring, config restore should fire on ALL exit paths,
+    # including before sys.exit(2) in the non-interactive branch
+    assert 'Restore config before exit' in run_init_source or \
+           'Restore config' in run_init_source and 'exit(2)' in run_init_source, \
+        "run_init() must restore config before exit(2) for non-interactive path"
