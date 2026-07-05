@@ -339,3 +339,21 @@ class TestAutoCloseReferencedIssues:
         from pipeline import auto_close_referenced_issues
         result = auto_close_referenced_issues("", 10, "https://github.com/owner/repo/pull/10")
         assert result == []
+
+
+# ── Task 6: flag parsing ─────────────────────────────────────────────
+
+class TestCreateBlockerIssuesFlag:
+    """CLI flag parsing for --create-blocker-issues."""
+
+    def test_flag_in_help_text(self):
+        """--create-blocker-issues appears in HELP_TEXT."""
+        import utils
+        assert "--create-blocker-issues" in utils.HELP_TEXT
+
+    def test_flag_in_cli_metadata(self):
+        """--create-blocker-issues appears in CLI_METADATA flags."""
+        import utils
+        flag_names = [f["flag"] for f in utils.CLI_METADATA["flags"]
+                      if f.get("flag")]
+        assert "--create-blocker-issues" in flag_names
