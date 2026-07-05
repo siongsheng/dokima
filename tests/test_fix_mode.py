@@ -89,7 +89,7 @@ def test_extract_blockers_standard_section(panel):
 - Login test fails
 - Missing error handling
 """
-    result = panel.extract_blockers_from_pr(pr_body)
+    result, _ = panel.extract_blockers_from_pr(pr_body)
     assert len(result) == 2
     assert "Login test fails" in result
 
@@ -97,14 +97,14 @@ def test_extract_blockers_standard_section(panel):
 def test_extract_blockers_empty(panel):
     """No blockers found → returns empty list."""
     pr_body = "## Review\n**Verdict:** BLOCKED\n"
-    result = panel.extract_blockers_from_pr(pr_body)
+    result, _ = panel.extract_blockers_from_pr(pr_body)
     assert result == []
 
 
 def test_extract_blockers_no_blockers_section(panel):
     """No ### Blockers section → returns empty (caller handles)."""
     pr_body = "Just some PR description."
-    result = panel.extract_blockers_from_pr(pr_body)
+    result, _ = panel.extract_blockers_from_pr(pr_body)
     assert result == []
 
 
@@ -117,7 +117,7 @@ def test_extract_blockers_architectural_filtered(panel):
 - Login test fails
 - ARCHITECTURAL: Need to restructure DB schema
 """
-    result = panel.extract_blockers_from_pr(pr_body)
+    result, _ = panel.extract_blockers_from_pr(pr_body)
     assert len(result) == 1
     assert "Login test fails" in result
 
@@ -130,7 +130,7 @@ def test_extract_blockers_all_architectural(panel):
 ### Blockers
 - ARCHITECTURAL: Redesign the whole system
 """
-    result = panel.extract_blockers_from_pr(pr_body)
+    result, _ = panel.extract_blockers_from_pr(pr_body)
     assert result == []
 
 

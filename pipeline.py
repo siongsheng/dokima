@@ -243,16 +243,16 @@ def discover_blocked_pr():
 
 def extract_blockers_from_pr(pr_body, pr_number=None):
     """Parse PR body for blocker descriptions under ### Blockers section.
-    Returns list of blocker strings with ARCHITECTURAL lines excluded.
+    Returns (blockers, from_section) — from_section=True if sourced from ### Blockers header.
     Falls back to PR comments if pr_number provided."""
     global REPO
     blockers = []
-    blockers_section_matched = False
+    from_section = False
 
     # Primary: ### Blockers section
     blockers_section = re.search(r'### Blockers\s*\n(.*?)(?=\n### |\n## |\Z)', pr_body, re.DOTALL)
     if blockers_section:
-        blockers_section_matched = True
+        from_section = True
         section_text = blockers_section.group(1)
         for line in section_text.split("\n"):
             line = line.strip()
@@ -284,7 +284,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     # Filter out ARCHITECTURAL blockers
     filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
 
-    return filtered
+    return filtered, from_section
 
 
 def run_fix_mode_issue(project_dir, issue_number):
@@ -488,10 +488,10 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             pass  # Proceed — best-effort check
 
     # Step 3: Extract blockers (EC13: no TL review fallback)
-    blockers = extract_blockers_from_pr(pr_body, pr_number=pr_num)
+    blockers, from_section = extract_blockers_from_pr(pr_body, pr_number=pr_num)
     if not blockers:
         # EC13: check PR comments via fallback
-        blockers = extract_blockers_from_pr("", pr_number=pr_num)
+        blockers, from_section = extract_blockers_from_pr("", pr_number=pr_num)
     if not blockers:
         print(f"  Cannot extract blockers automatically. Review PR manually:", flush=True)
         print(f"  {pr_url}", flush=True)

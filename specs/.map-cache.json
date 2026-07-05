@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "afc2380d5a709f3a1c996bdd07621ae7",
+    "hash": "d2b68c6f10ac2fa701520dbfeb88d21d",
     "desc": ""
   },
   "AGENTS.md": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "46cdee7e5dfb276239e88165e93977b1",
+    "hash": "65230e075f0d87af73f03b74c5b0efe9",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "559293b3cedec59df7b2b7d7b75991bc",
+    "hash": "20c3995e27a03b76bcf7f08191af35f0",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "docs/pipeline.md": {
@@ -248,7 +248,7 @@
     "desc": "Exports: panel, TestExtractConventionRules"
   },
   "tests/test_f036_should_fix_extraction.py": {
-    "hash": "9a9e29bbb138e0e00e121e3659c5c04b",
+    "hash": "e8b8e0131ac9affb81c163d391d1933c",
     "desc": "Exports: panel"
   },
   "tests/test_final_coverage.py": {
@@ -260,7 +260,7 @@
     "desc": "Exports: _setup"
   },
   "tests/test_fix_mode.py": {
-    "hash": "58ac22a011ba1a00de9447bfb5b04c56",
+    "hash": "d4f772555d60e960820914f8c25a0a29",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
   "tests/test_functions_unit.py": {

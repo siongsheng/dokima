@@ -141,6 +141,12 @@
 **Status:** [x] Done Progress
 **User Story:** As a user, I can fix should fix issue creation: extract from pr review text (not just nm_stdout), handle table-format findings (r1 | reliability | ... | should fix). add tests for all extraction formats.
 
+### F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.
+**Priority:** P2
+**Dependencies:** F034
+**Status:** [ ] Pending
+**User Story:** As a developer, when I run `dokima fix` to resolve TL blockers, I know exactly which blockers were fixed and where — no manual cross-referencing between PRs. The original PR's blocker section links to the resolution PR, and GitHub issues (if created) auto-close on merge.
+
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 **Priority:** P2
 **Dependencies:** None
@@ -158,7 +164,7 @@
 ### F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.
 **Priority:** P2
 **Dependencies:** F032
-**Status:** [~] In Progress Progress
+**Status:** [x] Done
 **User Story:** As a user, I can dokima fix --issue n: pull github issue body, extract file/line/fix/verify from structured format, spawn coder to implement. also upgrade should fix issue creation to include what/fix/verify sections for coder-readability.
 
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
