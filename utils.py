@@ -107,7 +107,7 @@ CLI_METADATA = {
         {"name": "init", "syntax": "dokima init \"description\" [dir]", "description": "Project discovery & constitution"},
         {"name": "add", "syntax": "dokima add \"Feature\" [--priority=P1] [dir]", "description": "Add feature to roadmap (auto-priority, auto-deps)"},
         {"name": "next", "syntax": "dokima next [--continuous] [dir]", "description": "Build next feature from roadmap"},
-        {"name": "fix", "syntax": "dokima fix [dir]", "description": "Fix BLOCKED PR: detect blockers, fix, verify"},
+        {"name": "fix", "syntax": "dokima fix [--issue N] [dir]", "description": "Fix BLOCKED PR (or --issue N): detect blockers, fix, verify"},
         {"name": "status", "syntax": "dokima status [dir]", "description": "Show pipeline state"},
         {"name": "stop", "syntax": "dokima stop [dir]", "description": "Graceful stop after current feature"},
         {"name": "kill", "syntax": "dokima kill [dir]", "description": "Emergency kill (SIGTERM then SIGKILL)"},
@@ -128,6 +128,7 @@ CLI_METADATA = {
         {"flag": "--no-resume", "args": None, "env_var": "PANEL_NO_RESUME", "description": "Ignore any existing checkpoint and start fresh"},
         {"flag": "--max-parallel", "args": "N", "env_var": "PANEL_MAX_PARALLEL", "description": "Max parallel coder agents (default: 5)"},
         {"flag": "--base-branch", "args": "<b>", "env_var": "PANEL_BASE_BRANCH", "description": "Override default branch for PR base"},
+        {"flag": "--issue", "args": "N", "env_var": None, "description": "Fix a specific GitHub issue by number (with fix command)"},
     ],
     "env_vars": [
         {"name": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items", "related_flag": "--fix-all"},
