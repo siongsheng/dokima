@@ -236,6 +236,6 @@
 ### F035: GitLab support: swap gh CLI for glab or abstract VCS layer
 **Priority:** P3
 **Dependencies:** None
-**Status:** [ ] Pending
+**Status:** [~] In Progress
 **User Story:** As a user, I can gitlab support: swap gh cli for glab or abstract vcs layer.
 
