@@ -17,6 +17,7 @@
 - **F031: dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. Loops until confidence is High, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.** — in progress since 2026-07-04 20:17, branch `feat/f031-dokima-init-back-and-forth-intervie-0b3eecfe` [panel]
 - **F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.** — in progress since 2026-07-05 10:13, branch `feat/f034-dokima-fix---issue-n-pull-github-is-acc18fcb` [panel]
 - **F035: GitLab support: swap gh CLI for glab or abstract VCS layer** — in progress since 2026-07-05 15:04, branch `feat/f035-gitlab-support-swap-gh-cli-for-glab-b1d7132e` [panel]
+- **F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.** — in progress since 2026-07-06 04:03, branch `feat/f037-blocker-resolution-tracking--cross--e310627f` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
