@@ -340,6 +340,50 @@ def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
     return urls
 
 
+def auto_close_referenced_issues(pr_body, pr_num, pr_url):
+    """Scan PR body for Closes/Fixes #N and comment on those issues.
+
+    Called from run_post_pipeline when verdict is APPROVED and PR is merged.
+    Best-effort: failures are logged, not raised.
+
+    Returns list of issue numbers that were commented on.
+    """
+    if not pr_body or not pr_body.strip():
+        return []
+
+    # Find all Closes #N and Fixes #N references
+    ref_pattern = re.compile(r'(?:Closes?|Fixes?|Resolves?)\s+#(\d+)', re.IGNORECASE)
+    issue_nums = set()
+    for match in ref_pattern.finditer(pr_body):
+        issue_nums.add(int(match.group(1)))
+
+    if not issue_nums:
+        return []
+
+    commented = []
+    for issue_num in sorted(issue_nums):
+        try:
+            # Verify issue exists
+            _, view_err, view_rc = vcs.vcs_issue_view(str(issue_num), fields="body,title")
+            if view_rc != 0:
+                print(f"  ⚠ Issue #{issue_num} not found — skipping close comment", flush=True)
+                continue
+
+            # Add closing comment
+            comment = f"Resolved by PR #{pr_num}: {pr_url}"
+            _, comment_err, comment_rc = gh("issue", "comment", str(issue_num),
+                                            "--body", comment)
+            if comment_rc == 0:
+                commented.append(issue_num)
+                print(f"  ✅ Commented on issue #{issue_num}: {comment}", flush=True)
+            else:
+                print(f"  ⚠ Could not comment on issue #{issue_num}: {comment_err[:200]}", flush=True)
+        except Exception as e:
+            print(f"  ⚠ Error processing issue #{issue_num}: {e}", flush=True)
+
+    return commented
+
+
 def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
                                 spec_path, feature, create_issues=False):
     """Update the original PR body with blocker resolution status.
