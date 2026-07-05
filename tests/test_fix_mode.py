@@ -275,3 +275,107 @@ class TestExtractIssueSectionsFilePath:
         result = panel.extract_issue_sections(WHAT_MALFORMED_BACKTICK)
         # Should get "broken.py" from unclosed backtick
         assert result["file_path"] == "broken.py"
+
+
+# ──────────────────────────────────────────────────────────────
+# Tests for run_fix_mode_issue() — Task 3 TDD (RED phase)
+# ──────────────────────────────────────────────────────────────
+
+import json as _json_mod
+from unittest.mock import patch as _mock_patch
+
+STRUCTURED_ISSUE_JSON = _json_mod.dumps({
+    "body": "### What\n[RELIABILITY] Fix `utils.py:42` naming conventions\n\n### Fix\nRename internal functions to use _ prefix\n\n### Verify\n- [ ] Run: python3 -m pytest tests/ -q\n",
+    "title": "Fix naming convention",
+    "labels": []
+})
+
+
+class TestRunFixModeIssue:
+    """Tests for run_fix_mode_issue() — fetch issue, spawn coder, vet + nm."""
+
+    def test_function_exists(self, panel):
+        """run_fix_mode_issue must be callable on the panel."""
+        assert hasattr(panel, 'run_fix_mode_issue')
+        assert callable(panel.run_fix_mode_issue)
+
+    def test_happy_path_spawns_coder(self, panel):
+        """Happy path: fetch structured issue, spawn coder, run vet + nm."""
+        gh_calls = []
+
+        def _mock_gh(*args):
+            gh_calls.append(args)
+            return (STRUCTURED_ISSUE_JSON, "", 0)
+
+        coder_result = {"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}
+        vet_result = {"coder_failed": False}
+        nm_result = {"pr_url": "https://github.com/t/t/pull/99", "nm_stdout": ""}
+
+        # Patch _make_map_hint on the pipeline module (via panel._pipeline)
+        # and the phase functions so internal calls go through mocks
+        _pipeline = getattr(panel, '_pipeline', panel)
+
+        _orig_map_hint = _pipeline._make_map_hint
+        _orig_gh = panel.gh
+        _orig_git = panel.git
+        _orig_p2 = _pipeline.run_phase2_coder
+        _orig_p3 = _pipeline.run_phase3_vet
+        _orig_p4 = _pipeline.run_phase4_nm
+
+        try:
+            _pipeline._make_map_hint = lambda *a, **kw: ""
+            panel.gh = _mock_gh
+            panel.git = lambda *a, **kw: ("", "", 0)
+            _pipeline.run_phase2_coder = lambda *a, **kw: coder_result
+            _pipeline.run_phase3_vet = lambda *a, **kw: vet_result
+            _pipeline.run_phase4_nm = lambda *a, **kw: nm_result
+
+            panel.run_fix_mode_issue("/tmp/test-project", 42)
+
+            # Verify gh was called with issue number 42
+            assert any("42" in str(c) for c in gh_calls), \
+                f"gh not called with issue 42: {gh_calls}"
+        finally:
+            _pipeline._make_map_hint = _orig_map_hint
+            panel.gh = _orig_gh
+            panel.git = _orig_git
+            _pipeline.run_phase2_coder = _orig_p2
+            _pipeline.run_phase3_vet = _orig_p3
+            _pipeline.run_phase4_nm = _orig_p4
+
+    def test_issue_fetch_failure_returns_gracefully(self, panel):
+        """gh returns non-zero → prints error, returns without spawning coder."""
+        gh_calls = []
+
+        def _mock_gh_fail(*args):
+            gh_calls.append(args)
+            return ("", "not found", 1)
+
+        _orig_gh = panel.gh
+        try:
+            panel.gh = _mock_gh_fail
+            result = panel.run_fix_mode_issue("/tmp/test-project", 999)
+            # Should not raise, and should return None or similar
+            assert result is None
+        finally:
+            panel.gh = _orig_gh
+
+    def test_no_structured_sections_prints_error(self, panel):
+        """Issue body without ### headings → error message, no coder spawn."""
+        issue_json_no_sections = _json_mod.dumps({
+            "body": "This is just free text with no structured format.",
+            "title": "Some issue",
+            "labels": []
+        })
+
+        def _mock_gh(*args):
+            return (issue_json_no_sections, "", 0)
+
+        _orig_gh = panel.gh
+        try:
+            panel.gh = _mock_gh
+            result = panel.run_fix_mode_issue("/tmp/test-project", 43)
+            # Should not raise, should return None
+            assert result is None
+        finally:
+            panel.gh = _orig_gh
