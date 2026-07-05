@@ -62,6 +62,7 @@ MANAGE:
   dokima next [dir]                      Build next feature from roadmap
   dokima next --continuous [dir]         Full sprint: build + auto-merge + loop
   dokima fix [dir]                       Fix BLOCKED PR: detect blockers, fix, verify
+  dokima fix --issue N [dir]             Fix specific GitHub issue N by extracting What/Fix/Verify sections
 
 CONTROL:
   dokima status [dir]                    Show pipeline state
@@ -107,7 +108,8 @@ CLI_METADATA = {
         {"name": "init", "syntax": "dokima init \"description\" [dir]", "description": "Project discovery & constitution"},
         {"name": "add", "syntax": "dokima add \"Feature\" [--priority=P1] [dir]", "description": "Add feature to roadmap (auto-priority, auto-deps)"},
         {"name": "next", "syntax": "dokima next [--continuous] [dir]", "description": "Build next feature from roadmap"},
-        {"name": "fix", "syntax": "dokima fix [dir]", "description": "Fix BLOCKED PR: detect blockers, fix, verify"},
+        {"name": "fix", "syntax": "dokima fix [--issue N] [dir]", "description": "Fix BLOCKED PR or specific GitHub issue N: detect blockers, fix, verify"},
+        {"name": "fix-issue", "syntax": "dokima fix --issue N [dir]", "description": "Fix specific GitHub issue N by extracting What/Fix/Verify from issue body"},
         {"name": "status", "syntax": "dokima status [dir]", "description": "Show pipeline state"},
         {"name": "stop", "syntax": "dokima stop [dir]", "description": "Graceful stop after current feature"},
         {"name": "kill", "syntax": "dokima kill [dir]", "description": "Emergency kill (SIGTERM then SIGKILL)"},
@@ -120,6 +122,7 @@ CLI_METADATA = {
         {"flag": "--interactive", "args": None, "env_var": None, "description": "Show human gate (with next/continuous)"},
         {"flag": "--answers", "args": "<file>", "env_var": None, "description": "Resume from saved interview state"},
         {"flag": "--fix-all", "args": None, "env_var": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items (with --fix)"},
+        {"flag": "--issue", "args": "N", "env_var": None, "description": "Fix specific GitHub issue N instead of discovering BLOCKED PR (with fix)"},
         {"flag": "--skip-autofix", "args": None, "env_var": "PANEL_SKIP_AUTOFIX", "description": "Disable auto-fix loopback (nm + TL phases)"},
         {"flag": "--force-full", "args": None, "env_var": "PANEL_FORCE_FULL", "description": "Run all 5 phases regardless of depth gating"},
         {"flag": "--skip-auto-archive", "args": None, "env_var": "PANEL_SKIP_AUTO_ARCHIVE", "description": "Don't auto-archive merged specs"},

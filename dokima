@@ -195,6 +195,7 @@ def main():
         fix_p.add_argument("--skip-autofix", action="store_true")
         fix_p.add_argument("--force-full", action="store_true")
         fix_p.add_argument("--answers", default=None)
+        fix_p.add_argument("--issue", type=int, default=None)
 
         # status
         status_p = subparsers.add_parser("status", add_help=False)
@@ -337,6 +338,7 @@ def main():
             FORCE_FULL = force_full
             SKIP_AUTOFIX = skip_autofix
             SKIP_HUMAN_GATE = skip_human_gate
+            issue_number = getattr(args, "issue", None)
             answers_path = getattr(args, "answers", None)
             user_answers_prefill = None
             if answers_path:
@@ -611,7 +613,10 @@ def main():
     # ── FIX MODE: early dispatch ──
     if is_fix:
         # Use _pipeline reference so test patches on pipeline module take effect
-        _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate)
+        if issue_number is not None:
+            _pipeline.run_fix_mode_issue(project_dir=PROJECT_DIR, issue_number=issue_number)
+        else:
+            _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate)
         _cleanup_lock()
         return
 
