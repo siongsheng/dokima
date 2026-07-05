@@ -53,22 +53,6 @@ def _make_map_hint(project_dir):
     """Generate a codebase-map hint string for agent prompts.
     Returns empty string if map doesn't exist or is 0 bytes.
     Best-effort — never blocks the pipeline."""
-
-
-def _depth_section(confidence, impact, depth):
-    """Generate a ## Depth section explaining which phases ran and why."""
-    phase_map = {
-        "coder": "Strategist → Coder (no verification)",
-        "vet": "Strategist → Coder → vet (build + tests)",
-        "vet+nm": "Strategist → Coder → vet → nm (adversarial review)",
-        "full": "Strategist → Coder → vet → nm → Tech Lead (all phases)",
-    }
-    phases = phase_map.get(depth, f"Strategist → Coder (depth={depth})")
-    return (
-        f"## Depth\n"
-        f"Confidence: {confidence} × Impact: {impact} → **{depth}**\n"
-        f"Phases run: {phases}\n"
-    )
     map_path = os.path.join(project_dir, "specs", "codebase-map.md")
     if not os.path.exists(map_path):
         return ""
@@ -84,6 +68,22 @@ def _depth_section(confidence, impact, depth):
         "test mappings, tech stack, and commands. "
         "Consult it only when you need to find a specific file or test — "
         "do NOT read it as exploration before starting."
+    )
+
+
+def _depth_section(confidence, impact, depth):
+    """Generate a ## Depth section explaining which phases ran and why."""
+    phase_map = {
+        "coder": "Strategist → Coder (no verification)",
+        "vet": "Strategist → Coder → vet (build + tests)",
+        "vet+nm": "Strategist → Coder → vet → nm (adversarial review)",
+        "full": "Strategist → Coder → vet → nm → Tech Lead (all phases)",
+    }
+    phases = phase_map.get(depth, f"Strategist → Coder (depth={depth})")
+    return (
+        f"## Depth\n"
+        f"Confidence: {confidence} × Impact: {impact} → **{depth}**\n"
+        f"Phases run: {phases}\n"
     )
 
 
