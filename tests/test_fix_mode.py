@@ -468,6 +468,14 @@ def test_extract_issue_sections_no_sections(panel):
         extract_issue_sections("Just some free text without headings.")
 
 
+def test_extract_issue_sections_none_input(panel):
+    """None input → ValueError (spec Section 10: Failure modes)."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections(None)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # F034: run_fix_mode_issue() — unit tests
 # ═══════════════════════════════════════════════════════════════════
