@@ -572,3 +572,226 @@ class TestPipelineWiringShouldFix:
 
         assert len(issue_calls) <= 5, \
             f"Should create at most 5 issues, got {len(issue_calls)}"
+
+    def test_issue_body_has_what_fix_verify_source_headings(self, panel):
+        """Issue body must have ### What, ### Fix, ### Verify, ### Source headings."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/200", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1, "Expected at least 1 SHOULD FIX issue"
+        for call_args in issue_calls:
+            body = None
+            for i, a in enumerate(call_args):
+                if a == "--body" and i + 1 < len(call_args):
+                    body = call_args[i + 1]
+            assert body is not None, "Issue must have --body"
+            assert "### What" in body, f"Missing ### What in body: {body[:200]}"
+            assert "### Fix" in body, f"Missing ### Fix in body: {body[:200]}"
+            assert "### Verify" in body, f"Missing ### Verify in body: {body[:200]}"
+            assert "### Source" in body, f"Missing ### Source in body: {body[:200]}"
+
+    def test_issue_body_what_includes_location(self, panel):
+        """### What section must include file location from table-format finding."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/201", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1
+        # First finding in PIPELINE_TL_OUTPUT is R1 with location utils.py:42
+        body = None
+        for i, a in enumerate(issue_calls[0]):
+            if a == "--body" and i + 1 < len(issue_calls[0]):
+                body = issue_calls[0][i + 1]
+        assert body is not None
+        # The ### What section should mention the location
+        what_idx = body.find("### What")
+        assert what_idx != -1, "Missing ### What heading"
+        what_section = body[what_idx:]
+        assert "utils.py" in what_section, \
+            f"### What should include utils.py location, got: {what_section[:300]}"
+
+    def test_issue_body_source_has_pr_link(self, panel):
+        """### Source section must include PR link."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/202", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        pr_url = "https://github.com/t/t/pull/1"
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", pr_url,
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1
+        body = None
+        for i, a in enumerate(issue_calls[0]):
+            if a == "--body" and i + 1 < len(issue_calls[0]):
+                body = issue_calls[0][i + 1]
+        assert body is not None
+        source_idx = body.find("### Source")
+        assert source_idx != -1, "Missing ### Source heading"
+        source_section = body[source_idx:]
+        assert pr_url in source_section, \
+            f"### Source should include PR URL {pr_url}, got: {source_section[:300]}"
+        assert "feat/test" in source_section, \
+            f"### Source should include branch, got: {source_section[:300]}"
+
+    def test_issue_body_no_old_finding_context_sections(self, panel):
+        """Issue body must NOT contain the old ### Finding or ### Context sections."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/203", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1
+        for call_args in issue_calls:
+            body = None
+            for i, a in enumerate(call_args):
+                if a == "--body" and i + 1 < len(call_args):
+                    body = call_args[i + 1]
+            assert body is not None
+            assert "### Finding" not in body, \
+                f"Old ### Finding section should not be in body: {body[:300]}"
+            assert "### Context" not in body, \
+                f"Old ### Context section should not be in body: {body[:300]}"
+
+    def test_issue_body_fix_has_actionable_content(self, panel):
+        """### Fix section must contain actionable instruction, not empty."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/204", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1
+        body = None
+        for i, a in enumerate(issue_calls[0]):
+            if a == "--body" and i + 1 < len(issue_calls[0]):
+                body = issue_calls[0][i + 1]
+        assert body is not None
+        fix_idx = body.find("### Fix")
+        assert fix_idx != -1, "Missing ### Fix heading"
+        # Find the Fix section content (between ### Fix and next ### heading)
+        fix_section = body[fix_idx:]
+        next_heading = fix_section.find("\n###", 7)  # skip past "### Fix\n"
+        fix_content = fix_section[7:next_heading].strip() if next_heading != -1 else fix_section[7:].strip()
+        assert len(fix_content) >= 10, \
+            f"### Fix should have at least 10 chars of content, got: '{fix_content}'"
