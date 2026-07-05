@@ -109,6 +109,7 @@ def main():
     answers_path = None
     filtered_argv = []
     add_priority = None
+    vcs_override = None          # captured from --vcs flag or argparse
 
     # ── Top-level flag pre-scan ──
     # --help, --help-json, --map, --map-full are top-level flags
@@ -302,6 +303,7 @@ def main():
             if getattr(args, "no_resume", False):
                 RESUME = False
             base_branch_override = getattr(args, "base_branch", None) or os.environ.get("PANEL_BASE_BRANCH")
+            vcs_override = getattr(args, "vcs", None)
             FORCE_FULL = force_full
             SKIP_AUTOFIX = skip_autofix
             SKIP_HUMAN_GATE = skip_human_gate
@@ -339,6 +341,7 @@ def main():
             skip_human_gate = getattr(args, "skip_human_gate", False) or False
             max_parallel_override = None
             base_branch_override = None
+            vcs_override = getattr(args, "vcs", None)
             FORCE_FULL = force_full
             SKIP_AUTOFIX = skip_autofix
             SKIP_HUMAN_GATE = skip_human_gate
@@ -513,6 +516,14 @@ def main():
                     print(f"  \u2713 Loaded {len(answers_list)} answer(s) from {answers_path}", flush=True)
                 break
 
+        # ── --vcs detection ──
+        for i, arg in enumerate(sys.argv):
+            if arg == "--vcs" and i + 1 < len(sys.argv):
+                val = sys.argv[i + 1]
+                if val in ("github", "gitlab"):
+                    vcs_override = val
+                break
+
         # ── Determine PROJECT_DIR and feature ──
         if is_next or is_map or is_fix:
             if is_fix:
@@ -600,18 +611,21 @@ def main():
         print(f"  ✓ Fallback models configured for: {roles}", flush=True)
 
     # ── VCS Detection: --vcs flag > PANEL_VCS env > auto-detect from git remote ──
-    vcs_flag = vcs.parse_vcs_flag()
-    env_vcs = os.environ.get("PANEL_VCS", "").lower()
-    if vcs_flag:
-        vcs.VCS_BACKEND = vcs_flag
-        vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if vcs_flag == "gitlab" else "GH_TOKEN"
-    elif env_vcs in ("github", "gitlab"):
-        vcs.VCS_BACKEND = env_vcs
-        vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if env_vcs == "gitlab" else "GH_TOKEN"
+    if vcs_override:
+        vcs.VCS_BACKEND = vcs_override
+        vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if vcs_override == "gitlab" else "GH_TOKEN"
     else:
-        vcs.detect_vcs_backend(PROJECT_DIR)
+        vcs_flag = vcs.parse_vcs_flag()
+        env_vcs = os.environ.get("PANEL_VCS", "").lower()
+        if vcs_flag:
+            vcs.VCS_BACKEND = vcs_flag
+            vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if vcs_flag == "gitlab" else "GH_TOKEN"
+        elif env_vcs in ("github", "gitlab"):
+            vcs.VCS_BACKEND = env_vcs
+            vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if env_vcs == "gitlab" else "GH_TOKEN"
+        else:
+            vcs.detect_vcs_backend(PROJECT_DIR)
     print(f"  ✓ VCS backend: {vcs.VCS_BACKEND}", flush=True)
-
     REPO = detect_repo()
     if not REPO:
         print("ERROR: Could not detect repository owner/name from git remote origin.")
