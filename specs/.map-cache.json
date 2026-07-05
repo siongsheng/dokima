@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "28f6480185d7497c8f55686ec61a0fa1",
+    "hash": "afc2380d5a709f3a1c996bdd07621ae7",
     "desc": ""
   },
   "AGENTS.md": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "cd1d64a4fa8e80e68305e49daf85d138",
+    "hash": "46cdee7e5dfb276239e88165e93977b1",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {

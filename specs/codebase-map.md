@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-05 01:29:47 (incremental | 94 files)
+## Generated: 2026-07-05 10:03:40 (incremental | 94 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
