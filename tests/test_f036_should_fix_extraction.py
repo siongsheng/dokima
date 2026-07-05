@@ -573,6 +573,293 @@ class TestPipelineWiringShouldFix:
         assert len(issue_calls) <= 5, \
             f"Should create at most 5 issues, got {len(issue_calls)}"
 
+
+# ══════════════════════════════════════════════════════════════
+# Tests for upgraded SHOULD FIX issue body format (Task 6)
+# ══════════════════════════════════════════════════════════════
+
+class TestGenerateFixInstruction:
+    """Unit tests for _generate_fix_instruction() — each keyword category branch."""
+
+    def test_naming_convention_keywords(self, panel):
+        """Keywords like 'naming', 'convention', 'snake_case' trigger naming response."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Use snake_case naming", "dimension": "", "location": ""})
+        assert "naming conventions" in result.lower()
+
+    def test_convention_dimension(self, panel):
+        """CONVENTION/STYLE dimension triggers project conventions response with location."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Format with black", "dimension": "STYLE",
+                     "location": "app.py:5"})
+        assert "project conventions" in result.lower()
+        assert "app.py:5" in result
+
+    def test_missing_test_keywords(self, panel):
+        """Keywords like 'missing test', 'add test', 'untested' trigger test coverage."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Missing test for edge case", "dimension": "",
+                     "location": "utils.py:42"})
+        assert "test coverage" in result.lower()
+        assert "utils.py:42" in result
+
+    def test_doc_keywords(self, panel):
+        """Keywords like 'doc', 'stale', 'outdated' trigger documentation update."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Documentation is stale", "dimension": "",
+                     "location": "README.md"})
+        assert "documentation" in result.lower()
+        assert "README.md" in result
+
+    def test_redundant_keywords(self, panel):
+        """Keywords like 'redundant', 'dead code', 'unused' trigger remove code."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Dead code in old module", "dimension": "",
+                     "location": "legacy.py"})
+        assert "redundant or unused" in result.lower()
+
+    def test_maintainability_dimension(self, panel):
+        """MAINTAINABILITY dimension triggers refactor response."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Long method needs splitting", "dimension": "MAINTAINABILITY",
+                     "location": "pipeline.py:450"})
+        assert "maintainability" in result.lower()
+
+    def test_generic_with_location(self, panel):
+        """When no keyword matches and location present → 'Address the finding in {loc}'."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Review threading model", "dimension": "PERFORMANCE",
+                     "location": "agent.py:30"})
+        assert "Address the finding in agent.py:30" in result
+
+    def test_generic_no_location(self, panel):
+        """When no keyword matches and no location → 'Address the finding: {detail}'."""
+        f = panel._pipeline._generate_fix_instruction
+        result = f({"detail": "Review threading model", "dimension": "", "location": ""})
+        assert result == "Address the finding: Review threading model"
+
+
+class TestGenerateVerifySection:
+    """Unit tests for _generate_verify_section() — each keyword category branch."""
+
+    def test_first_line_is_run_command(self, panel):
+        """Verify section always starts with '- [ ] Run: <test_cmd>'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Some finding", "dimension": ""}, "npm test")
+        lines = result.split("\n")
+        assert lines[0] == "- [ ] Run: npm test"
+
+    def test_naming_convention_verify(self, panel):
+        """Naming keywords → 'All names follow project conventions'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Use snake_case", "dimension": ""}, "pytest")
+        assert "All names follow project conventions" in result
+
+    def test_missing_test_verify(self, panel):
+        """Missing test keywords → 'New tests pass and cover the scenario'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Missing test for parse", "dimension": ""}, "pytest")
+        assert "New tests pass and cover the scenario" in result
+
+    def test_doc_verify(self, panel):
+        """Doc keywords → 'Documentation accurately reflects current behavior'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Stale docs in README", "dimension": ""}, "pytest")
+        assert "Documentation accurately reflects current behavior" in result
+
+    def test_redundant_verify(self, panel):
+        """Redundant keywords → 'No regressions in existing tests'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Unused variable", "dimension": ""}, "pytest")
+        assert "No regressions in existing tests" in result
+
+    def test_maintainability_dimension_verify(self, panel):
+        """MAINTAINABILITY dimension → 'Refactored code passes all existing tests'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Long method", "dimension": "MAINTAINABILITY"}, "pytest")
+        assert "Refactored code passes all existing tests" in result
+
+    def test_generic_verify(self, panel):
+        """No keyword match → 'Finding resolved per the Fix instruction above'."""
+        f = panel._pipeline._generate_verify_section
+        result = f({"detail": "Review threading model", "dimension": "PERFORMANCE"}, "cargo test")
+        assert "Finding resolved per the Fix instruction above" in result
+
+
+class TestUpgradedIssueBodyFormat:
+    """Verify the upgraded body format (### What / ### Fix / ### Verify / ### Source)
+    is used in SHOULD FIX issue creation and old markers are absent."""
+
+    def test_body_has_what_fix_verify_source_sections(self, panel):
+        """Issue body must contain ### What, ### Fix, ### Verify, ### Source sections."""
+        from unittest.mock import patch
+
+        issue_body = None
+
+        def gh_se(*args, **kwargs):
+            nonlocal issue_body
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)  # fallback to tl_output
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                # Capture --body argument
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_body = args[i + 1]
+                return ("https://github.com/t/t/issues/200", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        tl_out = PIPELINE_TL_OUTPUT
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=tl_out):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert issue_body is not None, "Expected issue body to be captured"
+        assert "### What" in issue_body, f"Missing ### What in body:\n{issue_body}"
+        assert "### Fix" in issue_body, f"Missing ### Fix in body:\n{issue_body}"
+        assert "### Verify" in issue_body, f"Missing ### Verify in body:\n{issue_body}"
+        assert "### Source" in issue_body, f"Missing ### Source in body:\n{issue_body}"
+        assert "- [ ] Run:" in issue_body, "Verify section must have test command"
+
+    def test_body_has_no_old_format_markers(self, panel):
+        """Issue body must NOT contain old format markers."""
+        from unittest.mock import patch
+
+        issue_body = None
+
+        def gh_se(*args, **kwargs):
+            nonlocal issue_body
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_body = args[i + 1]
+                return ("https://github.com/t/t/issues/201", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert issue_body is not None, "Expected issue body to be captured"
+        assert "## Tech Lead Review Finding" not in issue_body, \
+            f"Old format marker found in body:\n{issue_body}"
+        assert "### Finding" not in issue_body, \
+            f"Old '### Finding' section found in body:\n{issue_body}"
+        assert "### Context" not in issue_body, \
+            f"Old '### Context' section found in body:\n{issue_body}"
+
+    def test_what_section_has_dim_loc_prefix(self, panel):
+        """When dimension AND location present → [DIM] loc: desc format."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/202", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        # Table-format findings have dimension + location → should have [DIM] loc: desc
+        found_dim_loc = any(
+            "[RELIABILITY] utils.py:42" in body for body in issue_bodies
+        )
+        assert found_dim_loc, \
+            f"Expected [DIM] loc: desc format in at least one body:\n{issue_bodies}"
+
+    def test_source_section_has_pr_branch_spec(self, panel):
+        """Source section must contain PR, Branch, and Spec references."""
+        from unittest.mock import patch
+
+        issue_body = None
+
+        def gh_se(*args, **kwargs):
+            nonlocal issue_body
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_body = args[i + 1]
+                return ("https://github.com/t/t/issues/203", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert issue_body is not None
+        assert "- PR:" in issue_body, f"Missing PR ref in Source:\n{issue_body}"
+        assert "- Branch:" in issue_body, f"Missing Branch ref in Source:\n{issue_body}"
+        assert "- Spec:" in issue_body, f"Missing Spec ref in Source:\n{issue_body}"
+
     def test_issue_body_has_what_fix_verify_source_headings(self, panel):
         """Issue body must have ### What, ### Fix, ### Verify, ### Source headings."""
         from unittest.mock import patch
@@ -795,3 +1082,219 @@ class TestPipelineWiringShouldFix:
         fix_content = fix_section[7:next_heading].strip() if next_heading != -1 else fix_section[7:].strip()
         assert len(fix_content) >= 10, \
             f"### Fix should have at least 10 chars of content, got: '{fix_content}'"
+
+class TestWhatLineFormatVariations:
+    """what_line construction: [DIM] loc: desc, [DIM] desc, loc: desc, desc-only."""
+
+    def test_dim_and_loc_produces_full_prefix(self, panel):
+        """dim + loc -> '[DIM] loc: desc' format in What section."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/300", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        found = any(
+            "[RELIABILITY] utils.py:42:" in b for b in issue_bodies
+        )
+        assert found, f"Expected [DIM] loc: desc format: {issue_bodies}"
+
+    def test_dim_only_produces_dim_prefix(self, panel):
+        """dim only (no loc) -> '[DIM] desc' format in What section."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/301", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        tl_dim_only = (
+            "### SHOULD FIX (1)\n\n"
+            "| R1 | SECURITY | | SHOULD FIX | Review auth flow |\n\n"
+            "VERDICT: BLOCKED\nRISK: MEDIUM"
+        )
+
+        with patch("time.sleep"), patch.object(panel, "spawn_agent", return_value=tl_dim_only):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        found = any(
+            "[SECURITY]" in b and "Review auth flow" in b for b in issue_bodies
+        )
+        assert found, f"Expected [DIM] desc format: {issue_bodies}"
+
+    def test_loc_only_produces_location_prefix(self, panel):
+        """loc only (no dim) -> 'loc: desc' format in What section."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/302", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        tl_loc_only = (
+            "### SHOULD FIX (1)\n\n"
+            "| R1 | | config.py:10 | SHOULD FIX | Update defaults |\n\n"
+            "VERDICT: BLOCKED\nRISK: LOW"
+        )
+
+        with patch("time.sleep"), patch.object(panel, "spawn_agent", return_value=tl_loc_only):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        found = any(
+            "config.py:10:" in b and "Update defaults" in b for b in issue_bodies
+        )
+        assert found, f"Expected loc: desc format: {issue_bodies}"
+
+    def test_no_dim_no_loc_uses_plain_desc(self, panel):
+        """No dim, no loc -> desc used as-is in What section."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/303", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        tl_prose = "SHOULD FIX: add type hints to public functions\nVERDICT: CHANGES REQUESTED\nRISK: LOW"
+
+        with patch("time.sleep"), patch.object(panel, "spawn_agent", return_value=tl_prose):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        found = any(
+            "add type hints to public functions" in b for b in issue_bodies
+        )
+        assert found, f"Expected plain desc in What: {issue_bodies}"
+
+
+class TestVerifySectionStructure:
+    """Verify that the ### Verify section always has a test command line."""
+
+    def test_verify_starts_with_run_checkbox(self, panel):
+        """### Verify must have a '- [ ] Run:' line as first entry."""
+        from unittest.mock import patch
+
+        issue_bodies = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                for i, a in enumerate(args):
+                    if a == "--body" and i + 1 < len(args):
+                        issue_bodies.append(args[i + 1])
+                return ("https://github.com/t/t/issues/304", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_bodies) >= 1
+        for body in issue_bodies:
+            verify_idx = body.find("### Verify")
+            assert verify_idx != -1
+            verify_section = body[verify_idx:]
+            next_section = verify_section.find("\n###", 10)
+            verify_content = verify_section[:next_section] if next_section != -1 else verify_section
+            lines = [l.strip() for l in verify_content.split("\n") if l.strip()]
+            assert any(l.startswith("- [ ] Run:") for l in lines), \
+                f"### Verify must have '- [ ] Run:' line: {verify_content[:200]}"
