@@ -1190,6 +1190,84 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
             "Regenerate PR body from spec or update Impact to match.")
 
 
+def _generate_fix_instruction(finding):
+    """Generate an actionable fix instruction from a SHOULD FIX finding.
+
+    Derives a reasonable action from the finding's detail and dimension:
+    - Convention/naming violations → "Update code to follow {convention}"
+    - Missing tests → "Add test for {scenario}"
+    - Stale/inaccurate docs → "Update {doc file} to reflect current behavior"
+    - Generic fallback → "Address the finding in {location}" or generic message.
+    """
+    detail = finding.get('detail', '')
+    detail_lower = detail.lower()
+    dimension = finding.get('dimension', '').lower()
+    location = finding.get('location', '')
+
+    # Convention / naming violations
+    if any(kw in detail_lower for kw in ('naming', 'convention', 'snake_case',
+                                          '_ prefix', 'prefix', 'camelcase')):
+        return "Update code to follow naming conventions per conventions.md"
+
+    if 'convention' in dimension or 'style' in dimension:
+        loc_hint = f" in {location}" if location else ""
+        return f"Update code to follow project conventions{loc_hint}"
+
+    # Missing tests
+    if any(kw in detail_lower for kw in ('missing test', 'add test',
+                                          'untested', 'test coverage')):
+        loc_hint = f" for {location}" if location else ""
+        return f"Add test coverage{loc_hint}"
+
+    # Stale docs / documentation
+    if any(kw in detail_lower for kw in ('doc', 'documentation', 'readme',
+                                          'stale', 'outdated')):
+        loc_hint = f" in {location}" if location else ""
+        return f"Update documentation to reflect current behavior{loc_hint}"
+
+    # Redundant code / dead code
+    if any(kw in detail_lower for kw in ('redundant', 'dead code', 'unused',
+                                          'duplicate')):
+        loc_hint = f" in {location}" if location else ""
+        return f"Remove redundant or unused code{loc_hint}"
+
+    # Maintainability: extract method, long function, etc.
+    if 'maintainability' in dimension:
+        loc_hint = f" from {location}" if location else ""
+        return f"Refactor for maintainability{loc_hint}"
+
+    # Generic: use location if available
+    if location:
+        return f"Address the finding in {location}: {detail}"
+
+    return f"Address the finding: {detail}"
+
+
+def _generate_verify_section(finding, test_cmd):
+    """Generate a ### Verify section with test command and finding-specific check."""
+    detail = finding.get('detail', '')
+    detail_lower = detail.lower()
+    lines = [f"- [ ] Run: {test_cmd}"]
+
+    if any(kw in detail_lower for kw in ('naming', 'convention', 'snake_case',
+                                          '_ prefix', 'prefix')):
+        lines.append("- [ ] Confirm: All names follow project conventions")
+    elif any(kw in detail_lower for kw in ('missing test', 'add test',
+                                            'untested', 'test coverage')):
+        lines.append("- [ ] Confirm: New tests pass and cover the scenario")
+    elif any(kw in detail_lower for kw in ('doc', 'documentation', 'readme',
+                                            'stale', 'outdated')):
+        lines.append("- [ ] Confirm: Documentation accurately reflects current behavior")
+    elif any(kw in detail_lower for kw in ('redundant', 'dead code', 'unused')):
+        lines.append("- [ ] Confirm: No regressions in existing tests")
+    elif 'maintainability' in finding.get('dimension', '').lower():
+        lines.append("- [ ] Confirm: Refactored code passes all existing tests")
+    else:
+        lines.append("- [ ] Confirm: Finding resolved per the Fix instruction above")
+
+    return "\n".join(lines)
+
+
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
@@ -1408,31 +1486,32 @@ Report: what you fixed, commit hash."""
             dim_prefix = f" [{dim}]" if dim else ""
             title = f"SHOULD FIX{dim_prefix}: {desc[:72]}"
 
-            # Build enhanced body with table data when available
+            # Build structured body with What/Fix/Verify/Source sections
+            dim = finding.get('dimension', '')
+            loc = finding.get('location', '')
+            what_line = desc
+            if dim and loc:
+                what_line = f"[{dim}] {loc}: {desc}"
+            elif dim:
+                what_line = f"[{dim}] {desc}"
+            elif loc:
+                what_line = f"{loc}: {desc}"
+
             body_lines = [
-                f"## Tech Lead Review Finding",
-                f"",
-                f"**Feature:** {feature}",
-                f"**Branch:** {branch}",
-                f"**PR:** {pr_url or 'N/A'}",
-                f"**Verdict:** {verdict}",
-                f"**Spec:** {spec_path}",
+                f"### What",
+                what_line,
+                "",
+                f"### Fix",
+                _generate_fix_instruction(finding),
+                "",
+                f"### Verify",
+                _generate_verify_section(finding, TEST_CMD),
+                "",
+                f"### Source",
+                f"- PR: {pr_url or 'N/A'}",
+                f"- Branch: {branch}",
+                f"- Spec: {spec_path}",
             ]
-            if finding.get('id'):
-                body_lines.append(f"**ID:** {finding['id']}")
-            if finding.get('dimension'):
-                body_lines.append(f"**Dimension:** {finding['dimension']}")
-            if finding.get('location'):
-                body_lines.append(f"**Location:** {finding['location']}")
-            body_lines.extend([
-                "",
-                f"### Finding",
-                desc,
-                "",
-                f"### Context",
-                f"Found during adversarial review of `{branch}` against the spec. "
-                f"See the PR for full review details and other findings.",
-            ])
             body = "\n".join(body_lines)
 
             stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
