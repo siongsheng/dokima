@@ -7,7 +7,7 @@ This repo IS the panel — you don't run the panel on itself.
 - Python 3.6+ (modular: dokima entry point + utils.py, agent.py, pipeline.py, roadmap.py, tasks.py)
 - Bash for companion scripts (nm, vet)
 - Hermes Agent for profile spawning
-- GitHub CLI for PR/issue management
+- GitHub CLI (gh) or GitLab CLI (glab) for PR/issue management — auto-detected from git remote
 
 ## Commands
 - Test: `python3 -m pytest tests/ -q`

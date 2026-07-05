@@ -37,7 +37,7 @@ class TestVcsFlagWiring:
         try:
             sys.argv = ['dokima', 'next', '--vcs', 'gitlab', project_dir]
 
-            def mock_run_fix(**kwargs):
+            def mock_noop(*args, **kwargs):
                 pass
 
             with patch.object(panel, 'acquire_lock', return_value=(None, None)):
@@ -46,8 +46,11 @@ class TestVcsFlagWiring:
                         with patch.object(panel, '_set_gh_token'):
                             with patch.object(panel, 'detect_commands',
                                               return_value=("echo test", "echo build", "echo lint")):
-                                with patch.object(panel._pipeline, 'run_pipeline', side_effect=mock_run_fix):
-                                    panel.main()
+                                with patch.object(panel, 'run_next_setup',
+                                                  side_effect=mock_noop):
+                                    with patch.object(panel._pipeline, 'run_pipeline',
+                                                      side_effect=mock_noop):
+                                        panel.main()
 
             # After main() processes --vcs gitlab flag, vcs.VCS_BACKEND should be "gitlab"
             assert vcs.VCS_BACKEND == "gitlab", (
@@ -89,7 +92,7 @@ class TestVcsFlagWiring:
             vcs.VCS_BACKEND = "gitlab"
             sys.argv = ['dokima', '--vcs', 'github', 'Test feature', project_dir]
 
-            def mock_run_pipeline(*args, **kwargs):
+            def mock_noop(*args, **kwargs):
                 pass
 
             with patch.object(panel, 'acquire_lock', return_value=(None, None)):
@@ -98,7 +101,8 @@ class TestVcsFlagWiring:
                         with patch.object(panel, '_set_gh_token'):
                             with patch.object(panel, 'detect_commands',
                                               return_value=("echo test", "echo build", "echo lint")):
-                                with patch.object(panel, 'run_pipeline', side_effect=mock_run_pipeline):
+                                with patch.object(panel, 'run_pipeline',
+                                                  side_effect=mock_noop):
                                     panel.main()
 
             assert vcs.VCS_BACKEND == "github", (
@@ -136,7 +140,7 @@ class TestVcsFlagWiring:
             vcs.VCS_BACKEND = "gitlab"
             sys.argv = ['dokima', 'next', project_dir]
 
-            def mock_run_pipeline(*args, **kwargs):
+            def mock_noop(*args, **kwargs):
                 pass
 
             with patch.object(panel, 'acquire_lock', return_value=(None, None)):
@@ -145,8 +149,11 @@ class TestVcsFlagWiring:
                         with patch.object(panel, '_set_gh_token'):
                             with patch.object(panel, 'detect_commands',
                                               return_value=("echo test", "echo build", "echo lint")):
-                                with patch.object(panel._pipeline, 'run_pipeline', side_effect=mock_run_pipeline):
-                                    panel.main()
+                                with patch.object(panel, 'run_next_setup',
+                                                  side_effect=mock_noop):
+                                    with patch.object(panel._pipeline, 'run_pipeline',
+                                                      side_effect=mock_noop):
+                                        panel.main()
 
             # Auto-detection should have detected github from the remote
             assert vcs.VCS_BACKEND == "github", (

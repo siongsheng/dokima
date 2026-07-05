@@ -8,6 +8,9 @@ Output: Live to terminal + saved to /tmp/dokima-output.txt
 
 import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
 
+# VCS abstraction — auto-detects GitHub/GitLab from git remote
+import vcs
+
 # ── F022 Modular Architecture ───────────────────
 # Module imports for state propagation (mutable globals flow FROM dokima TO modules).
 import utils as _utils
@@ -172,6 +175,7 @@ def main():
         next_p.add_argument("--max-parallel", type=int, default=None)
         next_p.add_argument("--base-branch", default=None)
         next_p.add_argument("--answers", default=None)
+        next_p.add_argument("--vcs", default=None, choices=["github", "gitlab"])
 
         # continuous (alias for next --continuous)
         cont_p = subparsers.add_parser("continuous", add_help=False)
@@ -186,8 +190,7 @@ def main():
         cont_p.add_argument("--max-parallel", type=int, default=None)
         cont_p.add_argument("--base-branch", default=None)
         cont_p.add_argument("--answers", default=None)
-
-        # fix
+        cont_p.add_argument("--vcs", default=None, choices=["github", "gitlab"])
         fix_p = subparsers.add_parser("fix", add_help=False)
         fix_p.add_argument("dir", nargs="?", default=None)
         fix_p.add_argument("--fix-all", action="store_true")
@@ -196,6 +199,7 @@ def main():
         fix_p.add_argument("--force-full", action="store_true")
         fix_p.add_argument("--answers", default=None)
         fix_p.add_argument("--issue", type=int, default=None)
+        fix_p.add_argument("--vcs", default=None, choices=["github", "gitlab"])
 
         # status
         status_p = subparsers.add_parser("status", add_help=False)
@@ -441,6 +445,9 @@ def main():
             if arg == "--answers":
                 skip_next = True
                 continue
+            if arg == "--vcs":
+                skip_next = True
+                continue
             if arg == "--fix":
                 is_fix = True
                 continue
@@ -592,10 +599,23 @@ def main():
         roles = ", ".join(FALLBACK_MODELS.keys())
         print(f"  ✓ Fallback models configured for: {roles}", flush=True)
 
+    # ── VCS Detection: --vcs flag > PANEL_VCS env > auto-detect from git remote ──
+    vcs_flag = vcs.parse_vcs_flag()
+    env_vcs = os.environ.get("PANEL_VCS", "").lower()
+    if vcs_flag:
+        vcs.VCS_BACKEND = vcs_flag
+        vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if vcs_flag == "gitlab" else "GH_TOKEN"
+    elif env_vcs in ("github", "gitlab"):
+        vcs.VCS_BACKEND = env_vcs
+        vcs.VCS_TOKEN_ENV = "GITLAB_TOKEN" if env_vcs == "gitlab" else "GH_TOKEN"
+    else:
+        vcs.detect_vcs_backend(PROJECT_DIR)
+    print(f"  ✓ VCS backend: {vcs.VCS_BACKEND}", flush=True)
+
     REPO = detect_repo()
     if not REPO:
-        print("ERROR: Could not detect GitHub owner/repo from git remote origin.")
-        print("  The panel needs a GitHub remote to create PRs and issues.")
+        print("ERROR: Could not detect repository owner/name from git remote origin.")
+        print("  The panel needs a GitHub or GitLab remote to create PRs/MRs and issues.")
         _cleanup_lock()
         sys.exit(1)
 

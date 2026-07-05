@@ -188,6 +188,55 @@ The panel shines for **greenfield features with ambiguous requirements** where a
 - `AGENTS.md` at project root with test and build commands
 - GitHub remote configured on target project
 
+## GitLab Usage
+
+Dokima supports GitLab via the `glab` CLI. Auto-detection from your git remote means zero configuration if you're on GitLab — but you can also override with the `--vcs` flag.
+
+### Install glab
+
+```bash
+# macOS
+brew install glab
+
+# Linux (Debian/Ubuntu)
+curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/permalink/latest/downloads/glab_linux_amd64.deb -o glab.deb
+sudo dpkg -i glab.deb
+
+# Fedora/RHEL
+sudo dnf install glab
+
+# Authentication
+glab auth login
+```
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `GITLAB_TOKEN` | GitLab personal access token (checked first) |
+| `GLAB_TOKEN` | Alternative token env var (fallback) |
+| `PANEL_VCS` | Set to `gitlab` to force GitLab mode |
+
+Token needs: `api`, `read_repository`, `write_repository` scopes.
+
+### Usage
+
+```bash
+# Auto-detected from git remote (no flags needed)
+dokima "Add dark mode" ~/my-gitlab-project
+
+# Force GitLab even with GitHub remote
+dokima --vcs gitlab next ~/project
+
+# Force GitHub even with GitLab remote
+dokima --vcs github next ~/project
+
+# With PANEL_VCS env var
+PANEL_VCS=gitlab dokima next ~/project
+```
+
+When GitLab is detected, the panel uses `glab mr` instead of `gh pr` for all PR operations (create, merge, list, diff, view).
+
 > **Environment variables, exit codes, and file layout:** [docs/pipeline.md](docs/pipeline.md)
 
 ## Standing on Shoulders
