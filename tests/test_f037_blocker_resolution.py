@@ -136,3 +136,73 @@ class TestFormatBlockerCrossReference:
         # New issue should get strikethrough
         assert "~~New issue to fix~~" in result
         assert "→ resolved by https://github.com/t/t/pull/42" in result
+
+
+# ── Task 3: create_blocker_issues() ──────────────────────────────────
+
+class TestCreateBlockerIssues:
+    """Blocker-to-issue creation with guard flag."""
+
+    def test_create_blocker_issues_creates_issues(self):
+        """create_blocker_issues creates issues with correct title/body/label."""
+        import vcs
+        from pipeline import create_blocker_issues
+        blockers = ["Login test fails", "Missing error handling"]
+
+        with patch.object(vcs, 'vcs_issue_create') as mock_create:
+            mock_create.return_value = (
+                "https://github.com/owner/repo/issues/1",
+                "", 0
+            )
+            urls = create_blocker_issues(
+                blockers=blockers,
+                pr_num=42,
+                pr_url="https://github.com/owner/repo/pull/42",
+                feature="Test feature",
+                branch="feat/x",
+                spec_path="/tmp/spec.md",
+                create_blocker_issues=True
+            )
+
+        assert len(urls) == 2
+        assert mock_create.call_count == 2
+        # Verify first call: title, body, label
+        args1 = mock_create.call_args_list[0]
+        assert "BLOCKER: Login test fails" in args1[1]["title"]
+        assert "Blocker identified during TL review of PR #42" in args1[1]["body"]
+        assert "blocker" in args1[1]["labels"]
+
+    def test_create_blocker_issues_skips_when_flag_off(self):
+        """No issues created when create_blocker_issues is False."""
+        import vcs
+        from pipeline import create_blocker_issues
+        blockers = ["Login test fails"]
+
+        with patch.object(vcs, 'vcs_issue_create') as mock_create:
+            urls = create_blocker_issues(
+                blockers=blockers,
+                pr_num=42,
+                pr_url="https://github.com/owner/repo/pull/42",
+                feature="Test",
+                branch="feat/x",
+                spec_path="/tmp/spec.md",
+                create_blocker_issues=False
+            )
+
+        assert urls == []
+        mock_create.assert_not_called()
+
+    def test_create_blocker_issues_empty_blockers(self):
+        """Empty blocker list returns empty URL list (no-op)."""
+        from pipeline import create_blocker_issues
+        urls = create_blocker_issues(
+            blockers=[],
+            pr_num=42,
+            pr_url="https://github.com/owner/repo/pull/42",
+            feature="Test",
+            branch="feat/x",
+            spec_path="/tmp/spec.md",
+            create_blocker_issues=True
+        )
+        assert urls == []
+
