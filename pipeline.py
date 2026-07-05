@@ -1571,12 +1571,54 @@ Report: what you fixed, commit hash."""
                 body_lines.append(f"**Location:** {finding['location']}")
             body_lines.extend([
                 "",
-                f"### Finding",
-                desc,
+                f"### What",
+            ])
+            # Build What section: dimension + location + detail
+            what_parts = []
+            if finding.get('dimension'):
+                what_parts.append(f"[{finding['dimension']}]")
+            if finding.get('location'):
+                what_parts.append(finding['location'])
+            if what_parts:
+                body_lines.append(": ".join(what_parts) + f": {desc}")
+            else:
+                body_lines.append(desc)
+
+            # Build Fix section: derived action from finding
+            dim = (finding.get('dimension') or '').upper()
+            loc = finding.get('location', '')
+            if 'CONVENTION' in dim or 'STYLE' in dim:
+                fix_action = f"Update code to follow {dim.lower()} conventions"
+            elif 'RELIABILITY' in dim:
+                fix_action = f"Fix the reliability issue: {desc}"
+            elif 'MAINTAINABILITY' in dim:
+                fix_action = f"Refactor to address: {desc}"
+            elif 'SECURITY' in dim:
+                fix_action = f"Address the security finding: {desc}"
+            elif loc:
+                fix_action = f"Fix the issue in {loc}: {desc}"
+            else:
+                fix_action = f"Address the finding: {desc}"
+
+            body_lines.extend([
                 "",
-                f"### Context",
-                f"Found during adversarial review of `{branch}` against the spec. "
-                f"See the PR for full review details and other findings.",
+                f"### Fix",
+                fix_action,
+                "",
+                f"### Verify",
+                f"- [ ] Run: {TEST_CMD}",
+            ])
+            if loc:
+                body_lines.append(f"- [ ] Confirm: Change in {loc} resolves the finding without regressions")
+            else:
+                body_lines.append(f"- [ ] Confirm: Change resolves the finding without regressions")
+
+            body_lines.extend([
+                "",
+                f"### Source",
+                f"- PR: {pr_url or 'N/A'}",
+                f"- Branch: {branch}",
+                f"- Spec: {spec_path}",
             ])
             body = "\n".join(body_lines)
 
