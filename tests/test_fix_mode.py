@@ -467,3 +467,70 @@ def test_extract_issue_sections_no_sections(panel):
     with _pytest.raises(ValueError):
         extract_issue_sections("Just some free text without headings.")
 
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: run_fix_mode_issue() — unit tests
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_run_fix_mode_issue_happy_path(panel):
+    """Mock gh to return structured issue body, verify coder is spawned."""
+    from unittest.mock import patch, ANY
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "### What\n[RELIABILITY] utils.py:42: Naming issue\n\n### Fix\nRename function\n\n### Verify\nRun tests\n",
+        "title": "SHOULD FIX: Naming conventions"
+    })
+
+    gh_calls = []
+    git_calls = []
+
+    def mock_gh(*args, **kwargs):
+        gh_calls.append(args)
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        if "issue" in args and "create" in args:
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, 'git', side_effect=mock_git):
+            with patch.object(_pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}):
+                with patch.object(_pipeline, 'run_phase3_vet', return_value={"coder_failed": False}):
+                    with patch.object(_pipeline, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "https://github.com/t/t/pull/99"}):
+                        with patch.object(_pipeline, '_set_gh_token'):
+                            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                                with patch('sys.stdout'):
+                                    _pipeline.run_fix_mode_issue("/tmp/test", 42)
+
+    # Verify gh issue view was called with issue 42
+    view_calls = [c for c in gh_calls if "view" in c and "42" in map(str, c)]
+    assert len(view_calls) >= 1, "Expected gh issue view for #42"
+
+    # Verify fix/issue-42 branch was created
+    branch_calls = [c for c in git_calls if "fix/issue-42" in " ".join(map(str, c))]
+    assert len(branch_calls) >= 1, "Expected fix/issue-42 branch checkout"
+
+
+def test_run_fix_mode_issue_nonexistent(panel):
+    """gh returns non-zero for issue fetch → prints error, exits cleanly."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ("", "not found", 1)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch('sys.stdout'):
+                    # Should not raise — exits cleanly
+                    _pipeline.run_fix_mode_issue("/tmp/test", 999)
