@@ -1811,6 +1811,13 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         spec = clean_spec_content(spec)
         _qg_passed2, _qg_failures2 = verify_spec_quality(spec)
         if not _qg_passed2:
+            overlap_failures = [f for f in _qg_failures2 if "file overlap" in f.lower()]
+            if overlap_failures:
+                print(f"  🔴 BLOCKED — {len(overlap_failures)} file overlap(s) persist after re-prompt. Halting.", flush=True)
+                for _f in overlap_failures:
+                    print(f"     - {_f}", flush=True)
+                print("  The strategist marked parallel tasks that share files. Fix the spec manually or retry.", flush=True)
+                sys.exit(1)
             print(f"  ⚠ Quality gate still has {len(_qg_failures2)} issue(s) after re-prompt — proceeding with degraded quality", flush=True)
             for _f in _qg_failures2:
                 print(f"     - {_f}", flush=True)
