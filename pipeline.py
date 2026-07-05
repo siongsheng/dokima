@@ -255,8 +255,8 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
         section_text = blockers_section.group(1)
         for line in section_text.split("\n"):
             line = line.strip()
-            if line.startswith("- "):
-                desc = line[2:].strip()
+            if line.startswith("- ") or re.match(r"^\d+\.\s", line):
+                desc = re.sub(r"^\d+\.\s*", "", line).lstrip("- ").strip()
                 if desc:
                     blockers.append(desc)
 
