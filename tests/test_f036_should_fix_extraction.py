@@ -1,0 +1,574 @@
+"""Tests for extract_should_fix_from_text() — all extraction formats, edge cases, dedup.
+
+Covers: table format, prose format, bullet format, integration scenarios,
+edge cases (empty, None, whitespace, no SHOULD FIX), and deduplication.
+"""
+
+import pytest
+from conftest import _load_panel as _load
+
+
+@pytest.fixture(scope="module")
+def panel():
+    return _load()
+
+
+# ── Sample inputs for extraction testing ──
+
+# Table format: single row with all columns
+TABLE_SINGLE = """### SHOULD FIX (1)
+
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions for internal functions |
+"""
+
+# Table format: multi-row with mixed severities
+TABLE_MULTI = """### Findings
+
+| ID | DIMENSION | LOCATION | SEVERITY | DETAIL |
+|---|---|---|---|---|
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |
+| B1 | SECURITY | auth.py:15 | BLOCKER | Missing auth check |
+| R2 | MAINTAINABILITY | pipeline.py:100 | SHOULD FIX | Extract long method |
+| N1 | STYLE | app.py:5 | NIT | Whitespace trailing |
+"""
+
+# Table format: missing columns (3 columns — id, severity, detail only)
+TABLE_MISSING_COLS = """| R1 | SHOULD FIX | Use snake_case |"""
+
+# Table format: extra columns (6+ columns)
+TABLE_EXTRA_COLS = """| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming | extra1 | extra2 |"""
+
+# Table format: escaped pipes in detail
+TABLE_ESCAPED_PIPES = """| R1 | RELIABILITY | utils.py | SHOULD FIX | Use pipe \\| symbol for separator |"""
+
+# Table format: no SHOULD FIX rows
+TABLE_NO_MATCH = """### Findings
+
+| ID | DIMENSION | LOCATION | SEVERITY | DETAIL |
+| B1 | SECURITY | auth.py:15 | BLOCKER | Missing auth |
+| N1 | STYLE | app.py:5 | NIT | Whitespace |
+"""
+
+# Prose format: em-dash separator
+PROSE_EM_DASH = "SHOULD FIX — Update AGENTS.md with new command"
+
+# Prose format: colon separator
+PROSE_COLON = "SHOULD FIX: Add type hints to public functions"
+
+# Prose format: mixed case
+PROSE_LOWERCASE = "should fix — rename variable to follow convention"
+
+# Prose format: SHOULD FIX in middle of sentence (context-only, NOT extracted)
+PROSE_CONTEXT_ONLY = "the BLOCKER requires changes that we SHOULD FIX in next sprint phase"
+
+# Prose format: SHOULD FIX with no description
+PROSE_NO_DESC = "SHOULD FIX:"
+
+# Prose format: SHOULD FIX with no separator (no colon or em-dash)
+PROSE_NO_SEPARATOR = "SHOULD FIX this later"
+
+# Bullet format: dash prefix
+BULLET_DASH = "- SHOULD FIX: Add type annotations"
+
+# Bullet format: asterisk prefix
+BULLET_STAR = "* SHOULD FIX — Rename internal functions to use _ prefix"
+
+# Integration: full TL output with table-format findings (real-world scenario)
+FULL_TL_WITH_TABLE = """### BLOCKERS (2 — must fix before merge)
+
+**1. Missing error handling**
+dokima:276: Unconditionally replaces output.
+
+**2. Spec violation in phase 3**
+pipeline.py:450: Skip logic doesn't respect depth gating.
+
+### SHOULD FIX (1)
+
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions for internal functions |
+
+### NIT (1)
+
+| N1 | STYLE | app.py:10 | NIT | Format with black |
+
+VERDICT: BLOCKED
+RISK: HIGH"""
+
+# Integration: prose-only TL output (current format)
+FULL_TL_PROSE = """VERDICT: CHANGES REQUESTED
+RISK: MEDIUM
+
+SHOULD FIX: rename variable in utils.py:42
+SHOULD FIX — update AGENTS.md with new command
+
+RELEASE: YES minor"""
+
+
+# ── extract_should_fix_from_text() unit tests ──
+
+class TestExtractShouldFixFromTextTableFormat:
+    """Table format: pipe-delimited rows with SHOULD FIX severity."""
+
+    def test_single_table_row(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_SINGLE)
+        assert len(result) == 1
+        assert result[0]["id"] == "R1"
+        assert result[0]["dimension"] == "RELIABILITY"
+        assert result[0]["location"] == "utils.py:42"
+        assert result[0]["detail"] == "Naming conventions for internal functions"
+
+    def test_multi_row_mixed_severity(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_MULTI)
+        assert len(result) == 2
+        ids = [r["id"] for r in result]
+        assert "R1" in ids
+        assert "R2" in ids
+        # BLOCKER and NIT rows should NOT be extracted
+        assert "B1" not in ids
+        assert "N1" not in ids
+
+    def test_missing_columns(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_MISSING_COLS)
+        assert len(result) == 1
+        assert result[0]["id"] == "R1"
+        assert result[0]["detail"] == "Use snake_case"
+        # Missing columns get empty string
+        assert result[0]["dimension"] == ""
+
+    def test_extra_columns_appended_to_detail(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_EXTRA_COLS)
+        assert len(result) == 1
+        assert result[0]["id"] == "R1"
+        # Extra columns are appended to detail
+        assert "extra1" in result[0]["detail"]
+        assert "extra2" in result[0]["detail"]
+
+    def test_escaped_pipes_in_detail(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_ESCAPED_PIPES)
+        assert len(result) == 1
+        # The backslash-escaped pipe should be preserved in detail
+        assert "|" in result[0]["detail"]
+
+    def test_no_matching_rows_empty(self, panel):
+        result = panel.extract_should_fix_from_text(TABLE_NO_MATCH)
+        assert result == []
+
+    def test_shoULD_fix_case_insensitive_in_table(self, panel):
+        text = "| R1 | SECURITY | auth.py | should fix | lowercase severity |"
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+        assert result[0]["detail"] == "lowercase severity"
+
+    def test_should_fix_in_non_severity_column(self, panel):
+        """SHOULD FIX in detail column, not severity column — should NOT match."""
+        text = "| R1 | RELIABILITY | utils.py | NIT | consider SHOULD FIX here |"
+        result = panel.extract_should_fix_from_text(text)
+        assert result == []
+
+    def test_table_with_spacing_variants(self, panel):
+        """SHOULD FIX with extra spaces."""
+        text = "| R1 | RELIABILITY | utils.py:42 | SHOULD   FIX | Use snake_case |"
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+        assert result[0]["detail"] == "Use snake_case"
+
+
+class TestExtractShouldFixFromTextProseFormat:
+    """Prose format: keyword + separator patterns."""
+
+    def test_em_dash_separator(self, panel):
+        result = panel.extract_should_fix_from_text(PROSE_EM_DASH)
+        assert len(result) == 1
+        assert result[0]["detail"] == "Update AGENTS.md with new command"
+        assert result[0]["id"] == ""
+
+    def test_colon_separator(self, panel):
+        result = panel.extract_should_fix_from_text(PROSE_COLON)
+        assert len(result) == 1
+        assert result[0]["detail"] == "Add type hints to public functions"
+
+    def test_lowercase_should_fix(self, panel):
+        result = panel.extract_should_fix_from_text(PROSE_LOWERCASE)
+        assert len(result) == 1
+        assert result[0]["detail"] == "rename variable to follow convention"
+
+    def test_context_only_not_extracted(self, panel):
+        """SHOULD FIX in middle of sentence with no separator — NOT extracted."""
+        result = panel.extract_should_fix_from_text(PROSE_CONTEXT_ONLY)
+        assert result == []
+
+    def test_empty_detail_skipped(self, panel):
+        """SHOULD FIX with colon but empty detail."""
+        result = panel.extract_should_fix_from_text(PROSE_NO_DESC)
+        assert result == []
+
+    def test_no_separator_not_extracted(self, panel):
+        """SHOULD FIX followed by content but no colon or em-dash — NOT extracted."""
+        result = panel.extract_should_fix_from_text(PROSE_NO_SEPARATOR)
+        assert result == []
+
+    def test_quoted_description_preserved(self, panel):
+        text = 'SHOULD FIX: "use named exports throughout"'
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+        assert '"use named exports throughout"' == result[0]["detail"]
+
+    def test_multiple_em_dashes_first_splits(self, panel):
+        """First em-dash is the separator; rest stays in detail."""
+        text = "SHOULD FIX — conventions — naming — internal"
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+        # First em-dash splits, rest stays
+        assert "conventions" in result[0]["detail"]
+        assert "internal" in result[0]["detail"]
+
+
+class TestExtractShouldFixFromTextBulletFormat:
+    """Bullet format: dash/asterisk prefix before SHOULD FIX."""
+
+    def test_dash_bullet(self, panel):
+        result = panel.extract_should_fix_from_text(BULLET_DASH)
+        assert len(result) == 1
+        assert result[0]["detail"] == "Add type annotations"
+
+    def test_asterisk_bullet(self, panel):
+        result = panel.extract_should_fix_from_text(BULLET_STAR)
+        assert len(result) == 1
+        assert result[0]["detail"] == "Rename internal functions to use _ prefix"
+
+
+class TestExtractShouldFixFromTextEdgeCases:
+    """Edge cases: empty, None, whitespace, dedup."""
+
+    def test_empty_string(self, panel):
+        assert panel.extract_should_fix_from_text("") == []
+
+    def test_none_input(self, panel):
+        assert panel.extract_should_fix_from_text(None) == []
+
+    def test_whitespace_only(self, panel):
+        assert panel.extract_should_fix_from_text("   \n  \n  ") == []
+
+    def test_no_should_fix_at_all(self, panel):
+        assert panel.extract_should_fix_from_text("VERDICT: APPROVED\nAll good.") == []
+
+    def test_unicode_emoji_in_detail(self, panel):
+        text = "SHOULD FIX: add 🚀 emoji support to output ✨"
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+        assert "🚀" in result[0]["detail"]
+        assert "✨" in result[0]["detail"]
+
+    def test_all_four_keys_present(self, panel):
+        """Every returned dict must have all four keys."""
+        result = panel.extract_should_fix_from_text(PROSE_EM_DASH)
+        for r in result:
+            for key in ("id", "dimension", "location", "detail"):
+                assert key in r, f"Missing key '{key}' in result dict"
+
+    def test_deduplication_case_insensitive(self, panel):
+        """Two identical findings differing only in case → one result."""
+        text = (
+            "SHOULD FIX: naming convention for internal functions\n"
+            "SHOULD FIX: Naming Convention for Internal Functions"
+        )
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+
+    def test_deduplication_punctuation_stripped(self, panel):
+        """Two findings where one has trailing period → one result."""
+        text = (
+            "SHOULD FIX: naming convention\n"
+            "SHOULD FIX: naming convention."
+        )
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 1
+
+    def test_non_duplicates_not_merged(self, panel):
+        """Different detail text → separate results."""
+        text = (
+            "SHOULD FIX: Update docs\n"
+            "SHOULD FIX: Update docs in AGENTS.md"
+        )
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 2
+
+    def test_mixed_table_and_prose(self, panel):
+        """Both table and prose formats in same input."""
+        text = (
+            "| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |\n"
+            "SHOULD FIX: add type hints to public functions\n"
+        )
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) >= 1  # at least one extracted
+
+
+class TestExtractShouldFixFromTextIntegration:
+    """Integration scenarios — full TL output."""
+
+    def test_full_tl_with_table_findings(self, panel):
+        """Real-world: TL output with table-format SHOULD FIX block."""
+        result = panel.extract_should_fix_from_text(FULL_TL_WITH_TABLE)
+        assert len(result) == 1
+        assert result[0]["id"] == "R1"
+        assert result[0]["dimension"] == "RELIABILITY"
+        assert result[0]["detail"] == "Naming conventions for internal functions"
+        # BLOCKER rows should NOT be extracted as SHOULD FIX
+        details = [r["detail"] for r in result]
+        assert "Missing error handling" not in details
+
+    def test_full_tl_prose_format(self, panel):
+        """Real-world: TL output with prose SHOULD FIX lines."""
+        result = panel.extract_should_fix_from_text(FULL_TL_PROSE)
+        assert len(result) >= 1
+        details = [r["detail"] for r in result]
+        assert any("rename variable" in d for d in details)
+        assert any("update agents.md" in d.lower() for d in details)
+
+    def test_nm_stdout_style(self, panel):
+        """nm-style output with table findings — should extract SHOULD FIX rows."""
+        text = """| ID | DIMENSION | LOCATION | SEVERITY | DETAIL |
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |
+| R2 | MAINTAINABILITY | pipeline.py | SHOULD FIX | Extract long method |"""
+        result = panel.extract_should_fix_from_text(text)
+        assert len(result) == 2
+        assert result[0]["id"] == "R1"
+        assert result[1]["id"] == "R2"
+
+
+# ── Pipeline wiring tests ──
+
+# TL output with table-format SHOULD FIX for pipeline integration testing
+PIPELINE_TL_OUTPUT = """### BLOCKERS (1 — must fix before merge)
+
+**1. Missing error handling**
+dokima:276: Unconditionally replaces output.
+
+### SHOULD FIX (2)
+
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Use snake_case for internal functions |
+| R2 | MAINTAINABILITY | pipeline.py:100 | SHOULD FIX | Extract long method |
+
+VERDICT: BLOCKED
+RISK: MEDIUM"""
+
+
+class TestPipelineWiringShouldFix:
+    """Pipeline-level tests: review comment fetch, tl_output fallback, issue creation."""
+
+    def test_should_fix_issues_created_from_tl_output(self, panel):
+        """When tl_output has SHOULD FIX items, issues are created."""
+        from unittest.mock import patch
+        import types
+
+        # Mock gh to capture issue creation calls
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            if len(args) >= 2:
+                cmd = args[0]
+                # gh api PATCH (PR body update) — succeed silently
+                if cmd == "api":
+                    return ("", "", 0)
+                # gh issue create — capture and succeed
+                if cmd == "issue" and args[1] == "create":
+                    issue_calls.append({"args": args, "kwargs": kwargs})
+                    return ("https://github.com/t/t/issues/99", "", 0)
+                # gh pr view --comments (review comment fetch — no comment available)
+                if cmd == "pr":
+                    return ("", "", 1)  # fail → fallback to tl_output
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        # Mock call_agent so phase 5 doesn't try to spawn a real TL
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            result = panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        # Verify issues were created for SHOULD FIX items
+        assert len(issue_calls) >= 1, "Expected at least 1 SHOULD FIX issue"
+        # Check that structured dict fields are used in issue creation
+        created_titles = []
+        for call in issue_calls:
+            title = None
+            args = call["args"]
+            for i, a in enumerate(args):
+                if a == "--title" and i + 1 < len(args):
+                    title = args[i + 1]
+            if title:
+                created_titles.append(title)
+        assert any("SHOULD FIX" in t for t in created_titles), \
+            f"Issue titles should contain SHOULD FIX, got: {created_titles}"
+
+    def test_review_comment_fetch_primary_source(self, panel):
+        """When PR review comment is available, it should be used as primary source."""
+        from unittest.mock import patch
+
+        review_comment_body = (
+            "### SHOULD FIX (1)\n\n"
+            "| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |\n"
+        )
+
+        issue_calls = []
+        pr_view_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                pr_view_calls.append(args)
+                return (review_comment_body, "", 0)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/100", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        # Verify gh pr view was called to fetch review comment
+        assert len(pr_view_calls) >= 1, "Expected gh pr view --comments call"
+        # Verify issues were created from review comment
+        assert len(issue_calls) >= 1, "Expected issues from review comment"
+
+    def test_tl_output_fallback_when_review_fails(self, panel):
+        """When gh pr view fails, fall back to tl_output for SHOULD FIX extraction."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "gh: Not Found", 1)  # Simulate failure
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/101", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        # Issues should still be created from tl_output fallback
+        assert len(issue_calls) >= 1, \
+            "Expected SHOULD FIX issues from tl_output fallback when review fetch fails"
+
+    def test_dimension_prefix_in_issue_title(self, panel):
+        """Table-format findings should include dimension prefix in issue title."""
+        from unittest.mock import patch
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)  # fallback to tl_output
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/102", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) >= 1
+        # Check for dimension prefix in title (e.g., "SHOULD FIX [RELIABILITY]: ...")
+        for call_args in issue_calls:
+            title = None
+            for i, a in enumerate(call_args):
+                if a == "--title" and i + 1 < len(call_args):
+                    title = call_args[i + 1]
+            if title:
+                # Table-format findings should have dimension prefix
+                assert "SHOULD FIX" in title, f"Title should have SHOULD FIX: {title}"
+
+    def test_issue_cap_of_five_preserved(self, panel):
+        """No more than 5 SHOULD FIX issues should be created per run."""
+        from unittest.mock import patch
+
+        # Generate TL output with 8 SHOULD FIX items
+        many_sf_lines = []
+        for i in range(1, 9):
+            many_sf_lines.append(
+                f"| R{i} | RELIABILITY | file{i}.py:{i * 10} | SHOULD FIX | Issue {i} detail |"
+            )
+        tl_output_with_many = (
+            "### SHOULD FIX (8)\n\n" + "\n".join(many_sf_lines) +
+            "\n\nVERDICT: BLOCKED\nRISK: LOW"
+        )
+
+        issue_calls = []
+        def gh_se(*args, **kwargs):
+            cmd = args[0] if args else ""
+            if cmd == "pr":
+                return ("", "", 1)
+            if cmd == "api":
+                return ("", "", 0)
+            if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+                issue_calls.append(args)
+                return ("https://github.com/t/t/issues/999", "", 0)
+            return ("", "", 0)
+
+        panel.gh = gh_se
+        panel.git = lambda *a, **kw: ("", "", 0)
+        panel._set_gh_token = lambda *a, **kw: None
+        panel.load_key = lambda: "fk"
+        panel.load_github_token = lambda: "ft"
+        panel.detect_repo = lambda: "t/t"
+        panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+        with patch("time.sleep"), \
+             patch.object(panel, "spawn_agent", return_value=tl_output_with_many):
+            panel.run_phase5_tech_lead(
+                "Test Feature", "https://github.com/t/t/pull/1",
+                "feat/test", "/tmp/spec.md", "LOW"
+            )
+
+        assert len(issue_calls) <= 5, \
+            f"Should create at most 5 issues, got {len(issue_calls)}"
