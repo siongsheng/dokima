@@ -487,8 +487,8 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
     # 1. Parse
     features = parse_roadmap(roadmap_path)
     if not features:
-        print("ERROR: No features found in roadmap.md. Run `dokima init` first.")
-        sys.exit(1)
+        print("  No features found in roadmap.md. Run `dokima init` first.")
+        return None
 
     print(f"  Roadmap: {len(features)} features")
     done = sum(1 for f in features if f.status == "done")
