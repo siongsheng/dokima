@@ -1,6 +1,7 @@
 """Tests for fix mode: BLOCKED PR discovery, blocker extraction, subcommand, dispatch."""
 import os
 import sys
+import pytest
 from unittest.mock import patch
 
 from conftest import _load_panel as _load
@@ -335,4 +336,58 @@ def test_run_fix_mode_architectural_only(panel):
 def test_help_text_includes_fix(panel):
     """fix should appear in HELP_TEXT."""
     assert "fix" in panel.HELP_TEXT or "dokima fix" in panel.HELP_TEXT
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: --issue N flag for fix mode
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_fix_with_issue_dispatches_to_run_fix_mode_issue(panel, tmpdir):
+    """fix --issue 42 dispatches to run_fix_mode_issue, not run_fix_mode."""
+    import subprocess
+    project_dir = os.path.join(str(tmpdir), "proj3")
+    os.makedirs(os.path.join(project_dir, "specs"), exist_ok=True)
+    with open(os.path.join(project_dir, "AGENTS.md"), "w") as f:
+        f.write("# Test\n\n## Commands\n- Test: `echo ok`\n- Build: `echo ok`\n")
+    subprocess.run(["git", "init", project_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "config", "user.email", "t@t.com"])
+    subprocess.run(["git", "-C", project_dir, "config", "user.name", "T"])
+    subprocess.run(["git", "-C", project_dir, "add", "-A"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "commit", "-m", "init"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "remote", "add", "origin", "https://github.com/t/t.git"])
+
+    old_argv = sys.argv
+    fix_mode_issue_args = []
+    fix_mode_args = []
+    did_exit = [False]
+    try:
+        sys.argv = ['dokima', 'fix', '--issue', '42', project_dir]
+
+        def mock_run_fix_mode_issue(**kwargs):
+            fix_mode_issue_args.append(kwargs)
+
+        def mock_run_fix_mode(**kwargs):
+            fix_mode_args.append(kwargs)
+
+        with patch.object(panel, 'acquire_lock', return_value=(None, None)):
+            with patch.object(panel._pipeline, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue, create=True):
+                with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix_mode):
+                    with patch.object(panel, 'load_key', return_value="test-key"):
+                        with patch.object(panel, 'detect_repo', return_value="t/t"):
+                            with patch.object(panel, '_set_gh_token'):
+                                with patch.object(panel, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                                    panel.main()
+
+        assert len(fix_mode_issue_args) == 1
+        assert fix_mode_issue_args[0].get("issue_number") == 42
+        assert fix_mode_issue_args[0].get("project_dir") == project_dir
+        assert len(fix_mode_args) == 0
+    except SystemExit:
+        did_exit[0] = True
+    finally:
+        sys.argv = old_argv
+
+    if did_exit[0]:
+        pytest.fail("panel.main() exited with SystemExit — --issue arg not recognized")
 
