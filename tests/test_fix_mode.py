@@ -216,6 +216,41 @@ def test_fix_mode_skips_auto_archive(panel, tmpdir):
         sys.argv = old_argv
 
 
+def test_fix_issue_argument_parsed(panel, tmpdir):
+    """fix --issue N should parse issue number from CLI."""
+    import subprocess
+    project_dir = os.path.join(str(tmpdir), "proj3")
+    os.makedirs(os.path.join(project_dir, "specs"), exist_ok=True)
+    with open(os.path.join(project_dir, "AGENTS.md"), "w") as f:
+        f.write("# Test\n\n## Commands\n- Test: `echo ok`\n- Build: `echo ok`\n")
+    subprocess.run(["git", "init", project_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "config", "user.email", "t@t.com"])
+    subprocess.run(["git", "-C", project_dir, "config", "user.name", "T"])
+    subprocess.run(["git", "-C", project_dir, "add", "-A"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "commit", "-m", "init"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "remote", "add", "origin", "https://github.com/t/t.git"])
+
+    old_argv = sys.argv
+    run_fix_kwargs = {}
+    try:
+        sys.argv = ['dokima', 'fix', '--issue', '42', project_dir]
+
+        def mock_run_fix(**kwargs):
+            run_fix_kwargs.update(kwargs)
+
+        with patch.object(panel, 'acquire_lock', return_value=(None, None)):
+            with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix):
+                with patch.object(panel, 'load_key', return_value="test-key"):
+                    with patch.object(panel, 'detect_repo', return_value="t/t"):
+                        with patch.object(panel, '_set_gh_token'):
+                            with patch.object(panel, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                                panel.main()
+
+        assert run_fix_kwargs.get('issue') == 42
+    finally:
+        sys.argv = old_argv
+
+
 def test_fix_answers_warning(panel):
     """fix + --answers should warn and ignore answers file."""
     from io import StringIO
