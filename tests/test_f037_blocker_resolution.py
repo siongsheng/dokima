@@ -166,11 +166,11 @@ class TestCreateBlockerIssues:
 
         assert len(urls) == 2
         assert mock_create.call_count == 2
-        # Verify first call: title, body, label
+        # Verify first call: title, body, label (positional args)
         args1 = mock_create.call_args_list[0]
-        assert "BLOCKER: Login test fails" in args1[1]["title"]
-        assert "Blocker identified during TL review of PR #42" in args1[1]["body"]
-        assert "blocker" in args1[1]["labels"]
+        assert "BLOCKER: Login test fails" in str(args1[0][0])   # title
+        assert "Blocker identified during TL review of PR #42" in str(args1[0][1])  # body
+        assert "blocker" in str(args1)
 
     def test_create_blocker_issues_skips_when_flag_off(self):
         """No issues created when create_blocker_issues is False."""
@@ -205,4 +205,91 @@ class TestCreateBlockerIssues:
             create_blocker_issues=True
         )
         assert urls == []
+
+
+# ── Task 4: post-fix PR body update ──────────────────────────────────
+
+class TestPostFixUpdateBody:
+    """Post-fix PR body update with strikethrough + resolution section."""
+
+    def test_update_pr_body_after_fix_approved(self):
+        """APPROVED verdict → PR body gets strikethrough + resolution section."""
+        import vcs
+        import pipeline as pl
+        from utils import format_blocker_cross_reference
+
+        pr_body = "## Description\n\nSome text\n\n### Blockers\n- Login test fails\n- Missing error handling\n\n## Footer\n"
+        blockers = ["Login test fails", "Missing error handling"]
+        fix_pr_url = "https://github.com/owner/repo/pull/42"
+
+        with patch.object(vcs, 'vcs_pr_view') as mock_view, \
+             patch.object(vcs, 'vcs_pr_update_body') as mock_update:
+            mock_view.return_value = (pr_body, "", 0)
+            mock_update.return_value = ("", "", 0)
+
+            result = pl._update_pr_body_after_fix(
+                pr_num=42,
+                pr_url=fix_pr_url,
+                pr_branch="feat/fix",
+                blockers=blockers,
+                fix_verdict="APPROVED",
+                spec_path="/tmp/spec.md",
+                feature="Test feature",
+                create_blocker_issues=False
+            )
+
+        assert result is True
+        mock_view.assert_called_once()
+        mock_update.assert_called_once()
+        updated_body = mock_update.call_args[0][1]
+        assert "~~Login test fails~~" in updated_body
+        assert f"→ resolved by {fix_pr_url}" in updated_body
+        assert "### Resolution" in updated_body
+        assert "APPROVED" in updated_body
+
+    def test_update_pr_body_after_fix_no_blockers_section(self):
+        """No ### Blockers section → update skipped silently, returns False."""
+        import vcs
+        import pipeline as pl
+
+        pr_body = "## Description\n\nSome text\n\n## Footer\n"
+        with patch.object(vcs, 'vcs_pr_view') as mock_view, \
+             patch.object(vcs, 'vcs_pr_update_body') as mock_update:
+            mock_view.return_value = (pr_body, "", 0)
+
+            result = pl._update_pr_body_after_fix(
+                pr_num=42,
+                pr_url="https://github.com/owner/repo/pull/42",
+                pr_branch="feat/fix",
+                blockers=["login fails"],
+                fix_verdict="APPROVED",
+                spec_path="",
+                feature="Test",
+                create_blocker_issues=False
+            )
+
+        assert result is False
+        mock_view.assert_called_once()
+        mock_update.assert_not_called()
+
+    def test_update_pr_body_after_fix_vcs_failure(self):
+        """vcs_pr_view fails → returns False (best-effort, no crash)."""
+        import vcs
+        import pipeline as pl
+
+        with patch.object(vcs, 'vcs_pr_view') as mock_view:
+            mock_view.return_value = ("", "error", 1)
+
+            result = pl._update_pr_body_after_fix(
+                pr_num=42,
+                pr_url="https://github.com/owner/repo/pull/42",
+                pr_branch="feat/fix",
+                blockers=["login fails"],
+                fix_verdict="APPROVED",
+                spec_path="",
+                feature="Test",
+                create_blocker_issues=False
+            )
+
+        assert result is False
 
