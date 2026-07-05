@@ -80,6 +80,7 @@ MODIFIER FLAGS (apply across subcommands):
   --skip-human-gate    Skip Human Gate prompt (for automation)
   --max-parallel=N     Max parallel coder agents (env: PANEL_MAX_PARALLEL, default: 5)
   --base-branch <b>    Override default branch for PR base (default: detected from origin/HEAD)
+  --vcs <github|gitlab>  Override VCS backend (auto-detected from git remote by default)
   --interactive        Show human gate (with next)
   --answers <file>     Resume from saved interview state
   --fix-all            Include SHOULD FIX items (with fix)
@@ -131,6 +132,7 @@ CLI_METADATA = {
         {"flag": "--no-resume", "args": None, "env_var": "PANEL_NO_RESUME", "description": "Ignore any existing checkpoint and start fresh"},
         {"flag": "--max-parallel", "args": "N", "env_var": "PANEL_MAX_PARALLEL", "description": "Max parallel coder agents (default: 5)"},
         {"flag": "--base-branch", "args": "<b>", "env_var": "PANEL_BASE_BRANCH", "description": "Override default branch for PR base"},
+        {"flag": "--vcs", "args": "<github|gitlab>", "env_var": "PANEL_VCS", "description": "Override VCS backend (auto-detected from git remote)"},
     ],
     "env_vars": [
         {"name": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items", "related_flag": "--fix-all"},
