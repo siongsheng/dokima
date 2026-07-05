@@ -1983,6 +1983,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             + "\n".join(f"  - {_f}" for _f in _qg_failures) +
             f"\n\n"
             f"Fix these issues while preserving ALL content and sections.\n"
+            f"For file overlaps: mark the conflicting tasks as **Parallelizable:** no and make them sequential (Task N+1 depends on Task N).\n"
             f"Output the COMPLETE corrected spec — every section, every line.\n"
             f"Do NOT use write_file. Do NOT summarize.\n\n"
             f"── YOUR EXISTING SPEC (preserve this, fix issues) ──\n\n"
