@@ -236,6 +236,25 @@ def vcs_release_create(tag, title, target, generate_notes=True):
         return _run_vcs(*args)
 
 
+def vcs_pr_update_body(pr_num, new_body):
+    """Update the body/description of a PR (GitHub) or MR (GitLab).
+
+    Args:
+        pr_num: PR/MR number as int or str.
+        new_body: New body text (markdown).
+
+    Returns (stdout, stderr, returncode).
+    """
+    if VCS_BACKEND == "gitlab":
+        return _run_vcs("glab", "mr", "update", str(pr_num),
+                        "--description", new_body)
+    else:
+        return _run_vcs("gh", "api",
+                        f"repos/{REPO}/pulls/{pr_num}",
+                        "--method", "PATCH",
+                        "-f", f"body={new_body}")
+
+
 # ── Repo Operations ─────────────────────────────────────────────────
 
 def vcs_repo_clone(repo_slug, target_dir):
