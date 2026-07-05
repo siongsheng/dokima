@@ -11,6 +11,7 @@ _IMPORTING_PANEL = None
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_should_fix_from_text,
+                   extract_issue_sections,
                    extract_pr_sections,
                    _extract_convention_rules, _append_convention_rules,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
@@ -282,6 +283,150 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
 
     return filtered
+
+
+def run_fix_mode_issue(project_dir, issue_number):
+    """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
+
+    Steps:
+    1. Fetch issue body via gh issue view
+    2. Extract ### What, ### Fix, ### Verify sections
+    3. Construct coder prompt, create fix/issue-{N} branch, spawn coder
+    4. Run vet + nm if coder succeeds
+    """
+    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    PROJECT_DIR = project_dir
+
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  FIX MODE (issue #{issue_number}) — {project_dir}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
+
+    # Step 1: Fetch issue body
+    import json as _json
+    view_stdout, view_stderr, view_rc = gh(
+        "issue", "view", str(issue_number), "--repo", REPO,
+        "--json", "body,title", "--jq", "{body, title}"
+    )
+    if view_rc != 0:
+        print(f"  ✗ Could not fetch issue #{issue_number}: {view_stderr[:200]}", flush=True)
+        return
+
+    try:
+        issue_data = _json.loads(view_stdout)
+    except _json.JSONDecodeError:
+        print(f"  ✗ Failed to parse issue #{issue_number} response", flush=True)
+        return
+
+    issue_body = issue_data.get("body", "")
+    issue_title = issue_data.get("title", f"Issue #{issue_number}")
+
+    if not issue_body or not issue_body.strip():
+        print(f"  ✗ Issue #{issue_number} has no body", flush=True)
+        return
+
+    # Step 2: Extract sections
+    try:
+        sections = extract_issue_sections(issue_body)
+    except ValueError as e:
+        print(f"  ✗ Could not extract sections from issue #{issue_number}: {e}", flush=True)
+        print(f"  Issue must have ### What and ### Fix sections.", flush=True)
+        return
+
+    what = sections["what"]
+    fix = sections["fix"]
+    verify = sections["verify"]
+    file_path = sections.get("file_path")
+
+    print(f"  Issue: {issue_title}", flush=True)
+    print(f"  What: {what[:100]}{'...' if len(what) > 100 else ''}", flush=True)
+
+    # Step 3: Create fix/issue-N branch
+    branch = f"fix/issue-{issue_number}"
+    git("checkout", DEFAULT_BRANCH)
+    git("pull", "origin", DEFAULT_BRANCH)
+    checkout_out, checkout_err, checkout_rc = git("checkout", "-b", branch)
+    if checkout_rc != 0:
+        # Branch may already exist — try switching to it
+        print(f"  ⚠ Branch {branch} already exists — switching to it", flush=True)
+        git("checkout", branch)
+
+    # Step 4: Construct coder prompt
+    fix_prompt = (
+        f"FIX MODE: Fix issue #{issue_number}\\n\\n"
+        f"### What\\n{what}\\n\\n"
+        f"### Fix\\n{fix}\\n\\n"
+        f"### Verify\\n{verify}\\n\\n"
+    )
+    if file_path:
+        fix_prompt += f"### Target File\\n{file_path}\\n\\n"
+    fix_prompt += (
+        "### Constraints\\n"
+        "- FIX MODE: only fix the listed issue. Do NOT add features.\\n"
+        "- Do NOT refactor unrelated code. Do NOT change architecture.\\n"
+        f"- WORKING DIRECTORY: {project_dir}. Do NOT cd to other directories.\\n"
+        "- TDD: write failing test first, then fix, then confirm tests pass.\\n"
+        "- Single commit message: `fix: address issue #{issue_number}`\\n"
+        f"- Run {BUILD_CMD} + {TEST_CMD} before pushing.\\n"
+        "- If unable to fix, report: ⚠ CODER UNABLE TO FIX: <reason>\\n"
+    )
+
+    print(f"\\n{'─'*60}", flush=True)
+    print("  Phase: Coder (issue fix)", flush=True)
+    print(f"{'─'*60}", flush=True)
+
+    coder_result = run_phase2_coder(
+        feature=f"Issue #{issue_number}: {issue_title}",
+        spec=fix_prompt,
+        spec_path="",
+        tasks_extract_path="",
+        pr_sections=f"## Why\\n\\nFix issue #{issue_number}: {issue_title}",
+        branch=branch,
+        depth="full",
+        mode="fix",
+        is_next=False
+    )
+
+    coder_failed = coder_result.get("coder_failed", True)
+
+    # Step 5: vet phase
+    if not coder_failed:
+        print(f"\\n{'─'*60}", flush=True)
+        print("  Phase: vet (build + test)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        vet_result = run_phase3_vet(
+            feature=f"Issue #{issue_number}",
+            branch=branch,
+            pr_sections=f"## What Changed\\n\\nFixed issue #{issue_number}",
+            impact="MEDIUM",
+            spec_path=""
+        )
+        if vet_result.get("coder_failed"):
+            coder_failed = True
+            print("  ⚠ vet phase failed. Fix incomplete.", flush=True)
+
+    # Step 6: nm phase
+    if not coder_failed:
+        print(f"\\n{'─'*60}", flush=True)
+        print("  Phase: nm (adversarial review)", flush=True)
+        print(f"{'─'*60}", flush=True)
+        nm_result = run_phase4_nm(
+            feature=f"Issue #{issue_number}",
+            branch=branch,
+            impact="MEDIUM",
+            pr_url_in=coder_result.get("pr_url", "")
+        )
+
+    # Step 7: Summary
+    if not coder_failed:
+        print(f"\\n{'═'*60}", flush=True)
+        print(f"  ✅ Fix for issue #{issue_number} complete", flush=True)
+        print(f"  Branch: {branch}", flush=True)
+        if verify:
+            print(f"  Verify:\\n    {verify}", flush=True)
+        generate_codebase_map(project_dir)
+    else:
+        print(f"\\n{'═'*60}", flush=True)
+        print(f"  ❌ Fix for issue #{issue_number} failed", flush=True)
 
 
 def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
