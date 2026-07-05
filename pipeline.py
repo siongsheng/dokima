@@ -1723,10 +1723,7 @@ Report: what you fixed, commit hash."""
                         review_section += f"- {bl}\n"
         new_body = (existing_body or "") + review_section
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
-        _, edit_err, edit_rc = gh("api",
-            f"repos/{REPO}/pulls/{pr_num}",
-            "--method", "PATCH",
-            "-f", f"body={new_body}")
+        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
         if edit_rc == 0:
             print(f"  ✅ PR updated with Review section", flush=True)
         else:
