@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-05 10:03:40 (incremental | 94 files)
+## Generated: 2026-07-05 15:44:21 (incremental | 94 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -169,7 +169,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f036_should_fix_extraction.py → imports from conftest; external: pytest, types, unittest
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
-- tests/test_fix_mode.py → imports from conftest; external: contextlib, io, unittest
+- tests/test_fix_mode.py → imports from conftest, pipeline, utils; external: contextlib, io, pytest, unittest
 - tests/test_functions_unit.py → imports from conftest, utils; external: pytest, unittest
 - tests/test_help_text.py → standalone (stdlib only)
 - tests/test_helpers.py → external: pytest
