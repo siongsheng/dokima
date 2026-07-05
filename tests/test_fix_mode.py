@@ -391,3 +391,79 @@ def test_fix_with_issue_dispatches_to_run_fix_mode_issue(panel, tmpdir):
     if did_exit[0]:
         pytest.fail("panel.main() exited with SystemExit — --issue arg not recognized")
 
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: extract_issue_sections() — unit tests
+# ═══════════════════════════════════════════════════════════════════
+
+STRUCTURED_ISSUE_BODY = """### What
+[RELIABILITY] utils.py:42: Naming conventions for internal functions
+
+### Fix
+Rename internal functions to use _ prefix per conventions.md
+
+### Verify
+- [ ] Run: python3 -m pytest tests/ -q
+- [ ] Confirm: All internal functions use _ prefix, no naming lint warnings
+"""
+
+
+def test_extract_issue_sections_all_fields(panel):
+    """Parses full structured body, returns dict with all four keys populated."""
+    from utils import extract_issue_sections
+    result = extract_issue_sections(STRUCTURED_ISSUE_BODY)
+    assert result["what"] == "[RELIABILITY] utils.py:42: Naming conventions for internal functions"
+    assert result["fix"] == "Rename internal functions to use _ prefix per conventions.md"
+    assert "Run: python3 -m pytest tests/ -q" in result["verify"]
+    assert result["file_path"] == "utils.py"
+
+
+def test_extract_issue_sections_missing_verify(panel):
+    """Verify section is optional, returns empty string."""
+    from utils import extract_issue_sections
+    body = "### What\nSome finding\n\n### Fix\nDo something\n"
+    result = extract_issue_sections(body)
+    assert result["what"] == "Some finding"
+    assert result["fix"] == "Do something"
+    assert result["verify"] == ""
+
+
+def test_extract_issue_sections_missing_fix(panel):
+    """Fix section is required, raises ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("### What\nSome finding\n\n### Verify\nCheck it\n")
+
+
+def test_extract_issue_sections_file_path_backtick(panel):
+    """Extracts path.py:42 from What section."""
+    from utils import extract_issue_sections
+    body = "### What\n`src/core/auth.py:L128`\n\n### Fix\nUpdate auth\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] == "src/core/auth.py"
+
+
+def test_extract_issue_sections_no_backtick_path(panel):
+    """No backtick path → file_path is None."""
+    from utils import extract_issue_sections
+    body = "### What\nSome plain text finding\n\n### Fix\nDo it\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] is None
+
+
+def test_extract_issue_sections_empty_body(panel):
+    """Empty issue body → ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("")
+
+
+def test_extract_issue_sections_no_sections(panel):
+    """Issue body has no ### headings → ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("Just some free text without headings.")
+
