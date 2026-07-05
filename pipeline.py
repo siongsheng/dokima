@@ -12,6 +12,7 @@ _IMPORTING_PANEL = None
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_should_fix_from_text,
+                   format_blocker_cross_reference,
                    extract_issue_sections,
                    extract_pr_sections,
                    _extract_convention_rules, _append_convention_rules,
@@ -339,6 +340,98 @@ def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
     return urls
 
 
+def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
+                                spec_path, feature, create_issues=False):
+    """Update the original PR body with blocker resolution status.
+
+    Best-effort: failures log warnings, never raise. Returns True on success.
+    Only acts on APPROVED verdict — BLOCKED/UNKNOWN are no-ops.
+    """
+    if fix_verdict != "APPROVED":
+        return False
+    if not blockers:
+        return False
+
+    try:
+        # 1. Fetch fresh PR body
+        body_out, body_err, body_rc = vcs.vcs_pr_view(str(pr_num), fields="body")
+        if body_rc != 0:
+            print(f"  ⚠ Could not fetch PR body for update: {body_err[:200]}", flush=True)
+            return False
+
+        try:
+            import json as _json
+            pr_data = _json.loads(body_out)
+            current_body = pr_data.get("body", "")
+        except Exception:
+            current_body = body_out
+
+        if not current_body or not current_body.strip():
+            return False
+
+        # 2. Locate ### Blockers section
+        blockers_match = re.search(
+            r'(### Blockers\s*\n)(.*?)(?=\n### |\n## |\Z)',
+            current_body, re.DOTALL
+        )
+        if not blockers_match:
+            print("  ⚠ No ### Blockers section found in PR body — skipping update", flush=True)
+            return False
+
+        # 3. Replace blocker descriptions with formatted output
+        header = blockers_match.group(1)
+        section_content = blockers_match.group(2)
+        formatted = format_blocker_cross_reference(
+            blockers, pr_url, fix_verdict
+        )
+        updated_section = header + formatted
+
+        new_body = current_body.replace(blockers_match.group(0), updated_section)
+
+        # 4. Append ### Resolution subsection
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        resolution = (
+            f"\n\n### Resolution\n\n"
+            f"Fix PR: {pr_url}\n\n"
+            f"Verdict: {fix_verdict}\n\n"
+            f"Resolved at: {timestamp}\n"
+        )
+        new_body += resolution
+
+        # 5. If --create-blocker-issues, create issues and append Closes refs
+        if create_issues:
+            issue_urls = create_blocker_issues(
+                blockers=blockers,
+                pr_num=pr_num,
+                pr_url=pr_url,
+                feature=feature,
+                branch=pr_branch,
+                spec_path=spec_path,
+                create_blocker_issues=True
+            )
+            for url in issue_urls:
+                # Extract issue number from URL like https://github.com/owner/repo/issues/N
+                issue_num_match = re.search(r'/issues/(\d+)', url)
+                if issue_num_match:
+                    closes_ref = f"\nCloses #{issue_num_match.group(1)}"
+                    new_body += closes_ref
+
+        # 6. Persist the update
+        print(f"  ⏳ Updating PR #{pr_num} body with blocker resolution...", flush=True)
+        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
+        if edit_rc == 0:
+            print(f"  ✅ PR #{pr_num} body updated with blocker resolution", flush=True)
+            return True
+        else:
+            print(f"  ⚠ Could not update PR body: {edit_err[:200]}", flush=True)
+            return False
+
+    except Exception as e:
+        print(f"  ⚠ Could not update PR body (exception): {e}", flush=True)
+        return False
+
+
 def run_fix_mode_issue(project_dir, issue_number):
     """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
 
@@ -483,7 +576,7 @@ def run_fix_mode_issue(project_dir, issue_number):
         print(f"  ❌ Fix for issue #{issue_number} failed", flush=True)
 
 
-def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
+def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False, create_blocker_issues=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
     PROJECT_DIR = project_dir
@@ -752,6 +845,17 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
         print(f"\n  TL Verdict: {fix_verdict}", flush=True)
         if fix_verdict == "APPROVED":
             print(f"  ✅ All blockers resolved — PR #{pr_num} APPROVED", flush=True)
+            # F037: Update original PR body with blocker resolution
+            _update_pr_body_after_fix(
+                pr_num=pr_num,
+                pr_url=pr_url,
+                pr_branch=pr_branch,
+                blockers=blockers,
+                fix_verdict=fix_verdict,
+                spec_path=spec_path or "",
+                feature=pr_title,
+                create_issues=create_blocker_issues
+            )
         elif fix_verdict == "BLOCKED":
             print(f"  ❌ PR #{pr_num} still has unresolved blockers.", flush=True)
         else:
