@@ -84,6 +84,7 @@ MODIFIER FLAGS (apply across subcommands):
   --interactive        Show human gate (with next)
   --answers <file>     Resume from saved interview state
   --fix-all            Include SHOULD FIX items (with fix)
+  --create-blocker-issues  Create GitHub issues from detected blockers (with fix)
   --resume             Resume from last checkpoint (re-runs incomplete phases only)
   --no-resume          Ignore any existing checkpoint and start fresh
 
@@ -123,6 +124,7 @@ CLI_METADATA = {
         {"flag": "--interactive", "args": None, "env_var": None, "description": "Show human gate (with next/continuous)"},
         {"flag": "--answers", "args": "<file>", "env_var": None, "description": "Resume from saved interview state"},
         {"flag": "--fix-all", "args": None, "env_var": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items (with --fix)"},
+        {"flag": "--create-blocker-issues", "args": None, "env_var": None, "description": "Create GitHub issues from detected blockers (with fix)"},
         {"flag": "--issue", "args": "N", "env_var": None, "description": "Fix specific GitHub issue N instead of discovering BLOCKED PR (with fix)"},
         {"flag": "--skip-autofix", "args": None, "env_var": "PANEL_SKIP_AUTOFIX", "description": "Disable auto-fix loopback (nm + TL phases)"},
         {"flag": "--force-full", "args": None, "env_var": "PANEL_FORCE_FULL", "description": "Run all 5 phases regardless of depth gating"},
