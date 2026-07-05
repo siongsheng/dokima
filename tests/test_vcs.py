@@ -367,3 +367,167 @@ class TestContractInvariants:
             sig = inspect.signature(fn)
             # Verify callable — actual return type tested in operation tests
             assert callable(fn), f"{fn_name} is not callable"
+
+
+# ── vcs_issue_create() ──────────────────────────────────────────────
+
+class TestVcsIssueCreate:
+    """Issue creation with correct CLI args per backend."""
+
+    def test_github_issue_create(self):
+        """GitHub → calls gh issue create with --title, --body"""
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="https://github.com/owner/repo/issues/1", stderr="")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "Something broke")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert args[0] == "gh"
+            assert "issue" in args
+            assert "create" in args
+            assert "--title" in args
+            assert "--body" in args
+
+    def test_github_issue_create_with_labels(self):
+        """GitHub → includes --label when labels provided"""
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke", labels="bug,urgent")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "--label" in args
+            assert "bug,urgent" in args
+
+    def test_gitlab_issue_create(self):
+        """GitLab → calls glab issue create with --description instead of --body"""
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
+             patch.object(vcs, 'REPO', 'group/project'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert args[0] == "glab"
+            assert "issue" in args
+            assert "create" in args
+            assert "--description" in args
+
+
+# ── vcs_issue_view() ────────────────────────────────────────────────
+
+class TestVcsIssueView:
+    """Issue view with JSON output."""
+
+    def test_github_issue_view(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='{"title":"Bug"}', stderr="")
+            stdout, stderr, rc = vcs.vcs_issue_view(1)
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "gh" in args
+            assert "issue" in args
+            assert "view" in args
+            assert "--json" in args
+
+    def test_gitlab_issue_view(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
+             patch.object(vcs, 'REPO', 'group/project'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='{"title":"Bug"}', stderr="")
+            stdout, stderr, rc = vcs.vcs_issue_view(1)
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "glab" in args
+            assert "issue" in args
+            assert "view" in args
+
+
+# ── vcs_release_create() ────────────────────────────────────────────
+
+class TestVcsReleaseCreate:
+    """Release creation — GitHub only; GitLab errors."""
+
+    def test_github_release(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="Release created", stderr="")
+            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "gh" in args
+            assert "release" in args
+            assert "create" in args
+
+    def test_github_release_generate_notes(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main", generate_notes=True)
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "--generate-notes" in args
+
+    def test_gitlab_release_errors(self):
+        """GitLab → returns error, release is GitHub-only"""
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
+             patch.object(vcs, 'REPO', 'group/project'):
+            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main")
+            assert rc != 0
+            assert "release" in stderr.lower() or "github" in stderr.lower()
+
+
+# ── vcs_repo_clone() ────────────────────────────────────────────────
+
+class TestVcsRepoClone:
+    """Repo cloning dispatch."""
+
+    def test_github_clone(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            stdout, stderr, rc = vcs.vcs_repo_clone("owner/repo", "/tmp/clone")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "gh" in args
+            assert "repo" in args
+            assert "clone" in args
+
+    def test_gitlab_clone(self):
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
+             patch.object(vcs, 'REPO', 'group/project'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            stdout, stderr, rc = vcs.vcs_repo_clone("group/project", "/tmp/clone")
+            assert rc == 0
+            args = mock_run.call_args[0][0]
+            assert "glab" in args
+            assert "repo" in args
+            assert "clone" in args
