@@ -727,3 +727,45 @@ def test_should_fix_issue_body_has_source_section(panel):
     for body in issue_bodies:
         assert "### Source" in body, f"Issue body should have ### Source section, got: {body[:200]}"
         assert "pull/1" in body, f"Source should include PR link, got: {body[:200]}"
+
+
+def test_should_fix_issue_body_what_includes_location(panel):
+    """### What section includes file location when available from table format."""
+    from unittest.mock import patch
+
+    issue_bodies = []
+    def gh_se(*args, **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "pr":
+            return ("", "", 1)
+        if cmd == "api":
+            return ("", "", 0)
+        if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+            for i, a in enumerate(args):
+                if a == "--body" and i + 1 < len(args):
+                    issue_bodies.append(args[i + 1])
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    panel.gh = gh_se
+    panel.git = lambda *a, **kw: ("", "", 0)
+    panel._set_gh_token = lambda *a, **kw: None
+    panel.load_key = lambda: "fk"
+    panel.load_github_token = lambda: "ft"
+    panel.detect_repo = lambda: "t/t"
+    panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+    with patch("time.sleep"), \
+         patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+        panel.run_phase5_tech_lead(
+            "Test Feature", "https://github.com/t/t/pull/1",
+            "feat/test", "/tmp/spec.md", "LOW"
+        )
+
+    # At least one issue body should have utils.py:42 in the What section
+    found = False
+    for body in issue_bodies:
+        if "### What" in body and "utils.py" in body:
+            found = True
+            break
+    assert found, f"What section should include file location, got bodies: {issue_bodies}"
