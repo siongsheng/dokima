@@ -4,6 +4,7 @@ All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
 import sys, os, json, re, subprocess, time
+import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 _IMPORTING_PANEL = None
@@ -449,14 +450,16 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
     pr_branch = pr["headRefName"]
     pr_body = pr["body"]
     pr_url = f"https://github.com/{REPO}/pull/{pr_num}"
+    # If GitLab backend, generate MR URL instead
+    if vcs.VCS_BACKEND == "gitlab":
+        pr_url = f"https://gitlab.com/{REPO}/-/merge_requests/{pr_num}"
     print(f"  Found PR #{pr_num}: {pr_title}", flush=True)
     print(f"  Branch: {pr_branch}", flush=True)
     print(f"  URL: {pr_url}\n", flush=True)
 
     # Step 2: Check PR state (EC8: merged, closed)
     import json as _json
-    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
-                                 "--json", "state,merged", "--jq", "{state, merged}")
+    view_stdout, _, view_rc = vcs.vcs_pr_view(str(pr_num), fields="state,merged")
     if view_rc == 0:
         try:
             pr_state = _json.loads(view_stdout)
@@ -979,7 +982,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     if not coder_failed:
         pr_url = None
         if depth == "vet":
-            pr_urls = re.findall(r'https://github\.com/[\w.-]+/[\w.-]+/pull/\d+', coder_output)
+            pr_urls = re.findall(r'(?:https://github\.com/[\w.-]+/[\w.-]+/pull/\d+|https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+)', coder_output)
             if pr_urls:
                 pr_url = pr_urls[-1]
                 print(f"\n  PR (coder): {pr_url}", flush=True)
@@ -1153,10 +1156,8 @@ Report: what was broken, what you fixed, commit hash."""
         f"- {passed_str} tests\n"
         f"- Build passes\n"
     )
-    pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
-        "--base", DEFAULT_BRANCH, "--head", branch,
-        "--title", f"feat: {feature}",
-        "--body", pr_body)
+    pr_stdout, pr_stderr, pr_rc = vcs.vcs_pr_create(
+        DEFAULT_BRANCH, branch, f"feat: {feature}", pr_body)
     if pr_rc == 0 and pr_stdout.strip():
         parts = pr_stdout.strip().split()
         if parts:
@@ -1205,7 +1206,7 @@ def run_phase4_nm(feature, branch, impact, pr_url_in):
 
     # Extract PR URL from nm output (only if we don't already have one)
     if not pr_url:
-        pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
+        pr_match = re.search(r'(?:(?:https://github\.com/[^/]+/[^/]+/pull/\d+)|(?:https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+))', nm_stdout)
         if pr_match:
             pr_url = pr_match.group(1)
             print(f"  PR: {pr_url}", flush=True)
@@ -1272,7 +1273,7 @@ Report: what you fixed, commit hash."""
             print("  ✓ Re-verify passed — re-running nm with fixes...", flush=True)
             nm_result = _safe_run(nm_cmd, cwd=PROJECT_DIR, timeout=600)
             nm_stdout = nm_result.stdout or ""
-            pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
+            pr_match = re.search(r'(?:(?:https://github\.com/[^/]+/[^/]+/pull/\d+)|(?:https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+))', nm_stdout)
             if pr_match:
                 pr_url = pr_match.group(1)
             print(f"  ✓ nm re-run finished ({len(nm_stdout)} chars)", flush=True)
@@ -1384,6 +1385,7 @@ NM FINDINGS (supplementary): The nm pipeline stage already reviewed this diff wi
 SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missing guards, uncaught exceptions, security, missing tests, missing README update when spec required it) | SHOULD FIX (conventions, naming, AGENTS.md, redundant code, stale docs referencing old behavior) | NIT (formatting, comments, style)
 
 FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {REPO} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
+For GitLab projects, use: glab mr review PR_NUMBER --comment --message "Tech Lead Review: <verdict>. <summary>"
 Do NOT --approve (self-approval blocked). User merges manually.
 
 CRITICAL — your final output MUST end with this exact format (these lines are parsed):
@@ -2455,10 +2457,8 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
                 print("\n── Creating PR (depth=coder) ──", flush=True)
                 pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
             pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
-            stdout, _, rc = gh("pr", "create", "--repo", REPO,
-                               "--base", DEFAULT_BRANCH, "--head", branch,
-                               "--title", f"feat: {feature}",
-                               "--body", pr_body)
+            stdout, _, rc = vcs.vcs_pr_create(
+                DEFAULT_BRANCH, branch, f"feat: {feature}", pr_body)
             if rc == 0:
                 parts = stdout.strip().split()
                 pr_url = parts[-1] if parts else None
