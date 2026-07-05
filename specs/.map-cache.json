@@ -1,10 +1,10 @@
 {
   ".pipeline-status.json": {
-    "hash": "d2b68c6f10ac2fa701520dbfeb88d21d",
+    "hash": "9814b2404f41a7028c743f96ee1a6cf7",
     "desc": ""
   },
   "AGENTS.md": {
-    "hash": "48a7af705829b8aa0325ae3eeb4e3808",
+    "hash": "0108d3c2248e7f0650924ca28b1c12b2",
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
@@ -12,7 +12,7 @@
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
-    "hash": "9129b686dd383918a0f8e4a71d7a684c",
+    "hash": "e6ea3aa22c12409a04cc9c96dad0fde6",
     "desc": "Dokima"
   },
   "agent.py": {
@@ -24,11 +24,11 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "65230e075f0d87af73f03b74c5b0efe9",
+    "hash": "fba7402f86e94b6611637a4d724815e4",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "9f9ba5abdcd537028d7095ffe7d7d980",
+    "hash": "acb380565c758ca6feb0293d75f9c62c",
     "desc": "Exports: parse_roadmap"
   },
   "status.py": {
@@ -40,15 +40,19 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "20c3995e27a03b76bcf7f08191af35f0",
+    "hash": "9e4d5b3e14058fbcfbaadbe2860bfb85",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
+  },
+  "vcs.py": {
+    "hash": "0fe5269c1719d8b150a5a963cf688d28",
+    "desc": "Exports: detect_vcs_backend"
   },
   "docs/pipeline.md": {
     "hash": "50595743d76b954c390e95e6fd3da97c",
     "desc": "Dokima \u2014 Pipeline Reference"
   },
   "docs/setup.md": {
-    "hash": "bf3fb1b8bcf53f9820a0c73cfb36d5e4",
+    "hash": "b521bbcac631adb04a4b3fc28337c8cd",
     "desc": "Dokima \u2014 Deployment & Setup Guide"
   },
   "scripts/setup-linux.sh": {
@@ -188,7 +192,7 @@
     "desc": "Exports: test_tasks_module_importable, test_tasks_has_worktree_manager, test_tasks_has_task_lock, test_tasks_has_task_class, test_tasks_has_roadmap_feature"
   },
   "tests/test_f022_utils.py": {
-    "hash": "e3a9cce3a7f9e9cf114363d00f7c67ed",
+    "hash": "e94e6dfc87a50c8a8229b0d0519adbaa",
     "desc": "Exports: test_slugify_simple, test_slugify_special_chars, test_slugify_short, test_slugify_long, test_slugify_empty"
   },
   "tests/test_f022_utils_complete.py": {
@@ -247,16 +251,24 @@
     "hash": "e6995211d8e67a927f444510001a8054",
     "desc": "Exports: panel, TestExtractConventionRules"
   },
+  "tests/test_f035_vcs_wiring.py": {
+    "hash": "7fd03d55ccfd88a92b3746ec5a2ba32a",
+    "desc": "Exports: TestVcsFlagWiring"
+  },
   "tests/test_f036_should_fix_extraction.py": {
     "hash": "e8b8e0131ac9affb81c163d391d1933c",
     "desc": "Exports: panel"
+  },
+  "tests/test_f037_blocker_resolution.py": {
+    "hash": "11ad1d601248fcceb708148256c79c89",
+    "desc": "\u2500\u2500 Task 1: vcs_pr_update_body() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
   "tests/test_final_coverage.py": {
     "hash": "63bd93c57437b723a16f02ca7faee1ed",
     "desc": "Exports: _setup"
   },
   "tests/test_final_edge.py": {
-    "hash": "597be6e6057d1c2c1bff76d163460342",
+    "hash": "b559c8ee93cc5e11968fd3ee1d94d5ae",
     "desc": "Exports: _setup"
   },
   "tests/test_fix_mode.py": {
@@ -304,7 +316,7 @@
     "desc": "Exports: test_check_live_pid, test_check_dead_pid, test_check_non_numeric, test_check_empty_string, test_verify_owner_on_self"
   },
   "tests/test_pipeline_integration.py": {
-    "hash": "9d833691466ba94d8408f1ed0d961382",
+    "hash": "582751895d1f8e204455aa96ada8abcd",
     "desc": "Exports: _setup_test_project"
   },
   "tests/test_profile_templates.py": {
@@ -347,6 +359,14 @@
     "hash": "5cab1041379af41b43f058eb2d314d47",
     "desc": "Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated"
   },
+  "tests/test_task6_profiles.py": {
+    "hash": "aa819a5e53263e07d504ce9948aec137",
+    "desc": "Exports: TestAgentProfileEnvPassthrough"
+  },
+  "tests/test_task7_vcs_flag.py": {
+    "hash": "58d8070e845e4003389845eed80e1fc9",
+    "desc": "Exports: TestVcsFlagCli"
+  },
   "tests/test_task_dag.py": {
     "hash": "08ef00dd67cc27fd8b0540e75f8adda4",
     "desc": "Exports: panel, _make_dag, test_all_parallel_3tasks_2files_single_session, test_non_parallelizable_task_returns_single_session"
@@ -362,6 +382,14 @@
   "tests/test_unit_helpers.py": {
     "hash": "a988df5e5f6772c94566671b42f73035",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "tests/test_vcs.py": {
+    "hash": "cb6eb8b360d76487edbe0e60258c407d",
+    "desc": "\u2500\u2500 detect_vcs_backend() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+  },
+  "tests/test_vcs_wiring.py": {
+    "hash": "0009b48ed97c0441a51d08f92f316ca4",
+    "desc": "Exports: TestVcsFlagWiring"
   },
   "tests/htmlcov/coverage_html_cb_dd2e7eb5.js": {
     "hash": "47d6ea8f87058d0cea6b52102adf1b13",

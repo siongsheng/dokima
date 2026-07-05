@@ -144,7 +144,7 @@
 ### F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.
 **Priority:** P2
 **Dependencies:** F034
-**Status:** [~] In Progress
+**Status:** [x] Done Progress
 **User Story:** As a developer, when I run `dokima fix` to resolve TL blockers, I know exactly which blockers were fixed and where — no manual cross-referencing between PRs. The original PR's blocker section links to the resolution PR, and GitHub issues (if created) auto-close on merge.
 
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.

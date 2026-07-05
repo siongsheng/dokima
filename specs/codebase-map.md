@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-05 15:44:21 (incremental | 94 files)
+## Generated: 2026-07-06 05:03:10 (incremental | 101 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -82,7 +82,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py  — Exports: test_interview_save_path_constant_exists, test_load_init_interview_state_from_file
 - tests/test_f032_self_assessment.py  — Exports: _load_fresh_panel, test_coder_prompt_contains_self_assessment
 - tests/test_f033_cross_run_learning.py  — Exports: panel, TestExtractConventionRules
+- tests/test_f035_vcs_wiring.py  — Exports: TestVcsFlagWiring
 - tests/test_f036_should_fix_extraction.py  — Exports: panel
+- tests/test_f037_blocker_resolution.py  — ── Task 1: vcs_pr_update_body() ────────────────────────────────────
 - tests/test_final_coverage.py  — Exports: _setup
 - tests/test_final_edge.py  — Exports: _setup
 - tests/test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
@@ -107,10 +109,14 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_slugify.py  — Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash
 - tests/test_spec_quality_gates.py  — Sample well-formed spec with all required sections
 - tests/test_status_md.py  — Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated
+- tests/test_task6_profiles.py  — Exports: TestAgentProfileEnvPassthrough
+- tests/test_task7_vcs_flag.py  — Exports: TestVcsFlagCli
 - tests/test_task_dag.py  — Exports: panel, _make_dag, test_all_parallel_3tasks_2files_single_session, test_non_parallelizable_task_returns_single_session
 - tests/test_tl_extraction.py  — Exports: panel
 - tests/test_triple_bug_fix.py  — ── Bug 1: Spec archive ──────────────────────────────────────
 - tests/test_unit_helpers.py  — ═══════════════════════════════════════════════════════════════════
+- tests/test_vcs.py  — ── detect_vcs_backend() ────────────────────────────────────────────
+- tests/test_vcs_wiring.py  — Exports: TestVcsFlagWiring
 
 ### Documentation
 - AGENTS.md  — Dokima — Multi-Agent Orchestration Engine
@@ -119,10 +125,13 @@ Read the Domain Map below to understand the file organization before exploring i
 - docs/pipeline.md  — Dokima — Pipeline Reference
 - docs/setup.md  — Dokima — Deployment & Setup Guide
 
+### Other
+- vcs.py  — Exports: detect_vcs_backend
+
 ## Impact Map
 - agent.py → imports from utils; external: urllib
-- pipeline.py → imports from agent, roadmap, status, tasks, utils; external: select, string
-- roadmap.py → imports from agent, tasks, utils
+- pipeline.py → imports from agent, roadmap, status, tasks, utils, vcs; external: select, string
+- roadmap.py → imports from agent, tasks, utils, vcs
 - status.py → external: dataclasses
 - tasks.py → imports from agent, status, utils; external: shutil
 - tests/conftest.py → external: pytest, types, unittest
@@ -166,7 +175,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py → imports from utils; external: pytest
 - tests/test_f032_self_assessment.py → imports from conftest; external: pytest, unittest
 - tests/test_f033_cross_run_learning.py → imports from conftest, pipeline; external: inspect, pytest
+- tests/test_f035_vcs_wiring.py → imports from vcs; external: pytest, unittest
 - tests/test_f036_should_fix_extraction.py → imports from conftest; external: pytest, types, unittest
+- tests/test_f037_blocker_resolution.py → imports from pipeline, utils, vcs; external: pytest, unittest
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
 - tests/test_fix_mode.py → imports from conftest, pipeline, utils; external: contextlib, io, pytest, unittest
@@ -191,11 +202,16 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_slugify.py → external: pytest
 - tests/test_spec_quality_gates.py → external: contextlib, inspect, pytest, unittest
 - tests/test_status_md.py → external: pytest
+- tests/test_task6_profiles.py → imports from utils
+- tests/test_task7_vcs_flag.py → imports from utils, vcs; external: unittest
 - tests/test_task_dag.py → imports from conftest; external: pytest
 - tests/test_tl_extraction.py → imports from conftest; external: pytest
 - tests/test_triple_bug_fix.py → external: pytest
 - tests/test_unit_helpers.py → imports from conftest; external: pytest, unittest
-- utils.py → imports from status; external: glob, importlib, select, shutil
+- tests/test_vcs.py → imports from pipeline, roadmap, vcs; external: inspect, pytest, unittest
+- tests/test_vcs_wiring.py → imports from conftest, vcs; external: contextlib, pytest, unittest
+- utils.py → imports from status, vcs; external: glob, importlib, select, shutil
+- vcs.py → standalone (stdlib only)
 
 ## Test Map
 - tests/test_acquire_lock.py → (no matching source module)
@@ -238,7 +254,9 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f031_utils_helpers.py → (no matching source module)
 - tests/test_f032_self_assessment.py → (no matching source module)
 - tests/test_f033_cross_run_learning.py → (no matching source module)
+- tests/test_f035_vcs_wiring.py → (no matching source module)
 - tests/test_f036_should_fix_extraction.py → (no matching source module)
+- tests/test_f037_blocker_resolution.py → (no matching source module)
 - tests/test_final_coverage.py → (no matching source module)
 - tests/test_final_edge.py → (no matching source module)
 - tests/test_fix_mode.py → (no matching source module)
@@ -263,7 +281,11 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_slugify.py → (no matching source module)
 - tests/test_spec_quality_gates.py → (no matching source module)
 - tests/test_status_md.py → (no matching source module)
+- tests/test_task6_profiles.py → (no matching source module)
+- tests/test_task7_vcs_flag.py → (no matching source module)
 - tests/test_task_dag.py → (no matching source module)
 - tests/test_tl_extraction.py → (no matching source module)
 - tests/test_triple_bug_fix.py → (no matching source module)
 - tests/test_unit_helpers.py → (no matching source module)
+- tests/test_vcs.py → vcs
+- tests/test_vcs_wiring.py → (no matching source module)
