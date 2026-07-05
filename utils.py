@@ -2423,25 +2423,25 @@ _PROFILE_CONFIGS = {
         "model.provider": "deepseek",
         "agent.max_turns": "150",
         "agent.reasoning_effort": "high",
-        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, GLAB_TOKEN, GITLAB_TOKEN, HERMES_HOME, HOME]",
     },
     "coder": {
         "model.default": "deepseek-v4-pro",
         "model.provider": "deepseek",
         "agent.max_turns": "150",
-        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, GLAB_TOKEN, GITLAB_TOKEN, HERMES_HOME, HOME]",
     },
     "tech-lead": {
         "model.default": "deepseek-v4-pro",
         "model.provider": "deepseek",
         "agent.max_turns": "150",
-        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, GLAB_TOKEN, GITLAB_TOKEN, HERMES_HOME, HOME]",
     },
     "nm": {
         "model.default": "deepseek-v4-pro",
         "model.provider": "deepseek",
         "agent.max_turns": "150",
-        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, HERMES_HOME, HOME]",
+        "terminal.env_passthrough": "[GH_TOKEN, GITHUB_TOKEN, GLAB_TOKEN, GITLAB_TOKEN, HERMES_HOME, HOME]",
     },
 }
 _PROFILE_ORDER = ["strategist", "coder", "tech-lead", "nm"]
