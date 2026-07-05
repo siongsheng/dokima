@@ -235,7 +235,7 @@ class TestPostFixUpdateBody:
                 fix_verdict="APPROVED",
                 spec_path="/tmp/spec.md",
                 feature="Test feature",
-                create_blocker_issues=False
+                create_issues=False
             )
 
         assert result is True
@@ -265,7 +265,7 @@ class TestPostFixUpdateBody:
                 fix_verdict="APPROVED",
                 spec_path="",
                 feature="Test",
-                create_blocker_issues=False
+                create_issues=False
             )
 
         assert result is False
@@ -288,8 +288,54 @@ class TestPostFixUpdateBody:
                 fix_verdict="APPROVED",
                 spec_path="",
                 feature="Test",
-                create_blocker_issues=False
+                create_issues=False
             )
 
         assert result is False
 
+
+
+# ── Task 5: auto_close_referenced_issues() ───────────────────────────
+
+class TestAutoCloseReferencedIssues:
+    """Scan PR body for Closes/Fixes references and comment on those issues."""
+
+    def test_auto_close_referenced_issues(self):
+        """Closes #N → triggers issue close comment."""
+        import vcs
+        from pipeline import auto_close_referenced_issues
+
+        pr_body = "Fixed some things\n\nCloses #42\n\nAlso Closes #99"
+        pr_num = 10
+        pr_url = "https://github.com/owner/repo/pull/10"
+
+        with patch.object(vcs, 'vcs_issue_view') as mock_view:
+            mock_view.return_value = ('{"body":"test","title":"Test"}', "", 0)
+
+            with patch('pipeline.gh') as mock_gh:
+                mock_gh.return_value = ("", "", 0)
+
+                auto_close_referenced_issues(pr_body, pr_num, pr_url)
+
+                close_calls = [c for c in mock_gh.call_args_list
+                               if 'issue' in str(c) and 'comment' in str(c)]
+                assert len(close_calls) >= 1
+
+    def test_auto_close_no_references(self):
+        """No Closes/Fixes refs → no-op, returns empty list."""
+        from pipeline import auto_close_referenced_issues
+
+        pr_body = "Just some text without references"
+        pr_num = 10
+        pr_url = "https://github.com/owner/repo/pull/10"
+
+        with patch('pipeline.gh') as mock_gh:
+            result = auto_close_referenced_issues(pr_body, pr_num, pr_url)
+            mock_gh.assert_not_called()
+            assert result == []
+
+    def test_auto_close_empty_body(self):
+        """Empty PR body → returns empty list."""
+        from pipeline import auto_close_referenced_issues
+        result = auto_close_referenced_issues("", 10, "https://github.com/owner/repo/pull/10")
+        assert result == []
