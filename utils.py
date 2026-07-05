@@ -62,6 +62,7 @@ MANAGE:
   dokima next [dir]                      Build next feature from roadmap
   dokima next --continuous [dir]         Full sprint: build + auto-merge + loop
   dokima fix [dir]                       Fix BLOCKED PR: detect blockers, fix, verify
+  dokima fix --issue N [dir]             Fix specific GitHub issue N by extracting What/Fix/Verify sections
 
 CONTROL:
   dokima status [dir]                    Show pipeline state
@@ -107,7 +108,8 @@ CLI_METADATA = {
         {"name": "init", "syntax": "dokima init \"description\" [dir]", "description": "Project discovery & constitution"},
         {"name": "add", "syntax": "dokima add \"Feature\" [--priority=P1] [dir]", "description": "Add feature to roadmap (auto-priority, auto-deps)"},
         {"name": "next", "syntax": "dokima next [--continuous] [dir]", "description": "Build next feature from roadmap"},
-        {"name": "fix", "syntax": "dokima fix [dir]", "description": "Fix BLOCKED PR: detect blockers, fix, verify"},
+        {"name": "fix", "syntax": "dokima fix [--issue N] [dir]", "description": "Fix BLOCKED PR or specific GitHub issue N: detect blockers, fix, verify"},
+        {"name": "fix-issue", "syntax": "dokima fix --issue N [dir]", "description": "Fix specific GitHub issue N by extracting What/Fix/Verify from issue body"},
         {"name": "status", "syntax": "dokima status [dir]", "description": "Show pipeline state"},
         {"name": "stop", "syntax": "dokima stop [dir]", "description": "Graceful stop after current feature"},
         {"name": "kill", "syntax": "dokima kill [dir]", "description": "Emergency kill (SIGTERM then SIGKILL)"},
@@ -120,6 +122,7 @@ CLI_METADATA = {
         {"flag": "--interactive", "args": None, "env_var": None, "description": "Show human gate (with next/continuous)"},
         {"flag": "--answers", "args": "<file>", "env_var": None, "description": "Resume from saved interview state"},
         {"flag": "--fix-all", "args": None, "env_var": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items (with --fix)"},
+        {"flag": "--issue", "args": "N", "env_var": None, "description": "Fix specific GitHub issue N instead of discovering BLOCKED PR (with fix)"},
         {"flag": "--skip-autofix", "args": None, "env_var": "PANEL_SKIP_AUTOFIX", "description": "Disable auto-fix loopback (nm + TL phases)"},
         {"flag": "--force-full", "args": None, "env_var": "PANEL_FORCE_FULL", "description": "Run all 5 phases regardless of depth gating"},
         {"flag": "--skip-auto-archive", "args": None, "env_var": "PANEL_SKIP_AUTO_ARCHIVE", "description": "Don't auto-archive merged specs"},
@@ -2155,6 +2158,75 @@ def extract_should_fix_from_text(text):
             deduped.append(f)
 
     return deduped
+
+
+def extract_issue_sections(issue_body):
+    """Extract structured sections from a GitHub issue body.
+
+    Parses ### What, ### Fix, ### Verify sections using regex.
+    Extracts file path from ### What section via backtick-pattern matching.
+
+    Args:
+        issue_body: str — the issue body text
+
+    Returns:
+        dict with keys: what, fix, verify, file_path.
+        file_path is None if no backtick path found.
+
+    Raises:
+        ValueError if issue_body is empty or ### Fix section is missing.
+    """
+    if not issue_body or not issue_body.strip():
+        raise ValueError("Issue body is empty")
+
+    # Match sections: ### What, ### Fix, ### Verify
+    # Each section ends at the next ### heading or end of string
+    section_pattern = re.compile(
+        r'###\s+(What|Fix|Verify)\s*\n(.+?)(?=\n###\s+(?:What|Fix|Verify|Source)\b|\Z)',
+        re.DOTALL | re.IGNORECASE
+    )
+
+    sections = {}
+    for match in section_pattern.finditer(issue_body):
+        heading = match.group(1).lower()
+        content = match.group(2).strip()
+        # Strip backtick code blocks within sections
+        content = re.sub(r'```[^\n]*\n.*?\n```', '', content, flags=re.DOTALL).strip()
+        sections[heading] = content
+
+    # Fix section is required
+    if "fix" not in sections or not sections["fix"].strip():
+        raise ValueError("Issue body missing required ### Fix section")
+
+    what = sections.get("what", "")
+    fix = sections["fix"].strip()
+    verify = sections.get("verify", "")
+
+    # Extract file path from ### What section via backtick pattern
+    file_path = None
+    if what:
+        # Match backtick-wrapped paths like `path/file.py` or `path/file.py:42` or `file.py:L128`
+        bt_match = re.search(r'`([^`]+\.[a-z]{1,10}(?::[A-Za-z]?\d+)?)`', what)
+        if bt_match:
+            raw_path = bt_match.group(1)
+            # Strip line number suffix (e.g., :42, :L128, :N5)
+            file_path = re.sub(r':[A-Za-z]?\d+$', '', raw_path)
+        else:
+            # Fallback: match bare file paths like path/to/file.ext:NN
+            bare_match = re.search(
+                r'(?:^|\s)([\w/.-]+\.(?:py|js|ts|rs|go|md|yaml|yml|json|toml|cfg|ini|sh|bash|html|css|scss|vue|jsx|tsx|java|rb|php|c|cpp|h|hpp|swift|kt))(?::\d+)?(?:\s|$|:)',
+                what
+            )
+            if bare_match:
+                raw_path = bare_match.group(1)
+                file_path = re.sub(r':\d+$', '', raw_path)
+
+    return {
+        "what": what,
+        "fix": fix,
+        "verify": verify,
+        "file_path": file_path,
+    }
 
 
 def _extract_convention_rules(blocker_lines):

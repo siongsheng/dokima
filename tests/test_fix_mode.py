@@ -1,6 +1,7 @@
 """Tests for fix mode: BLOCKED PR discovery, blocker extraction, subcommand, dispatch."""
 import os
 import sys
+import pytest
 from unittest.mock import patch
 
 from conftest import _load_panel as _load
@@ -336,3 +337,289 @@ def test_help_text_includes_fix(panel):
     """fix should appear in HELP_TEXT."""
     assert "fix" in panel.HELP_TEXT or "dokima fix" in panel.HELP_TEXT
 
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: --issue N flag for fix mode
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_fix_with_issue_dispatches_to_run_fix_mode_issue(panel, tmpdir):
+    """fix --issue 42 dispatches to run_fix_mode_issue, not run_fix_mode."""
+    import subprocess
+    project_dir = os.path.join(str(tmpdir), "proj3")
+    os.makedirs(os.path.join(project_dir, "specs"), exist_ok=True)
+    with open(os.path.join(project_dir, "AGENTS.md"), "w") as f:
+        f.write("# Test\n\n## Commands\n- Test: `echo ok`\n- Build: `echo ok`\n")
+    subprocess.run(["git", "init", project_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "config", "user.email", "t@t.com"])
+    subprocess.run(["git", "-C", project_dir, "config", "user.name", "T"])
+    subprocess.run(["git", "-C", project_dir, "add", "-A"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "commit", "-m", "init"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", project_dir, "remote", "add", "origin", "https://github.com/t/t.git"])
+
+    old_argv = sys.argv
+    fix_mode_issue_args = []
+    fix_mode_args = []
+    did_exit = [False]
+    try:
+        sys.argv = ['dokima', 'fix', '--issue', '42', project_dir]
+
+        def mock_run_fix_mode_issue(**kwargs):
+            fix_mode_issue_args.append(kwargs)
+
+        def mock_run_fix_mode(**kwargs):
+            fix_mode_args.append(kwargs)
+
+        with patch.object(panel, 'acquire_lock', return_value=(None, None)):
+            with patch.object(panel._pipeline, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue, create=True):
+                with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix_mode):
+                    with patch.object(panel, 'load_key', return_value="test-key"):
+                        with patch.object(panel, 'detect_repo', return_value="t/t"):
+                            with patch.object(panel, '_set_gh_token'):
+                                with patch.object(panel, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                                    panel.main()
+
+        assert len(fix_mode_issue_args) == 1
+        assert fix_mode_issue_args[0].get("issue_number") == 42
+        assert fix_mode_issue_args[0].get("project_dir") == project_dir
+        assert len(fix_mode_args) == 0
+    except SystemExit:
+        did_exit[0] = True
+    finally:
+        sys.argv = old_argv
+
+    if did_exit[0]:
+        pytest.fail("panel.main() exited with SystemExit — --issue arg not recognized")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: extract_issue_sections() — unit tests
+# ═══════════════════════════════════════════════════════════════════
+
+STRUCTURED_ISSUE_BODY = """### What
+[RELIABILITY] utils.py:42: Naming conventions for internal functions
+
+### Fix
+Rename internal functions to use _ prefix per conventions.md
+
+### Verify
+- [ ] Run: python3 -m pytest tests/ -q
+- [ ] Confirm: All internal functions use _ prefix, no naming lint warnings
+"""
+
+
+def test_extract_issue_sections_all_fields(panel):
+    """Parses full structured body, returns dict with all four keys populated."""
+    from utils import extract_issue_sections
+    result = extract_issue_sections(STRUCTURED_ISSUE_BODY)
+    assert result["what"] == "[RELIABILITY] utils.py:42: Naming conventions for internal functions"
+    assert result["fix"] == "Rename internal functions to use _ prefix per conventions.md"
+    assert "Run: python3 -m pytest tests/ -q" in result["verify"]
+    assert result["file_path"] == "utils.py"
+
+
+def test_extract_issue_sections_missing_verify(panel):
+    """Verify section is optional, returns empty string."""
+    from utils import extract_issue_sections
+    body = "### What\nSome finding\n\n### Fix\nDo something\n"
+    result = extract_issue_sections(body)
+    assert result["what"] == "Some finding"
+    assert result["fix"] == "Do something"
+    assert result["verify"] == ""
+
+
+def test_extract_issue_sections_missing_fix(panel):
+    """Fix section is required, raises ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("### What\nSome finding\n\n### Verify\nCheck it\n")
+
+
+def test_extract_issue_sections_file_path_backtick(panel):
+    """Extracts path.py:42 from What section."""
+    from utils import extract_issue_sections
+    body = "### What\n`src/core/auth.py:L128`\n\n### Fix\nUpdate auth\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] == "src/core/auth.py"
+
+
+def test_extract_issue_sections_no_backtick_path(panel):
+    """No backtick path → file_path is None."""
+    from utils import extract_issue_sections
+    body = "### What\nSome plain text finding\n\n### Fix\nDo it\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] is None
+
+
+def test_extract_issue_sections_empty_body(panel):
+    """Empty issue body → ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("")
+
+
+def test_extract_issue_sections_no_sections(panel):
+    """Issue body has no ### headings → ValueError."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections("Just some free text without headings.")
+
+
+def test_extract_issue_sections_none_input(panel):
+    """None input → ValueError (spec Section 10: Failure modes)."""
+    from utils import extract_issue_sections
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        extract_issue_sections(None)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: run_fix_mode_issue() — unit tests
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_run_fix_mode_issue_happy_path(panel):
+    """Mock gh to return structured issue body, verify coder is spawned."""
+    from unittest.mock import patch, ANY
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "### What\n[RELIABILITY] utils.py:42: Naming issue\n\n### Fix\nRename function\n\n### Verify\nRun tests\n",
+        "title": "SHOULD FIX: Naming conventions"
+    })
+
+    gh_calls = []
+    git_calls = []
+
+    def mock_gh(*args, **kwargs):
+        gh_calls.append(args)
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        if "issue" in args and "create" in args:
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, 'git', side_effect=mock_git):
+            with patch.object(_pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}):
+                with patch.object(_pipeline, 'run_phase3_vet', return_value={"coder_failed": False}):
+                    with patch.object(_pipeline, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "https://github.com/t/t/pull/99"}):
+                        with patch.object(_pipeline, '_set_gh_token'):
+                            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                                with patch('sys.stdout'):
+                                    _pipeline.run_fix_mode_issue("/tmp/test", 42)
+
+    # Verify gh issue view was called with issue 42
+    view_calls = [c for c in gh_calls if "view" in c and "42" in map(str, c)]
+    assert len(view_calls) >= 1, "Expected gh issue view for #42"
+
+    # Verify fix/issue-42 branch was created
+    branch_calls = [c for c in git_calls if "fix/issue-42" in " ".join(map(str, c))]
+    assert len(branch_calls) >= 1, "Expected fix/issue-42 branch checkout"
+
+
+def test_run_fix_mode_issue_nonexistent(panel):
+    """gh returns non-zero for issue fetch → prints error, exits cleanly."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return ("", "not found", 1)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch('sys.stdout'):
+                    # Should not raise — exits cleanly
+                    _pipeline.run_fix_mode_issue("/tmp/test", 999)
+
+
+def test_run_fix_mode_issue_no_sections(panel):
+    """Issue body has no ### What / ### Fix → prints error."""
+    from unittest.mock import patch
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "Just some free-form text without structured sections.",
+        "title": "Random issue"
+    })
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch('sys.stdout'):
+                    # Should not raise — exits cleanly
+                    _pipeline.run_fix_mode_issue("/tmp/test", 77)
+
+
+def test_run_fix_mode_issue_branch_created(panel):
+    """Verify fix/issue-{N} branch name pattern is created."""
+    from unittest.mock import patch
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "### What\nFix something\n\n### Fix\nDo it\n",
+        "title": "Test issue"
+    })
+
+    git_calls = []
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        return ("", "", 0)
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, 'git', side_effect=mock_git):
+            with patch.object(_pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}):
+                with patch.object(_pipeline, 'run_phase3_vet', return_value={"coder_failed": False}):
+                    with patch.object(_pipeline, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "https://github.com/t/t/pull/99"}):
+                        with patch.object(_pipeline, '_set_gh_token'):
+                            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                                with patch('sys.stdout'):
+                                    _pipeline.run_fix_mode_issue("/tmp/test", 55)
+
+    branch_names = []
+    for call in git_calls:
+        for i, arg in enumerate(call):
+            if arg == "-b" and i + 1 < len(call):
+                branch_names.append(call[i + 1])
+    assert "fix/issue-55" in branch_names, f"Expected fix/issue-55 branch, got: {branch_names}"
+
+
+def test_extract_issue_sections_multiple_file_paths(panel):
+    """Multiple backtick paths → first one returned."""
+    from utils import extract_issue_sections
+    body = "### What\n`src/a.py` and also `src/b.py`\n\n### Fix\nFix both\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] == "src/a.py"
+
+
+def test_extract_issue_sections_code_block_not_extracted(panel):
+    """Backtick in triple-backtick code block → NOT extracted as file path."""
+    from utils import extract_issue_sections
+    body = "### What\n```\nnot_a_real_file.py\n```\nReal finding\n\n### Fix\nDo it\n"
+    result = extract_issue_sections(body)
+    # The code block should be stripped from content
+    assert "not_a_real_file.py" not in result["what"]
