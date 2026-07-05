@@ -48,7 +48,7 @@ from roadmap import (parse_roadmap, pick_next_feature, update_roadmap_status,
                      run_add_to_roadmap, run_next_setup, run_init)
 from pipeline import (run_pipeline, run_phase1_strategist, run_phase2_coder,
                       run_phase3_vet, run_phase4_nm, run_phase5_tech_lead,
-                      run_fix_mode, run_post_pipeline,
+                      run_fix_mode, run_fix_mode_issue, run_post_pipeline,
                       discover_blocked_pr, extract_blockers_from_pr,
                       _verify_pr_impact_alignment)
 
