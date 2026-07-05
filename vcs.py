@@ -187,3 +187,63 @@ def vcs_pr_diff(pr_num, stat_only=False):
         if stat_only:
             args.append("--stat")
         return _run_vcs(*args)
+
+
+# ── Issue Operations ────────────────────────────────────────────────
+
+def vcs_issue_create(title, body, labels=None):
+    """Create an issue.
+
+    Returns (stdout, stderr, returncode).
+    """
+    if VCS_BACKEND == "gitlab":
+        args = ["glab", "issue", "create", "--title", title, "--description", body]
+        if labels:
+            args.extend(["--label", labels])
+        return _run_vcs(*args)
+    else:
+        args = ["gh", "issue", "create", "--title", title, "--body", body]
+        if labels:
+            args.extend(["--label", labels])
+        return _run_vcs(*args)
+
+
+def vcs_issue_view(issue_num, fields="body,title"):
+    """View issue details as JSON.
+
+    Returns (stdout, stderr, returncode).
+    """
+    if VCS_BACKEND == "gitlab":
+        return _run_vcs("glab", "issue", "view", str(issue_num))
+    else:
+        return _run_vcs("gh", "issue", "view", str(issue_num), "--json", fields)
+
+
+# ── Release Operations ──────────────────────────────────────────────
+
+def vcs_release_create(tag, title, target, generate_notes=True):
+    """Create a release — GitHub only.
+
+    On GitLab, returns error since release workflow is GitHub-only.
+    Returns (stdout, stderr, returncode).
+    """
+    if VCS_BACKEND == "gitlab":
+        return "", "Error: Release workflow is GitHub-only. GitLab releases are not yet supported.", 1
+    else:
+        args = ["gh", "release", "create", tag, "--title", title, "--target", target]
+        if generate_notes:
+            args.append("--generate-notes")
+        return _run_vcs(*args)
+
+
+# ── Repo Operations ─────────────────────────────────────────────────
+
+def vcs_repo_clone(repo_slug, target_dir):
+    """Clone a repository using the VCS CLI.
+
+    Returns (stdout, stderr, returncode).
+    """
+    if VCS_BACKEND == "gitlab":
+        return _run_vcs("glab", "repo", "clone", repo_slug, target_dir)
+    else:
+        return _run_vcs("gh", "repo", "clone", repo_slug, target_dir)
