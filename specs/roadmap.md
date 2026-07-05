@@ -158,7 +158,7 @@
 ### F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.
 **Priority:** P2
 **Dependencies:** F032
-**Status:** [ ] Pending
+**Status:** [~] In Progress
 **User Story:** As a user, I can dokima fix --issue n: pull github issue body, extract file/line/fix/verify from structured format, spawn coder to implement. also upgrade should fix issue creation to include what/fix/verify sections for coder-readability.
 
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
