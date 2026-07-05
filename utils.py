@@ -2157,6 +2157,118 @@ def extract_should_fix_from_text(text):
     return deduped
 
 
+def extract_issue_sections(issue_body):
+    """Extract ### What, ### Fix, ### Verify sections from a structured GitHub issue body.
+
+    Parses heading-based sections (### What, ### Fix, ### Verify) and extracts
+    the file path from backtick-quoted references in the ### What section.
+
+    Args:
+        issue_body: The full issue body as a string.
+
+    Returns:
+        dict with keys: what, fix, verify, file_path.
+        - what, fix, verify: str (fix is required, verify defaults to "")
+        - file_path: str or None — first backtick-quoted file path found in 'what',
+          stripped of line numbers. None if no file path found.
+
+    Raises:
+        ValueError: If issue_body is empty/None/whitespace, has no ### headings,
+                    or is missing a non-empty ### Fix section.
+    """
+    if not issue_body or not str(issue_body).strip():
+        raise ValueError("issue body is empty or None")
+    text = str(issue_body)
+
+    # Check that at least one ### heading exists
+    if not re.search(r'^###\s', text, re.MULTILINE):
+        raise ValueError("issue body has no structured sections (### headings)")
+
+    # Extract each section independently (order-independent)
+    # Pattern: ### SectionName \n content (until next ### or end)
+    def _extract_section(body, heading):
+        pat = r'^###\s+' + re.escape(heading) + r'\n(.+?)(?=\n###\s|\Z)'
+        m = re.search(pat, body, re.DOTALL | re.MULTILINE)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    what_section = _extract_section(text, "What")
+    fix_section = _extract_section(text, "Fix")
+    verify_section = _extract_section(text, "Verify")
+
+    # Fix section is required and must be non-empty
+    if not fix_section or not fix_section.strip():
+        raise ValueError("missing or empty ### Fix section (required)")
+
+    # What section defaults to empty if missing (best-effort)
+    what_text = what_section.strip() if what_section else ""
+    fix_text = fix_section.strip()
+    verify_text = verify_section.strip() if verify_section else ""
+
+    # Extract file path from ### What section
+    file_path = _extract_file_path_from_what(what_text)
+
+    return {
+        "what": what_text,
+        "fix": fix_text,
+        "verify": verify_text,
+        "file_path": file_path,
+    }
+
+
+def _extract_file_path_from_what(what_text):
+    """Extract the first backtick-quoted file path from the What section text.
+
+    Strips triple-backtick code blocks first, then searches for single-backtick
+    patterns containing a file extension. Strips line numbers (colon suffix).
+    Returns None if no valid file path is found.
+
+    Handles:
+        `utils.py:42` → "utils.py"
+        `src/core/auth.py:L128` → "src/core/auth.py"
+        `README.md` → "README.md"
+        `frontend/app.js` (first of many) → "frontend/app.js"
+        `some_script` (no extension) → ignored
+        ```python ... `hidden.py` ... ``` → NOT extracted (in code block)
+    """
+    if not what_text:
+        return None
+
+    # Strip triple-backtick code blocks so we don't extract files from code examples
+    no_code_blocks = re.sub(r'```.*?```', '', what_text, flags=re.DOTALL)
+
+    # Match single backtick content: `file.path[:NN]` or `file.path[:LNN]`
+    # Must contain a dot followed by a known file extension (2-6 chars)
+    backtick_pattern = re.compile(
+        r'`([^`]*?\.[a-zA-Z]{2,6}(?::(?:\d+|L\d+))?)`'
+    )
+    for match in backtick_pattern.finditer(no_code_blocks):
+        content = match.group(1)
+        # Strip line number suffix (e.g., :42, :L128)
+        file_candidate = re.sub(r':(?:L?\d+)$', '', content)
+        # Verify it still has an extension after stripping line number
+        if '.' in file_candidate:
+            ext = file_candidate.rsplit('.', 1)[-1]
+            if 2 <= len(ext) <= 6 and ext.isalpha():
+                return file_candidate
+
+    # Fallback: handle unclosed backtick (e.g., `broken.py without closing)
+    # Look for backtick followed by file-like text before end of line or space
+    fallback_pattern = re.compile(r'`([^\s`]*?\.[a-zA-Z]{2,6})')
+    fallback_match = fallback_pattern.search(no_code_blocks)
+    if fallback_match:
+        content = fallback_match.group(1)
+        # Strip line number
+        file_candidate = re.sub(r':(?:L?\d+)$', '', content)
+        if '.' in file_candidate:
+            ext = file_candidate.rsplit('.', 1)[-1]
+            if 2 <= len(ext) <= 6 and ext.isalpha():
+                return file_candidate
+
+    return None
+
+
 def _extract_convention_rules(blocker_lines):
     """Filter TL blocker lines to pattern-violation convention rules.
 

@@ -35,6 +35,7 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    _extract_tl_verdict, _extract_tl_blockers,
                    _extract_convention_rules, _append_convention_rules,
                    extract_should_fix_from_text,
+                   extract_issue_sections,
                    halt_and_revert, archive_specs_for_feature,
                    ensure_profiles, deploy_profile_skills)
 from agent import (call_agent, spawn_agent, _run_agent,
