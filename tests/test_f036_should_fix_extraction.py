@@ -572,3 +572,158 @@ class TestPipelineWiringShouldFix:
 
         assert len(issue_calls) <= 5, \
             f"Should create at most 5 issues, got {len(issue_calls)}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F034: Upgraded SHOULD FIX issue body format tests
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_should_fix_issue_body_has_what_section(panel):
+    """Newly created SHOULD FIX issues must have ### What section."""
+    from unittest.mock import patch
+
+    issue_bodies = []
+    def gh_se(*args, **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "pr":
+            return ("", "", 1)
+        if cmd == "api":
+            return ("", "", 0)
+        if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+            for i, a in enumerate(args):
+                if a == "--body" and i + 1 < len(args):
+                    issue_bodies.append(args[i + 1])
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    panel.gh = gh_se
+    panel.git = lambda *a, **kw: ("", "", 0)
+    panel._set_gh_token = lambda *a, **kw: None
+    panel.load_key = lambda: "fk"
+    panel.load_github_token = lambda: "ft"
+    panel.detect_repo = lambda: "t/t"
+    panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+    with patch("time.sleep"), \
+         patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+        panel.run_phase5_tech_lead(
+            "Test Feature", "https://github.com/t/t/pull/1",
+            "feat/test", "/tmp/spec.md", "LOW"
+        )
+
+    assert len(issue_bodies) >= 1, "Expected at least 1 issue created"
+    for body in issue_bodies:
+        assert "### What" in body, f"Issue body should have ### What section, got: {body[:200]}"
+
+
+def test_should_fix_issue_body_has_fix_section(panel):
+    """Newly created SHOULD FIX issues must have ### Fix section."""
+    from unittest.mock import patch
+
+    issue_bodies = []
+    def gh_se(*args, **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "pr":
+            return ("", "", 1)
+        if cmd == "api":
+            return ("", "", 0)
+        if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+            for i, a in enumerate(args):
+                if a == "--body" and i + 1 < len(args):
+                    issue_bodies.append(args[i + 1])
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    panel.gh = gh_se
+    panel.git = lambda *a, **kw: ("", "", 0)
+    panel._set_gh_token = lambda *a, **kw: None
+    panel.load_key = lambda: "fk"
+    panel.load_github_token = lambda: "ft"
+    panel.detect_repo = lambda: "t/t"
+    panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+    with patch("time.sleep"), \
+         patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+        panel.run_phase5_tech_lead(
+            "Test Feature", "https://github.com/t/t/pull/1",
+            "feat/test", "/tmp/spec.md", "LOW"
+        )
+
+    for body in issue_bodies:
+        assert "### Fix" in body, f"Issue body should have ### Fix section, got: {body[:200]}"
+
+
+def test_should_fix_issue_body_has_verify_section(panel):
+    """Newly created SHOULD FIX issues must have ### Verify section."""
+    from unittest.mock import patch
+
+    issue_bodies = []
+    def gh_se(*args, **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "pr":
+            return ("", "", 1)
+        if cmd == "api":
+            return ("", "", 0)
+        if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+            for i, a in enumerate(args):
+                if a == "--body" and i + 1 < len(args):
+                    issue_bodies.append(args[i + 1])
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    panel.gh = gh_se
+    panel.git = lambda *a, **kw: ("", "", 0)
+    panel._set_gh_token = lambda *a, **kw: None
+    panel.load_key = lambda: "fk"
+    panel.load_github_token = lambda: "ft"
+    panel.detect_repo = lambda: "t/t"
+    panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+    with patch("time.sleep"), \
+         patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+        panel.run_phase5_tech_lead(
+            "Test Feature", "https://github.com/t/t/pull/1",
+            "feat/test", "/tmp/spec.md", "LOW"
+        )
+
+    for body in issue_bodies:
+        assert "### Verify" in body, f"Issue body should have ### Verify section, got: {body[:200]}"
+
+
+def test_should_fix_issue_body_has_source_section(panel):
+    """Newly created SHOULD FIX issues must have ### Source section with PR link."""
+    from unittest.mock import patch
+
+    issue_bodies = []
+    def gh_se(*args, **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "pr":
+            return ("", "", 1)
+        if cmd == "api":
+            return ("", "", 0)
+        if cmd == "issue" and len(args) >= 2 and args[1] == "create":
+            for i, a in enumerate(args):
+                if a == "--body" and i + 1 < len(args):
+                    issue_bodies.append(args[i + 1])
+            return ("https://github.com/t/t/issues/99", "", 0)
+        return ("", "", 0)
+
+    panel.gh = gh_se
+    panel.git = lambda *a, **kw: ("", "", 0)
+    panel._set_gh_token = lambda *a, **kw: None
+    panel.load_key = lambda: "fk"
+    panel.load_github_token = lambda: "ft"
+    panel.detect_repo = lambda: "t/t"
+    panel.call_agent = lambda *a, **kw: {"content": "Mock", "tokens": 1}
+
+    with patch("time.sleep"), \
+         patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
+        panel.run_phase5_tech_lead(
+            "Test Feature", "https://github.com/t/t/pull/1",
+            "feat/test", "/tmp/spec.md", "LOW"
+        )
+
+    for body in issue_bodies:
+        assert "### Source" in body, f"Issue body should have ### Source section, got: {body[:200]}"
+        assert "pull/1" in body, f"Source should include PR link, got: {body[:200]}"
