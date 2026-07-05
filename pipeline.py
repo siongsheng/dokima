@@ -52,6 +52,22 @@ def _make_map_hint(project_dir):
     """Generate a codebase-map hint string for agent prompts.
     Returns empty string if map doesn't exist or is 0 bytes.
     Best-effort — never blocks the pipeline."""
+
+
+def _depth_section(confidence, impact, depth):
+    """Generate a ## Depth section explaining which phases ran and why."""
+    phase_map = {
+        "coder": "Strategist → Coder (no verification)",
+        "vet": "Strategist → Coder → vet (build + tests)",
+        "vet+nm": "Strategist → Coder → vet → nm (adversarial review)",
+        "full": "Strategist → Coder → vet → nm → Tech Lead (all phases)",
+    }
+    phases = phase_map.get(depth, f"Strategist → Coder (depth={depth})")
+    return (
+        f"## Depth\n"
+        f"Confidence: {confidence} × Impact: {impact} → **{depth}**\n"
+        f"Phases run: {phases}\n"
+    )
     map_path = os.path.join(project_dir, "specs", "codebase-map.md")
     if not os.path.exists(map_path):
         return ""
@@ -837,7 +853,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     }
 
 
-def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
+def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, confidence="High", depth="vet"):
     """Phase 3: vet — checkout branch, run tests, run build, create PR, merge worktrees.
     Returns dict with: nm_output, pr_url, coder_failed, verdict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -988,7 +1004,7 @@ Report: what was broken, what you fixed, commit hash."""
     passed_str = f"{tests_passed}/{total_tests}" if total_tests != "?" else f"{tests_passed} passed"
     pr_body = (
         f"{pr_sections_final}\n\n"
-        f"## Validation\n"
+        f"## Depth\nConfidence: {confidence} × Impact: {impact} → **{depth}**\n\n## Validation\n"
         f"- {passed_str} tests\n"
         f"- Build passes\n"
     )
