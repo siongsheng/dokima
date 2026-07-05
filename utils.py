@@ -2074,6 +2074,47 @@ def _extract_tl_blockers(tl_output: str) -> list[str]:
     return merged[:10]
 
 
+def format_blocker_cross_reference(blockers, fix_pr_url, fix_verdict):
+    """Format blocker list with cross-reference to the resolution PR.
+
+    Args:
+        blockers: List of blocker description strings.
+        fix_pr_url: URL of the fix PR.
+        fix_verdict: TL verdict — APPROVED, BLOCKED, or UNKNOWN.
+
+    Returns:
+        Markdown string with blockers formatted per verdict.
+        - APPROVED: ~~blocker~~ → resolved by <fix_pr_url>
+        - BLOCKED:  blocker → unresolved
+        - UNKNOWN:  blockers unchanged
+        Already-resolved blockers (containing ~~) are left unchanged.
+    """
+    if not blockers:
+        return ""
+
+    if isinstance(blockers, str):
+        blockers = [blockers]
+
+    results = []
+    for b in blockers:
+        b = str(b).strip()
+        if not b:
+            continue
+        # Skip already-resolved blockers
+        if "~~" in b:
+            results.append(b)
+            continue
+
+        if fix_verdict == "APPROVED":
+            results.append(f"~~{b}~~ → resolved by {fix_pr_url}")
+        elif fix_verdict == "BLOCKED":
+            results.append(f"{b} → unresolved")
+        else:  # UNKNOWN or any other
+            results.append(b)
+
+    return "\n".join(results)
+
+
 def extract_should_fix_from_text(text):
     """Extract SHOULD FIX findings from any text source (TL output, PR review, nm stdout).
 
