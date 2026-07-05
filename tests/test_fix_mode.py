@@ -534,3 +534,84 @@ def test_run_fix_mode_issue_nonexistent(panel):
                 with patch('sys.stdout'):
                     # Should not raise — exits cleanly
                     _pipeline.run_fix_mode_issue("/tmp/test", 999)
+
+
+def test_run_fix_mode_issue_no_sections(panel):
+    """Issue body has no ### What / ### Fix → prints error."""
+    from unittest.mock import patch
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "Just some free-form text without structured sections.",
+        "title": "Random issue"
+    })
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch('sys.stdout'):
+                    # Should not raise — exits cleanly
+                    _pipeline.run_fix_mode_issue("/tmp/test", 77)
+
+
+def test_run_fix_mode_issue_branch_created(panel):
+    """Verify fix/issue-{N} branch name pattern is created."""
+    from unittest.mock import patch
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "### What\nFix something\n\n### Fix\nDo it\n",
+        "title": "Test issue"
+    })
+
+    git_calls = []
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        return ("", "", 0)
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, 'git', side_effect=mock_git):
+            with patch.object(_pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}):
+                with patch.object(_pipeline, 'run_phase3_vet', return_value={"coder_failed": False}):
+                    with patch.object(_pipeline, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "https://github.com/t/t/pull/99"}):
+                        with patch.object(_pipeline, '_set_gh_token'):
+                            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                                with patch('sys.stdout'):
+                                    _pipeline.run_fix_mode_issue("/tmp/test", 55)
+
+    branch_names = []
+    for call in git_calls:
+        for i, arg in enumerate(call):
+            if arg == "-b" and i + 1 < len(call):
+                branch_names.append(call[i + 1])
+    assert "fix/issue-55" in branch_names, f"Expected fix/issue-55 branch, got: {branch_names}"
+
+
+def test_extract_issue_sections_multiple_file_paths(panel):
+    """Multiple backtick paths → first one returned."""
+    from utils import extract_issue_sections
+    body = "### What\n`src/a.py` and also `src/b.py`\n\n### Fix\nFix both\n"
+    result = extract_issue_sections(body)
+    assert result["file_path"] == "src/a.py"
+
+
+def test_extract_issue_sections_code_block_not_extracted(panel):
+    """Backtick in triple-backtick code block → NOT extracted as file path."""
+    from utils import extract_issue_sections
+    body = "### What\n```\nnot_a_real_file.py\n```\nReal finding\n\n### Fix\nDo it\n"
+    result = extract_issue_sections(body)
+    # The code block should be stripped from content
+    assert "not_a_real_file.py" not in result["what"]
