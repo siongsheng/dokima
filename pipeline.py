@@ -247,10 +247,12 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     Falls back to PR comments if pr_number provided."""
     global REPO
     blockers = []
+    blockers_section_matched = False
 
     # Primary: ### Blockers section
     blockers_section = re.search(r'### Blockers\s*\n(.*?)(?=\n### |\n## |\Z)', pr_body, re.DOTALL)
     if blockers_section:
+        blockers_section_matched = True
         section_text = blockers_section.group(1)
         for line in section_text.split("\n"):
             line = line.strip()
