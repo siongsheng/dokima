@@ -506,14 +506,14 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
     # The TL review may include commentary, verdicts, and release notes under ### Blockers.
     # Only keep lines that look like actual blockers: contain 🔴 BLOCKER, or start with "BLOCKER",
     # or are in table format with a BLOCKER label.
-    code_blockers = [b for b in code_blockers
-                     if "🔴 BLOCKER" in b
-                     or re.search(r'^\|.*BLOCKER.*\|', b)
-                     or b.upper().startswith("BLOCKER")
-                     or "BLOCKER:" in b
-                     or "BLOCKER detail" in b
-                     or re.search(r'\*\*BLOCKER\b', b)]
-
+#    code_blockers = [b for b in code_blockers
+#                     if "🔴 BLOCKER" in b
+#                     or re.search(r'^\|.*BLOCKER.*\|', b)
+#                     or b.upper().startswith("BLOCKER")
+#                     or "BLOCKER:" in b
+#                     or "BLOCKER detail" in b
+#                     or re.search(r'\*\*BLOCKER\b', b)]
+#
     if arch_blockers:
         print(f"  ⚠ Architectural blockers (skipped — require human decision):", flush=True)
         for b in arch_blockers:
