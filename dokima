@@ -191,6 +191,7 @@ def main():
         fix_p = subparsers.add_parser("fix", add_help=False)
         fix_p.add_argument("dir", nargs="?", default=None)
         fix_p.add_argument("--fix-all", action="store_true")
+        fix_p.add_argument("--issue", type=int, default=None)
         fix_p.add_argument("--skip-human-gate", action="store_true")
         fix_p.add_argument("--skip-autofix", action="store_true")
         fix_p.add_argument("--force-full", action="store_true")
@@ -328,6 +329,7 @@ def main():
             PROJECT_DIR = os.path.abspath(args.dir) if args.dir else os.getcwd()
             PANEL_FEATURE = f"fix: {PROJECT_DIR}"
             fix_all = getattr(args, "fix_all", False) or False
+            issue = getattr(args, "issue", None)
             skip_autofix = getattr(args, "skip_autofix", False) or False
             force_full = getattr(args, "force_full", False) or False
             skip_auto_archive = False
@@ -611,7 +613,7 @@ def main():
     # ── FIX MODE: early dispatch ──
     if is_fix:
         # Use _pipeline reference so test patches on pipeline module take effect
-        _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate)
+        _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate, issue=issue)
         _cleanup_lock()
         return
 
