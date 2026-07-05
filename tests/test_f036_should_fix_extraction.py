@@ -1208,9 +1208,9 @@ class TestWhatLineFormatVariations:
 
         assert len(issue_bodies) >= 1
         found = any(
-            "config.py:10:" in b and "Update defaults" in b for b in issue_bodies
+            "config.py:10" in b and "Update defaults" in b for b in issue_bodies
         )
-        assert found, f"Expected loc: desc format: {issue_bodies}"
+        assert found, f"Expected dimension-as-location format: {issue_bodies}"
 
     def test_no_dim_no_loc_uses_plain_desc(self, panel):
         """No dim, no loc -> desc used as-is in What section."""
