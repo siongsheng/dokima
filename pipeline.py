@@ -286,6 +286,59 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
+def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
+                           create_blocker_issues=False):
+    """Create GitHub issues for each blocker (mirrors SHOULD FIX pattern).
+
+    Best-effort: failures log warnings, never block the pipeline.
+    Guarded by create_blocker_issues flag (off by default).
+
+    Returns list of issue URLs created.
+    """
+    if not create_blocker_issues:
+        return []
+    if not blockers:
+        return []
+
+    urls = []
+    for desc in blockers:
+        desc = str(desc).strip()
+        if not desc:
+            continue
+
+        title = f"BLOCKER: {desc[:72]}"
+        body_lines = [
+            "## What",
+            f"Blocker identified during TL review of PR #{pr_num}",
+            "",
+            "## Fix",
+            desc,
+            "",
+            "## Verify",
+            "- [ ] Re-run TL review to confirm resolution",
+            "",
+            "## Source",
+            f"- PR: {pr_url}",
+            f"- Branch: {branch}",
+        ]
+        if spec_path:
+            body_lines.append(f"- Spec: {spec_path}")
+
+        body = "\n".join(body_lines)
+        stdout, stderr, rc = vcs.vcs_issue_create(title, body, labels="blocker")
+
+        if rc == 0:
+            # Extract URL from stdout (gh prints the issue URL)
+            url = stdout.strip() if stdout else ""
+            urls.append(url)
+            print(f"  Created blocker issue: {url}", flush=True)
+        else:
+            print(f"  ⚠ Could not create blocker issue for '{desc[:60]}': {stderr[:200]}",
+                  flush=True)
+
+    return urls
+
+
 def run_fix_mode_issue(project_dir, issue_number):
     """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
 
