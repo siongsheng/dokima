@@ -586,3 +586,17 @@ class TestTlPromptGitlab:
         import pipeline
         # Verify vcs is accessible from pipeline context
         assert 'vcs' in dir(pipeline) or hasattr(pipeline, 'vcs')
+
+
+class TestRoadmapVcsMigration:
+    """roadmap.py uses vcs.*() instead of gh() for PR operations."""
+
+    def test_roadmap_imports_vcs(self):
+        """roadmap.py imports vcs module."""
+        import roadmap
+        assert 'vcs' in dir(roadmap) or hasattr(roadmap, 'vcs')
+
+    def test_roadmap_importable(self):
+        """roadmap module is importable after migration."""
+        import roadmap
+        assert roadmap is not None
