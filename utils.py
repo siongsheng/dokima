@@ -192,7 +192,7 @@ def _redact_secrets(text):
     if not text:
         return text
     tokens = []
-    for env_name in ("GH_TOKEN", "GITHUB_TOKEN", "API_SERVER_KEY"):
+    for env_name in ("GH_TOKEN", "GITHUB_TOKEN", "API_SERVER_KEY", "GLAB_TOKEN", "GITLAB_TOKEN"):
         val = os.environ.get(env_name, "")
         if val:
             tokens.append(val)
@@ -571,7 +571,7 @@ def _check_pr_body_quality(spec_text: str, failures: list) -> None:
         )
 
 def detect_repo():
-    """Extract owner/repo from git remote origin."""
+    """Extract owner/repo from git remote origin. Supports GitHub and GitLab."""
     # Allow test patching via dokima.detect_repo override (F022b)
     dokima_mod = _IMPORTING_PANEL
     if dokima_mod is not None:
@@ -582,10 +582,16 @@ def detect_repo():
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10)
     if result.returncode == 0:
         url = result.stdout.strip()
+        # GitHub: github.com[:/]owner/repo(.git)?
         m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
         if m:
             return m.group(1)
-    print("WARNING: Could not detect GitHub repo from git remote. Some gh commands may fail.")
+        # GitLab: gitlab.*[:/]namespace/project(.git)?
+        # Supports subgroups: group/subgroup/project
+        m = re.search(r'gitlab\.[^:/]+[:/](.+?)(?:\.git)?$', url)
+        if m:
+            return m.group(1)
+    print("WARNING: Could not detect repo from git remote. Some VCS commands may fail.")
     return None
 
 def detect_commands():
@@ -900,11 +906,53 @@ def _detect_default_branch(project_dir):
         pass
     return "master"
 
+def _set_vcs_token():
+    """Load the appropriate VCS token based on VCS_BACKEND and export to environment.
+
+    For GitHub: loads GH_TOKEN. For GitLab: loads GITLAB_TOKEN or GLAB_TOKEN.
+    """
+    # Auto-detect VCS from import if available
+    try:
+        import vcs
+        backend = vcs.VCS_BACKEND
+    except ImportError:
+        backend = "github"
+
+    if backend == "gitlab":
+        # Try GITLAB_TOKEN first, then GLAB_TOKEN
+        for env_var in ("GITLAB_TOKEN", "GLAB_TOKEN"):
+            from_profiles = _load_token_from_env_file(env_var)
+            if from_profiles:
+                os.environ[env_var] = from_profiles
+                return
+        # If neither found in profiles, check if already in env
+        if os.environ.get("GITLAB_TOKEN"):
+            return
+        if os.environ.get("GLAB_TOKEN"):
+            return
+    else:
+        # GitHub (default)
+        gh_token = load_github_token()
+        if gh_token:
+            os.environ["GH_TOKEN"] = gh_token
+
+
+def _load_token_from_env_file(env_var_name):
+    """Load a token from profiles/work/.env by env var name."""
+    env_path = os.path.join(PROFILES, "work", ".env")
+    if not os.path.exists(env_path):
+        return ""
+    prefix = env_var_name + '='
+    with open(env_path) as f:
+        for line in f:
+            if line.startswith(prefix) and not line.startswith("#"):
+                return line.strip().split("=", 1)[1]
+    return ""
+
+
 def _set_gh_token():
-    """Load GH_TOKEN and export to environment if available."""
-    gh_token = load_github_token()
-    if gh_token:
-        os.environ["GH_TOKEN"] = gh_token
+    """Backward-compatible alias for _set_vcs_token()."""
+    _set_vcs_token()
 
 def show_help():
     print(HELP_TEXT)
