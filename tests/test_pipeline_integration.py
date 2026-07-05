@@ -239,7 +239,7 @@ class TestStrategistCoderHandoff:
 
 # ── F019: Data-driven execution mode — integration tests ─────────
 
-# Strategist spec that produces a DAG with 3 parallel tasks, 2 distinct files.
+# Strategist spec that produces a DAG with 3 parallel tasks, 3 distinct files (no overlap).
 # compute_execution_mode() → "single_session" (≤10 tasks, ≤3 files, all parallel)
 STRAT_SPEC_SINGLE_SESSION = """# Test Feature: Batch
 
@@ -286,7 +286,7 @@ README: No change needed.
 **Description:** Small change to module B.
 
 ### Task 3: Add tests
-**Files:** src/a.py
+**Files:** tests/test_a.py
 **Dependencies:** [none]
 **Parallelizable:** yes
 **Description:** Add tests for changes.

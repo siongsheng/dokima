@@ -82,6 +82,30 @@ class TestDetect:
             repo = panel.detect_repo()
             assert repo is None
 
+    def test_detect_repo_gitlab_ssh(self, panel, tmpdir):
+        """git@gitlab.com:group/project.git → 'group/project'"""
+        project_dir = _setup(tmpdir, panel)
+        mock_result = type("R", (), {"returncode": 0, "stdout": "git@gitlab.com:group/project.git\n", "stderr": ""})()
+        with patch("subprocess.run", return_value=mock_result):
+            repo = panel.detect_repo()
+            assert repo == "group/project"
+
+    def test_detect_repo_gitlab_https(self, panel, tmpdir):
+        """https://gitlab.com/group/project.git → 'group/project'"""
+        project_dir = _setup(tmpdir, panel)
+        mock_result = type("R", (), {"returncode": 0, "stdout": "https://gitlab.com/group/project.git\n", "stderr": ""})()
+        with patch("subprocess.run", return_value=mock_result):
+            repo = panel.detect_repo()
+            assert repo == "group/project"
+
+    def test_detect_repo_gitlab_subgroup(self, panel, tmpdir):
+        """git@gitlab.com:group/subgroup/project.git → 'group/subgroup/project'"""
+        project_dir = _setup(tmpdir, panel)
+        mock_result = type("R", (), {"returncode": 0, "stdout": "git@gitlab.com:group/subgroup/project.git\n", "stderr": ""})()
+        with patch("subprocess.run", return_value=mock_result):
+            repo = panel.detect_repo()
+            assert repo == "group/subgroup/project"
+
 
 # ═══════════════════════════════════════════════════════════════════
 # Continuous loop: continue_loop decisions

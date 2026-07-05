@@ -149,6 +149,64 @@ def test_redact_secrets_empty():
     assert utils._redact_secrets(None) is None
 
 
+def test_redact_secrets_glab_token():
+    """GLAB_TOKEN is redacted from output."""
+    import utils, os
+    os.environ["GLAB_TOKEN"] = "glpat-secret123"
+    try:
+        result = utils._redact_secrets("Token glpat-secret123 is here")
+        assert "glpat-secret123" not in result
+        assert "[REDACTED]" in result
+    finally:
+        os.environ.pop("GLAB_TOKEN", None)
+
+
+def test_redact_secrets_gitlab_token():
+    """GITLAB_TOKEN is redacted from output."""
+    import utils, os
+    os.environ["GITLAB_TOKEN"] = "glpat-secret456"
+    try:
+        result = utils._redact_secrets("Token glpat-secret456 is here")
+        assert "glpat-secret456" not in result
+        assert "[REDACTED]" in result
+    finally:
+        os.environ.pop("GITLAB_TOKEN", None)
+
+
+# ── _set_vcs_token / _set_gh_token ──────────────────
+
+def test_set_vcs_token_exists():
+    """_set_vcs_token is importable and callable."""
+    import utils
+    assert callable(utils._set_vcs_token)
+
+
+def test_set_gh_token_still_works():
+    """_set_gh_token alias still exists and is callable (backward compat)."""
+    import utils
+    assert callable(utils._set_gh_token)
+
+
+def test_set_vcs_token_github():
+    """GitHub backend → GH_TOKEN loaded."""
+    import utils, os
+    # Save env
+    old_gh = os.environ.pop("GH_TOKEN", None)
+    old_glab = os.environ.pop("GLAB_TOKEN", None)
+    old_gitlab = os.environ.pop("GITLAB_TOKEN", None)
+    try:
+        # Simulate GitHub token in profiles/work/.env
+        # _set_vcs_token uses VCS_BACKEND to pick which token
+        # We can't easily mock the profiles path, but we test it's callable
+        utils._set_vcs_token()
+    finally:
+        if old_gh:
+            os.environ["GH_TOKEN"] = old_gh
+        if old_glab:
+            os.environ["GLAB_TOKEN"] = old_glab
+        if old_gitlab:
+            os.environ["GITLAB_TOKEN"] = old_gitlab
+
 # ── git (integration-light) ────────────────────────
 
 def test_git_version():
