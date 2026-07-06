@@ -189,8 +189,14 @@ def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str):
     before the next feature's PR creation."""
     # Ensure we're on default branch
     rel_path = os.path.relpath(roadmap_path, PROJECT_DIR)
-    git("checkout", DEFAULT_BRANCH)
-    git("pull", "origin", DEFAULT_BRANCH)
+    _, stderr, rc = git("checkout", DEFAULT_BRANCH)
+    if rc != 0:
+        print(f"  ✗ Failed to checkout {DEFAULT_BRANCH}: {stderr[:200]}", flush=True)
+        return
+    _, stderr, rc = git("pull", "origin", DEFAULT_BRANCH)
+    if rc != 0:
+        print(f"  ✗ Failed to pull {DEFAULT_BRANCH}: {stderr[:200]}", flush=True)
+        return
     git("add", rel_path)
     # Also stage STATUS.md (written by update_status_md)
     status_rel = "specs/STATUS.md"
