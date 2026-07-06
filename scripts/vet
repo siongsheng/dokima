@@ -1,20 +1,46 @@
 #!/usr/bin/env bash
 # vet — Zero-AI-token build + test verification
 # Reads commands from AGENTS.md, runs them, reports pass/fail.
-# Usage: vet [project-dir]
+# Usage: vet [--verify-code] [project-dir]
+#   --verify-code: after test+build pass, run verify_imports.py (F039 real-code check)
+#   REAL_CODE_VERIFY=1 env var does the same as --verify-code
 #   project-dir: project root containing AGENTS.md (default: cwd)
 
 set -euo pipefail
 
-PROJECT_DIR="${1:-$(pwd)}"
+PROJECT_DIR=""
+VERIFY_CODE=false
+
+# ── Parse arguments ──
+for arg in "$@"; do
+    case "$arg" in
+        --verify-code)
+            VERIFY_CODE=true
+            ;;
+        *)
+            if [[ -z "$PROJECT_DIR" ]]; then
+                PROJECT_DIR="$arg"
+            fi
+            ;;
+    esac
+done
+
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 AGENTS_FILE="$PROJECT_DIR/AGENTS.md"
 TEST_CMD=""
 BUILD_CMD=""
+
+# ── Check REAL_CODE_VERIFY env var ──
+if [[ "${REAL_CODE_VERIFY:-}" == "1" ]]; then
+    VERIFY_CODE=true
+fi
 
 # ANSI codes
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "═══ vet — Build + Test Verification ═══"
 echo ""
@@ -92,10 +118,46 @@ else
 fi
 
 echo ""
-if $ALL_PASS; then
-    echo -e "${GREEN}✓ Verification passed${NC}"
-    exit 0
-else
+
+if ! $ALL_PASS; then
     echo -e "${RED}🔴 Verification FAILED${NC}"
     exit 1
 fi
+
+# ── F039: Real-code verification (--verify-code flag or REAL_CODE_VERIFY=1 env) ──
+if $VERIFY_CODE; then
+    # Look for verify_imports.py: project dir first, then script dir, then PATH
+    VERIFY_SCRIPT=""
+    if [[ -f "$PROJECT_DIR/scripts/verify_imports.py" ]]; then
+        VERIFY_SCRIPT="$PROJECT_DIR/scripts/verify_imports.py"
+    elif [[ -f "$SCRIPT_DIR/verify_imports.py" ]]; then
+        VERIFY_SCRIPT="$SCRIPT_DIR/verify_imports.py"
+    elif command -v verify_imports.py &>/dev/null; then
+        VERIFY_SCRIPT="verify_imports.py"
+    fi
+
+    if [[ -z "$VERIFY_SCRIPT" ]]; then
+        echo "  ⚠ verify_imports.py not found (checked project/scripts/, $SCRIPT_DIR/, and PATH)"
+        exit 1
+    fi
+    echo "  ⏳ Verifying real code (F039)..."
+
+    set +e
+    python3 "$VERIFY_SCRIPT" "$PROJECT_DIR"
+    VERIFY_EXIT=$?
+    set -e
+
+    if [[ $VERIFY_EXIT -eq 0 ]]; then
+        echo -e "  ${GREEN}✅ Real-code verification passed${NC}"
+    elif [[ $VERIFY_EXIT -eq 2 ]]; then
+        echo -e "  ${RED}🔴 Real-code verification FAILED — tested functions missing from source${NC}"
+        exit 2
+    else
+        echo -e "  ${RED}🔴 Real-code verification error (exit code $VERIFY_EXIT)${NC}"
+        exit 1
+    fi
+    echo ""
+fi
+
+echo -e "${GREEN}✓ Verification passed${NC}"
+exit 0
