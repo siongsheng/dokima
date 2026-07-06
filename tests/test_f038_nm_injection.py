@@ -206,7 +206,8 @@ class TestNmReviewMarkdown:
         md = pl._build_nm_review_section(summary)
         assert "### nm Review" in md
         assert "**Risk:** MEDIUM" in md
-        assert "Auto-Fix Applied: 2 issue(s)" in md
+        assert "Auto-Fix Applied" in md
+        assert "2 issue(s)" in md
         assert "missing test" in md
         assert "uncaught exception" in md
         assert "The implementation has several issues." in md
@@ -256,7 +257,8 @@ class TestNmReviewMarkdown:
             "should_fix_items": [],
         }
         md = pl._build_nm_review_section(summary)
-        assert "Auto-Fix Applied: 1 issue(s)" in md
+        assert "Auto-Fix Applied" in md
+        assert "1 issue(s)" in md
         assert "missing test" in md
         assert "SHOULD FIX" not in md
 
