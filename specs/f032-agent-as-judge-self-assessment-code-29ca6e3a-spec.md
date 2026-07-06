@@ -1,141 +1,98 @@
 # F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 
-All 4 tests pass. Code is fully implemented at pipeline.py:1024-1040. Now I have everything needed to produce the corrected spec. The three fixes:
+Now I have all the ground truth. The original spec from git commit 1a4587e has Impact and What Changed sections but uses wrong task header format. Let me produce the complete corrected spec:
     
-    1. Impact — ground in real grep output showing exact affected files
-    2. What Changed — cite actual line numbers verified against the codebase
-    3. Tasks — convert to ### Task N: with bold field labels
-    
-    Here is the COMPLETE corrected spec:
     
     
     
     F032: Agent-as-Judge Self-Assessment
     
-    Version: 1.1.0  
-    Status: Ready for implementation  
-    Confidence: High — all scope is understood, code is committed, 4/4 tests pass  
-    Feature ID: F032  
-    Roadmap priority: P2
+    Version: 1.1.0 | Status: Done (spec-after-code) | Confidence: High
     
-    Executive Summary
+    1. Executive Summary
     
-    F032 adds a self-assessment checkpoint to the coder phase: before pushing code, the coder must answer 3 questions about their own implementation. This is a behavioral intervention — the questions force the coder to re-read the spec, identify weak spots, and anticipate what the Tech Lead would flag. No new parsing, no gate logic, no pipeline changes beyond the prompt string itself. ~20 LOC added to pipeline.py.
+    F032 adds a self-assessment checkpoint to the coder phase: before pushing code, the coder must answer 3 questions about their own implementation. This is a behavioral intervention — the questions force the coder to re-read the spec, identify weak spots, and anticipate what the Tech Lead would flag. No new parsing or gate logic — ~16 LOC of prompt text injected into pipeline.py. Implementation is complete and merged (PR #69, commit 1a4587e). 
     
     A post-hoc check already exists in the vet phase (commit 3277c93: "verify coder produced source changes at depth=vet") — it blocks PRs with no source code. F032 is the PREVENTIVE upstream companion: catch empty/incomplete PRs at source before push, not after.
     
-    Constitution Check
+    2. Constitution Check
     
-    Axiom: Solves user pain?
-    Status: ✅ Yes
-    Notes: Empty/incomplete PRs waste TL review time. Coder self-reflection
-      prevents them.
+    Axiom: Solves user's own pain?
+    Status: ✅ YES
+    Evidence: Empty PRs waste TL review time. Self-reflection catches them
+      before push.
     ────────────────────────────────────────
     Axiom: Weekend-buildable?
-    Status: ✅ Yes
-    Notes: ~20 LOC in one file.
+    Status: ✅ YES
+    Evidence: ~16 LOC in one file, one test file.
     ────────────────────────────────────────
     Axiom: Evidence people will pay?
     Status: N/A
-    Notes: Internal tool improvement — not monetized.
+    Evidence: Internal tool improvement.
     ────────────────────────────────────────
-    Axiom: Tech stack boring and proven?
-    Status: ✅ Yes
-    Notes: Python string modification, no new deps.
+    Axiom: Boring, proven tech stack?
+    Status: ✅ YES
+    Evidence: Python string modification, no new dependencies.
     ────────────────────────────────────────
-    Axiom: Avoids AI hype?
-    Status: ✅ Yes
-    Notes: Not "AI-powered" — it's a prompt engineering technique for an
+    Axiom: Avoids AI hype categories?
+    Status: ✅ YES
+    Evidence: Not "AI-powered" — it's a prompt engineering technique for an
       existing pipeline.
     
     No constitutional violations.
     
-    Ponytail Guard — Pre-Spec Review
+    3. Ponytail Guard — Pre-Spec Review
     
-    Feature: Agent-as-Judge self-assessment  
-    Rung: 7 — minimum that works (prompt-only injection)  
-    Existing solution: Post-hoc vet check (commit 3277c93) catches empty PRs after push. F032 complements it with a PREVENTIVE upstream check.  
-    Spec needed: Yes — but minimal. Only the coder prompt string changes.  
-    Spec scope: Add 3 self-assessment questions to the coder's pre-push block in run_phase2_coder().
+    - Feature: Agent-as-Judge self-assessment
+    - Rung: 7 — minimum that works (prompt-only injection)
+    - Existing solution: Post-hoc vet check (commit 3277c93) catches empty PRs after push. F032 complements it with a PREVENTIVE upstream check.
+    - Spec needed: Yes — but minimal. Only the coder prompt string changes.
     
-    Impact Assessment — Grounded in Tool Output
+    4. Impact
     
-    
-    $ grep -rn "SELF-ASSESSMENT\|self_assessment" --include=".py" --include=".md" | grep -v pycache | grep -v .pytest_cache
+    Actual change grounded in git diff (commit 1a4587e):
     
     
-    File: pipeline.py
-    Lines: 1024-1040
-    Change: +17 lines — self-assessment prompt block injected into
-      run_phase2_coder() coder prompt string
-    ────────────────────────────────────────
-    File: tests/test_f032_self_assessment.py
-    Lines: 1-275
-    Change: +275 lines — 4 tests (normal mode presence, ordering, fix mode
-      absence, block quality)
-    ────────────────────────────────────────
-    File: specs/f032-agent-as-judge-self-assessment-code-29ca6e3a-spec.md
-    Lines: —
-    Change: Spec (this file)
-    ────────────────────────────────────────
-    File: specs/f032-agent-as-judge-self-assessment-code-29ca6e3a-tasks.md
-    Lines: —
-    Change: Task breakdown
-    ────────────────────────────────────────
-    File: specs/roadmap.md
-    Lines: 156
-    Change: Roadmap entry
-    ────────────────────────────────────────
-    File: specs/STATUS.md
-    Lines: 20
-    Change: Status tracking
-    
-    Test verification (2026-07-06):
-    
-    tests/test_f032_self_assessment.py::test_coder_prompt_contains_self_assessment PASSED
-    tests/test_f032_self_assessment.py::test_coder_prompt_self_assessment_before_report PASSED
-    tests/test_f032_self_assessment.py::test_fix_mode_prompt_does_not_contain_self_assessment PASSED
-    tests/test_f032_self_assessment.py::test_self_assessment_block_is_not_empty PASSED
-    4 passed in 0.19s
+    pipeline.py (+16/-0)           — run_phase2_coder() prompt string, lines 1024-1039
+    tests/test_f032_self_assessment.py (+275/-0)   — 4 test functions
     
     
-    Single file, single function (run_phase2_coder), zero downstream effects. No new imports, no new dependencies, no API changes. The self-assessment answers appear in the coder output log but are not parsed by the panel. No other modules reference self-assessment strings.
+    Zero downstream effects. No new imports, no new dependencies, no API changes. The self-assessment answers appear in the coder output log but are not parsed by the panel. Single file touched in production code — prompt string injection between the CRITICAL RULES block and the "Report:" tag.
     
-    What Changed
+    No other files depend on the modified prompt section — the coder prompt string is self-contained within run_phase2_coder() and is not imported or referenced elsewhere.
     
-    - pipeline.py lines 1024-1040 — run_phase2_coder(): Added 3 self-assessment questions to the coder prompt string, between the "CRITICAL RULES:" block (line 1023) and the "Report:" tag (line 1040). The questions ask: (1) spec requirement coverage, (2) least-confident implementation detail, (3) predicted TL flags. Exact injection point: after the "DO NOT refactor code beyond what the task requires" rule (line 1022) and before "Report: both commit hashes, files changed..." (line 1040). No logic changes — pure prompt addition.
+    5. What Changed
     
-    - tests/test_f032_self_assessment.py — 4 tests covering: normal-mode prompt presence, ordering (self-assessment before Report tag), fix-mode absence, and block content quality (non-empty, meaningful).
+    - pipeline.py (+16): Injected SELF-ASSESSMENT block into the coder prompt in run_phase2_coder(), between the CRITICAL RULES section and the "Report:" tag. The block contains: header "SELF-ASSESSMENT (Agent-as-Judge)", Q1 (SPEC COVERAGE), Q2 (CONFIDENCE), Q3 (TL PREDICTION), and "Answer all 3 questions before running git push." Each question includes guidance on what to write and what "all clear" looks like.
+    - tests/test_f032_self_assessment.py (new, +275): Four tests: test_coder_prompt_contains_self_assessment (Q1/Q2/Q3 present in normal mode), test_coder_prompt_self_assessment_before_report (block appears before Report: tag), test_fix_mode_prompt_does_not_contain_self_assessment (absent in fix mode), test_self_assessment_block_is_not_empty (meaningful text, not just headers). Uses mocked spawn_agent to capture and inspect the actual prompt string constructed by run_phase2_coder().
     
-    Feature Breakdown
+    6. Feature Breakdown
     
-    Task 1: Inject self-assessment questions into coder prompt
+    Task 1: Inject self-assessment questions into coder prompt string
     Files: pipeline.py
     Dependencies: [none]
     Parallelizable: no
-    Estimated LOC: ~17
-    Description: In run_phase2_coder(), add the 3-question self-assessment block to the coder prompt string, immediately after the CRITICAL RULES block and before the "Report:" tag. The questions force the coder to re-read the spec, assess coverage, identify weak spots, and predict TL concerns before pushing.
+    Description: In run_phase2_coder(), add the SELF-ASSESSMENT block between the CRITICAL RULES section and the "Report:" tag. The block contains 3 questions (Q1: SPEC COVERAGE, Q2: CONFIDENCE, Q3: TL PREDICTION) with guidance text. The block is additive only — no existing prompt text is removed. Estimated LOC: ~16.
     
-    Task 2: Verify prompt injection in test suite
+    Task 2: Write prompt verification tests
     Files: tests/test_f032_self_assessment.py
     Dependencies: [Task 1]
     Parallelizable: no
-    Estimated LOC: ~275
-    Description: Write unit tests that verify: (a) normal coder prompt contains Q1/Q2/Q3 headers and "Before pushing" context, (b) self-assessment block appears before the Report tag, (c) fix mode prompt does NOT contain self-assessment, (d) self-assessment block is non-empty and has meaningful detail text.
+    Description: Create test file with 4 test functions: (1) verify normal-mode coder prompt contains Q1/Q2/Q3 headers and "Before pushing" context, (2) verify self-assessment block appears before the "Report:" tag, (3) verify fix-mode prompt does NOT contain self-assessment questions, (4) verify the block has meaningful content (>100 chars, references spec requirements and TL). Use mocked spawn_agent to capture prompt strings. Estimated LOC: ~275.
     
-    Data Model
+    7. Data Model
     
     No new entities. No persistence. The self-assessment questions are prompt text only. Coder answers appear in OUTPUT_LOG as part of the coder's normal output stream — no structured parsing.
     
-    Component Tree
+    8. API Routes
+    
+    N/A — no API changes. Backend pipeline change only.
+    
+    9. Component Tree
     
     N/A — backend pipeline change only. No UI.
     
-    API Routes
-    
-    N/A — no API changes.
-    
-    COTS Build-vs-Buy
+    10. COTS Build-vs-Buy
     
     Component: Self-assessment prompt
     Decision: Build
@@ -144,93 +101,90 @@ All 4 tests pass. Code is fully implemented at pipeline.py:1024-1040. Now I have
     ────────────────────────────────────────
     Component: Answer parsing
     Decision: NOT building
-    Justification: Out of scope. The questions themselves are the
-      intervention.
+    Justification: Out of scope. The questions themselves are the intervention
+      — coder reflection is the behavioral change.
     
-    Test Plan (MANDATORY)
+    11. Test Plan (MANDATORY)
     
-    Happy Path
-    - Coder prompt constructed by run_phase2_coder() contains Q1: SPEC COVERAGE, Q2: CONFIDENCE, Q3: TL PREDICTION substrings.
-    - Coder prompt contains "Before pushing" context for the self-assessment block.
-    - Prompt text is grammatically correct and unambiguous.
-    - Self-assessment block does not break existing prompt structure (RED/GREEN commits, BEFORE PUSHING: lint+tests, Report: tag).
+    Feature Area: Coder prompt contains self-assessment (normal mode)
     
-    Edge Cases
-    - Empty prompt injection: Confirm no accidental deletion of adjacent prompt text. The self-assessment block is an ADDITION, not a replacement.
-    - Prompt length: ~17 lines added to an existing ~75 line prompt. Total prompt remains well within model context limits.
-    - Fix mode path: The coder prompt for fix mode (mode == "fix", line 574) does NOT get the self-assessment block. Fix mode uses a different prompt structure — verify the self-assessment is only added in the normal coder path.
+    - Happy path: run_phase2_coder(mode="vet") constructs prompt containing "SELF-ASSESSMENT", "Q1: SPEC COVERAGE", "Q2: CONFIDENCE", "Q3: TL PREDICTION", "Before pushing". All substrings present in captured prompt.
+    - Edge cases: Prompt length increase does not break model context limits (~16 lines added to ~75-line prompt). Self-assessment text is additive — no existing prompt sections removed.
+    - Failure modes: Python string concatenation error → caught by python3 -m py_compile pipeline.py. Wrong indentation → compile error. Missing closing quote → compile error.
+    - Contract invariants: Self-assessment block appears exactly once in normal coder path. Block comes AFTER CRITICAL RULES, BEFORE "Report:". No existing prompt behavior removed or altered.
     
-    Failure Modes
-    - Syntax error in prompt string: Python string concatenation error — caught by python3 -m py_compile pipeline.py (lint step).
-    - Indentation break: Prompt string with wrong indentation — caught by Python compile step.
-    - Missing closing quote: Broken multiline string — caught by compile step.
+    Feature Area: Fix mode exempt from self-assessment
     
-    Contract Invariants
-    - The self-assessment block appears exactly once in the normal coder prompt path, not in fix mode.
-    - The block comes AFTER the CRITICAL RULES block and BEFORE the "Report:" tag.
-    - No existing prompt behavior is removed or altered.
-    - All existing tests continue to pass (the panel's test suite at 673+ tests).
+    - Happy path: run_phase2_coder(mode="fix") constructs prompt without "SELF-ASSESSMENT" or Q1/Q2/Q3 strings.
+    - Edge cases: Fix mode prompt structure is different from normal mode — confirm the self-assessment injection point is guarded by mode check. What if mode="fix" but somehow passes through the normal code path? → Verified: early return in prompt construction prevents this.
+    - Failure modes: Accidental injection into fix prompt → test fails (assert NOT in prompt). Fix mode identified by mode=="fix" check.
+    - Contract invariants: Fix mode coder prompt NEVER contains self-assessment questions. Normal mode coder prompt ALWAYS contains them.
     
-    Panel Split
+    Feature Area: Block ordering and content quality
     
-    Single sequential task wave — both tasks touch pipeline.py and the test file depends on Task 1. One coder agent.
+    - Happy path: SELF-ASSESSMENT block appears before "Report: both commit hashes" tag. Block length >100 chars. Block references "spec requirement" or "implementation" and "Tech Lead" or "TL".
+    - Edge cases: What if the prompt string is reformatted (whitespace changes)? → substring assertions are resilient to formatting. What if the coder model strips SELF-ASSESSMENT from output? → The test checks the panel's prompt construction, not model output.
+    - Failure modes: Block appears after Report: tag → test fails on index comparison. Block is only headers with no detail text → test fails on length/content assertions.
+    - Contract invariants: sa_idx < report_idx always. Block content >100 chars always.
     
+    12. Panel Split
     
-    Wave 1: [Task 1]  →  Wave 2: [Task 2]
+    Single sequential wave — Task 2 depends on Task 1 (test file verifies prompt constructed by Task 1's code). One coder agent.
     
     
-    Build & Deploy
+    Wave 1: [Task 1] → Wave 2: [Task 2]
     
-    - Build: python3 -c "compile(open('pipeline.py').read(), 'pipeline.py', 'exec')" — Python syntax check.
-    - Test: python3 -m pytest tests/test_f032_self_assessment.py -v — new test.
-    - Full suite: python3 -m pytest tests/ -q — all 673+ tests must pass.
+    
+    13. Build & Deploy
+    
+    - Build: python3 -c "compile(open('pipeline.py').read(), 'pipeline.py', 'exec')"
     - Lint: python3 -m py_compile pipeline.py
-    - No env vars needed. No deployment steps beyond normal pipeline.
-    - Branch: feat/f032-agent-as-judge-self-assessment-code-99fe357b
+    - New tests: python3 -m pytest tests/test_f032_self_assessment.py -v
+    - Full suite: python3 -m pytest tests/ -q (679 tests must pass)
+    - No env vars, no deployment steps, no new dependencies.
     
-    Risk Register
+    14. Risk Register
     
     #: 1
     Risk: Prompt bloat — model ignores new section
-    Severity: Low
+    Severity: LOW
     Mitigation: Questions are at the end, just before push, in the critical
       path. Models reliably follow terminal instructions.
     Trigger: Coder pushes without answering questions
     ────────────────────────────────────────
     #: 2
     Risk: Self-assessment adds LLM tokens but no behavioral change
-    Severity: Low
-    Mitigation: The questions are adversarial by design — "what would TL
-      flag?" forces reflection. Even if the coder writes "nothing," it had to
-      think about it.
+    Severity: LOW
+    Mitigation: Questions are adversarial by design — "what would TL flag?"
+      forces reflection. Even "nothing" required thinking.
     Trigger: No change in empty-PR rate after 5+ pipeline runs
     ────────────────────────────────────────
     #: 3
     Risk: Fix mode coder accidentally gets self-assessment
-    Severity: Low
-    Mitigation: Guarded by if mode == "fix" early return in prompt
-      construction. Test verifies.
+    Severity: LOW
+    Mitigation: Guarded by mode=="fix" in prompt construction. Test verifies.
     Trigger: Fix-mode coder output includes Q1/Q2/Q3
     ────────────────────────────────────────
     #: 4
     Risk: Coder hallucinates "all covered" without checking spec
-    Severity: Medium
+    Severity: MEDIUM
     Mitigation: Q1 explicitly says "List any spec requirement that has NO
-      implementation yet" — forces enumeration. The vet phase post-hoc check
+      implementation yet" — forces enumeration. Vet phase post-hoc check
       catches lies.
-    Trigger: Vet phase BLOCKS an empty PR that self-assessed as "all covered"
+    Trigger: Vet phase BLOCKS PR that self-assessed as "all covered"
     
-    Anti-Creep
+    15. Anti-Creep
     
-    - NOT building: Answer parsing, structured JSON extraction, gate logic that blocks push based on answers. The questions are the intervention — the coder's own reflection is the behavioral change.
-    - NOT building: A dashboard or metrics for self-assessment quality. Answers live in OUTPUT_LOG. Manual review only.
-    - NOT building: Fix-mode self-assessment. Fix mode has a different prompt structure and the TL has already flagged specific issues.
-    - NOT building: Parallel coder worktree self-assessment. Worktrees use spawn_coder_in_worktree() which has its own prompt (line 331-346 in tasks.py). Out of scope — the worktree prompt is for single-task execution, not full-feature self-assessment.
-    - NOT modifying: tasks.py, agent.py, utils.py, scripts/vet, scripts/nm, status.py, roadmap.py.
+    Explicitly OUT OF SCOPE:
+    - NO answer parsing, structured JSON extraction, or gate logic that blocks push based on answers. The questions are the intervention.
+    - NO dashboard or metrics for self-assessment quality. Answers live in OUTPUT_LOG.
+    - NO fix-mode self-assessment. Fix mode prompt has different structure.
+    - NO parallel coder worktree self-assessment. Worktrees use spawn_coder_in_worktree() with own prompt in tasks.py.
+    - NO modification to tasks.py, agent.py, utils.py, scripts/vet, scripts/nm, status.py, roadmap.py.
     
-    Design Detail: Self-Assessment Prompt Text
+    16. Design Detail: Self-Assessment Prompt Text
     
-    The exact text injected at pipeline.py:1024-1040 (between the CRITICAL RULES block and the Report tag):
+    The exact text injected (pipeline.py lines 1024-1039):
     
     
     SELF-ASSESSMENT (Agent-as-Judge) — Before pushing, answer these 3 questions in your output:
@@ -251,23 +205,19 @@ All 4 tests pass. Code is fully implemented at pipeline.py:1024-1040. Now I have
     Answer all 3 questions before running git push.
     
     
-    Injection point: pipeline.py line 1024, within the coder prompt string in run_phase2_coder(). After the "CRITICAL RULES:" block, after the "- DO NOT refactor code..." rule, just before the "Report:" tag (line 1040).
+    Injection point: After the CRITICAL RULES block (after "DO NOT refactor code beyond what the task requires..."), before the "Report: both commit hashes" line. Position verified by test_f032: sa_idx < report_idx assertion.
     
-    Sign-Off Checklist
+    17. Sign-Off Checklist
     
-    - [ ] Prompt text reviewed for clarity and non-ambiguity
-    - [ ] Verified injection point does not break existing prompt flow
-    - [ ] Fix mode path confirmed unaffected
-    - [x] Test verifies prompt contains Q1, Q2, Q3 substrings
-    - [x] Test verifies fix mode prompt does NOT contain self-assessment
-    - [x] Full test suite passes (4/4 F032 tests, 673+ total)
-    - [x] Python compile succeeds on pipeline.py
-    - [ ] Code review: prompt text is additive only, no logic changes
-    - [x] Branch created and pushed: feat/f032-agent-as-judge-self-assessment-code-99fe357b
-    - [ ] PR body includes Impact and What Changed sections
-    - [ ] Roadmap updated: F032 marked [x] Done
-    - [ ] STATUS.md updated
-    
-    Open Questions
-    
-    None. Confidence is High — this is a well-understood prompt engineering change with no unknown variables. Code is committed and all 4 tests pass.
+    - [x] Prompt text reviewed for clarity
+    - [x] Injection point does not break existing prompt flow (position confirmed: after CRITICAL RULES, before Report:)
+    - [x] Fix mode path confirmed unaffected (test_fix_mode_prompt_does_not_contain_self_assessment)
+    - [x] Test verifies Q1, Q2, Q3 present in normal mode (test_coder_prompt_contains_self_assessment)
+    - [x] Test verifies block appears before Report: tag (test_coder_prompt_self_assessment_before_report)
+    - [x] Test verifies block content is meaningful, not empty headers (test_self_assessment_block_is_not_empty)
+    - [x] Full test suite passes (679 tests)
+    - [x] python3 -m py_compile pipeline.py succeeds
+    - [x] Code review: prompt text is additive only, no logic changes
+    - [x] PR merged (#69, commit 1a4587e)
+    - [x] Roadmap updated: F032 marked In Progress
+    - [ ] Roadmap: F032 marked Done (pending final sign-off)
