@@ -1,39 +1,78 @@
 """Dokima utilities — shared helpers, git/GitHub wrappers, security, spec extraction, checkpointing.
 
 All functions extracted from dokima monolith (F022: Modular Architecture).
-Module-level globals are set by main() in the dokima entry script before any function calls.
+PipelineContext (F040) replaces module-level globals — immutable per run, passed explicitly.
 """
-import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime, types
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 # shutil imported dynamically where needed (deploy_profile_skills)
 
+
+# ── PipelineContext dataclass (F040) ────────────────────
+# Single source of truth for all pipeline configuration.
+# Created at startup, replaces 25+ module-level globals.
+
+@dataclass
+class PipelineContext:
+    """All pipeline configuration in one immutable-per-run object.
+
+    Created in main(), passed to every phase function.
+    Replaces module-level globals: PROJECT_DIR, REPO, DEFAULT_BRANCH,
+    PROFILES, REAL_HOME, OUTPUT_LOG, FALLBACK_MODELS, etc.
+    """
+    # Project identity
+    project_dir: str = ""
+    repo: str = ""
+    default_branch: str = "master"
+    panel_feature: str = ""
+    panel_dir: str = ""
+
+    # Paths (computed at startup, immutable per run)
+    real_home: str = ""
+    hermes_home: str = ""
+    hermes_bin: str = ""
+    profiles_dir: str = ""
+    output_log: str = "/tmp/dokima-output.txt"
+
+    # API
+    api_key: str = ""
+
+    # Agent ports
+    panel_port: dict = field(default_factory=lambda: {
+        "strategist": 8647, "tech-lead": 8644,
+        "coder": 8645, "nm": 8648
+    })
+
+    # Model fallback
+    fallback_models: dict = field(default_factory=dict)
+
+    # Pipeline flags
+    skip_autofix: bool = False
+    force_full: bool = False
+    skip_human_gate: bool = False
+    max_parallel_override: Optional[int] = None
+    resume: Optional[bool] = None
+    max_continuous: int = 20
+
+    # Project commands (detected from AGENTS.md)
+    test_cmd: str = "npm test"
+    build_cmd: str = "npm run build"
+    lint_cmd: str = "npm run lint"
+
+    # Transient runtime state (was module-level globals)
+    _log_file_handle: Any = field(default=None, repr=False)
+    _lock_fd: Any = field(default=None, repr=False)
+    _log_file: Any = field(default=None, repr=False)
+    _stdout_orig: Any = field(default=None, repr=False)
+    _gh_token_cache: Optional[str] = field(default=None, repr=False)
+
+
 # ── Module-level globals (set by main()) ──────────
-# Set by conftest._load_panel() after importing this module.
-# Used by override-detection to find the correct panel instance
-# without relying on sys.modules (which can be stale from
-# other _load_panel() calls in tests — F022b).
-_IMPORTING_PANEL = None
-PROJECT_DIR = ""
-REPO = ""
-DEFAULT_BRANCH = "master"
-API_KEY = ""
-OUTPUT_LOG = "/tmp/dokima-output.txt"
-REAL_HOME = pwd.getpwuid(os.getuid()).pw_dir
-HERMES = os.path.join(REAL_HOME, ".hermes")
-HERMES_BIN = os.path.join(HERMES, "hermes-agent/venv/bin/hermes")
-PROFILES = os.path.join(HERMES, "profiles")
-PANEL_PORT = {"strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648}
-PANEL_FEATURE = ""
-PANEL_DIR = ""
-FALLBACK_MODELS = {}
-SKIP_AUTOFIX = False
-FORCE_FULL = False
-SKIP_HUMAN_GATE = False
-max_parallel_override = None
-RESUME = None
-TEST_CMD = "npm test"
-BUILD_CMD = "npm run build"
-LINT_CMD = "npm run lint"
+# PipelineContext (_ctx) replaces 25+ module-level globals (F040).
+# Backward-compatible read/write access maintained via module __getattr__/__setattr__.
+_IMPORTING_PANEL = None  # test infrastructure — not in ctx
 
 # Version
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -43,13 +82,105 @@ try:
 except OSError:
     VERSION = "unknown"
 
-# ── Global state ─────────────────────────────────
-_LOG_FILE_HANDLE = None
-_LOCK_FD = None
-_LOG_FILE = None
-_STDOUT_ORIG = None
-_GH_TOKEN_CACHE = None
-MAX_CONTINUOUS = 20
+# ── PipelineContext singleton ─────────────────────
+_real_home = pwd.getpwuid(os.getuid()).pw_dir
+_ctx = PipelineContext(
+    real_home=_real_home,
+    hermes_home=os.path.join(_real_home, ".hermes"),
+    hermes_bin=os.path.join(_real_home, ".hermes", "hermes-agent/venv/bin/hermes"),
+    profiles_dir=os.path.join(_real_home, ".hermes", "profiles"),
+    output_log="/tmp/dokima-output.txt",
+    max_continuous=20,
+)
+
+# ── Inject globals for bare-name access inside utils.py ──
+# Functions inside utils.py use bare names (PROJECT_DIR, not utils.PROJECT_DIR).
+# Python resolves bare names through globals(), not __getattr__.
+# We inject _ctx field references as module-level names.
+# Mutable types (dict) share the same object; immutable types (str/int)
+# are read-only via this path (writes go through __setattr__ or _ctx directly).
+PROJECT_DIR = _ctx.project_dir
+REPO = _ctx.repo
+DEFAULT_BRANCH = _ctx.default_branch
+API_KEY = _ctx.api_key
+OUTPUT_LOG = _ctx.output_log
+REAL_HOME = _ctx.real_home
+HERMES = _ctx.hermes_home
+HERMES_BIN = _ctx.hermes_bin
+PROFILES = _ctx.profiles_dir
+PANEL_PORT = _ctx.panel_port
+PANEL_FEATURE = _ctx.panel_feature
+PANEL_DIR = _ctx.panel_dir
+FALLBACK_MODELS = _ctx.fallback_models
+SKIP_AUTOFIX = _ctx.skip_autofix
+FORCE_FULL = _ctx.force_full
+SKIP_HUMAN_GATE = _ctx.skip_human_gate
+max_parallel_override = _ctx.max_parallel_override
+RESUME = _ctx.resume
+MAX_CONTINUOUS = _ctx.max_continuous
+TEST_CMD = _ctx.test_cmd
+BUILD_CMD = _ctx.build_cmd
+LINT_CMD = _ctx.lint_cmd
+_LOG_FILE_HANDLE = _ctx._log_file_handle
+_LOCK_FD = _ctx._lock_fd
+_LOG_FILE = _ctx._log_file
+_STDOUT_ORIG = _ctx._stdout_orig
+_GH_TOKEN_CACHE = _ctx._gh_token_cache
+
+# ── Backward-compatible attribute map ─────────────
+# Maps old global names to PipelineContext field names.
+# Used by __getattr__/__setattr__ for seamless read/write.
+_CTX_ATTR_MAP = {
+    'PROJECT_DIR': 'project_dir',
+    'REPO': 'repo',
+    'DEFAULT_BRANCH': 'default_branch',
+    'API_KEY': 'api_key',
+    'OUTPUT_LOG': 'output_log',
+    'REAL_HOME': 'real_home',
+    'HERMES': 'hermes_home',
+    'HERMES_BIN': 'hermes_bin',
+    'PROFILES': 'profiles_dir',
+    'PANEL_PORT': 'panel_port',
+    'PANEL_FEATURE': 'panel_feature',
+    'PANEL_DIR': 'panel_dir',
+    'FALLBACK_MODELS': 'fallback_models',
+    'SKIP_AUTOFIX': 'skip_autofix',
+    'FORCE_FULL': 'force_full',
+    'SKIP_HUMAN_GATE': 'skip_human_gate',
+    'max_parallel_override': 'max_parallel_override',
+    'RESUME': 'resume',
+    'MAX_CONTINUOUS': 'max_continuous',
+    'TEST_CMD': 'test_cmd',
+    'BUILD_CMD': 'build_cmd',
+    'LINT_CMD': 'lint_cmd',
+    '_LOG_FILE_HANDLE': '_log_file_handle',
+    '_LOCK_FD': '_lock_fd',
+    '_LOG_FILE': '_log_file',
+    '_STDOUT_ORIG': '_stdout_orig',
+    '_GH_TOKEN_CACHE': '_gh_token_cache',
+}
+
+
+def __getattr__(name):
+    """Backward-compatible read access: utils.PROJECT_DIR → _ctx.project_dir."""
+    if name in _CTX_ATTR_MAP:
+        return getattr(_ctx, _CTX_ATTR_MAP[name])
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __setattr__(name, value):
+    """Backward-compatible write access: utils.PROJECT_DIR = x → _ctx.project_dir = x."""
+    if name in _CTX_ATTR_MAP:
+        setattr(_ctx, _CTX_ATTR_MAP[name], value)
+        return
+    # For Python < 3.12, fall back to direct globals() mutation
+    globals()[name] = value
+
+
+def __dir__():
+    """Include old global names in dir(utils)."""
+    return sorted(set(list(globals().keys()) + list(_CTX_ATTR_MAP.keys())))
+
 
 HELP_TEXT = """Dokima — Multi-Agent Orchestration Engine
 
@@ -209,13 +340,12 @@ def _redact_secrets(text):
 
 def _write_log_line(text):
     """Append a redacted line to OUTPUT_LOG. Creates the file if it doesn't exist."""
-    global _LOG_FILE_HANDLE
     try:
-        if _LOG_FILE_HANDLE is None:
-            _LOG_FILE_HANDLE = open(OUTPUT_LOG, "a")
-            os.chmod(OUTPUT_LOG, 0o600)
-        _LOG_FILE_HANDLE.write(text + "\n")
-        _LOG_FILE_HANDLE.flush()
+        if _ctx._log_file_handle is None:
+            _ctx._log_file_handle = open(_ctx.output_log, "a")
+            os.chmod(_ctx.output_log, 0o600)
+        _ctx._log_file_handle.write(text + "\n")
+        _ctx._log_file_handle.flush()
     except Exception:
         pass
 
@@ -275,12 +405,11 @@ def gh(*args, **kwargs):
         if override is not None and override is not gh:
             return override(*args, **kwargs)
 
-    global _GH_TOKEN_CACHE
     env = os.environ.copy()
-    if _GH_TOKEN_CACHE is None:
-        _GH_TOKEN_CACHE = load_github_token()
-    if _GH_TOKEN_CACHE:
-        env["GH_TOKEN"] = _GH_TOKEN_CACHE
+    if _ctx._gh_token_cache is None:
+        _ctx._gh_token_cache = load_github_token()
+    if _ctx._gh_token_cache:
+        env["GH_TOKEN"] = _ctx._gh_token_cache
     result = subprocess.run(["gh"] + list(args),
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=30, env=env)
     return result.stdout.strip(), result.stderr.strip(), result.returncode
@@ -809,17 +938,16 @@ def acquire_lock():
 
 def _cleanup_lock():
     """Release lock and restore stdout on interrupt or normal exit."""
-    global _LOCK_FD, _LOG_FILE, _STDOUT_ORIG, _LOG_FILE_HANDLE
     # Also check dokima's _LOCK_FD (may be set by tests without syncing)
     dokima_mod = _IMPORTING_PANEL
     panel_fd = getattr(dokima_mod, '_LOCK_FD', None) if dokima_mod else None
-    fd_to_close = _LOCK_FD or panel_fd
+    fd_to_close = _ctx._lock_fd or panel_fd
     if fd_to_close:
         try:
             fd_to_close.close()
         except Exception:
             pass
-        _LOCK_FD = None
+        _ctx._lock_fd = None
         # Sync to dokima module if loaded (F022 modular refactor)
         if dokima_mod is not None:
             dokima_mod._LOCK_FD = None
@@ -827,11 +955,11 @@ def _cleanup_lock():
         os.remove(_lock_path())
     except OSError:
         pass
-    if _STDOUT_ORIG:
-        sys.stdout = _STDOUT_ORIG
-    if _LOG_FILE:
+    if _ctx._stdout_orig:
+        sys.stdout = _ctx._stdout_orig
+    if _ctx._log_file:
         try:
-            _LOG_FILE.close()
+            _ctx._log_file.close()
         except Exception:
             pass
 
