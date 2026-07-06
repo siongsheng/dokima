@@ -1,11 +1,11 @@
 {
-  "feature": "F038: Surface nm and TL findings in PR body \u2014 when nm runs (Phase 4) or TL reviews (Phase 5), inject their findings into the PR body as and sections. At depth=vet+nm (no TL), nm findings still appear. Currently nm output is invisible (37K chars logged but never surfaced); TL findings only appear via a separate PR comment. SHOULD FIX items from both nm and TL are extracted as GitHub issues regardless of depth.",
+  "feature": "F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction \u2014 human-readable rules that compound.",
   "project": "/home/opc/dokima",
-  "branch": "feat/f038-surface-nm-and-tl-findings-in-pr-bo-2318e714",
+  "branch": "feat/f033-cross-run-learning-via-conventionsm-966bee6e",
   "depth": "vet+nm",
   "risk": "MEDIUM",
   "mode": "passive",
-  "log_path": "/tmp/dokima-output-20260706-110234.txt",
+  "log_path": "/tmp/dokima-output-20260706-172733.txt",
   "started_at": "2026-07-02T19:42:33.093216",
   "current_phase": "init",
   "phases": {
