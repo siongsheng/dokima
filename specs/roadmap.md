@@ -273,6 +273,8 @@
 ### F042: CI pipeline — add .github/workflows/test.yml running pytest on push/PR. Add complexity gates (max CC=30), lint (pyflakes), and type checking (mypy --strict for new modules).
 **Priority:** P1
 **Dependencies:** None
+**Status:** [ ] Pending
+**Dependencies:** None
 **Status:** [x] Done
 **User Story:** As a contributor, tests run automatically on every push and PR — no manual python3 -m pytest needed.
 
