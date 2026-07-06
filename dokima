@@ -10,6 +10,8 @@ import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
 
 # VCS abstraction — auto-detects GitHub/GitLab from git remote
 import vcs
+# PipelineContext — replaces module-level globals (F040)
+from context import PipelineContext
 
 # ── F022 Modular Architecture ───────────────────
 # Module imports for state propagation (mutable globals flow FROM dokima TO modules).
@@ -67,14 +69,8 @@ HERMES = os.path.join(REAL_HOME, ".hermes")
 HERMES_BIN = os.path.join(HERMES, "hermes-agent/venv/bin/hermes")
 PROFILES = os.path.join(HERMES, "profiles")
 PANEL_PORT = {"strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648}
-OUTPUT_LOG = f"/tmp/dokima-output-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
-DEFAULT_BRANCH = "master"  # detected at startup, may be 'main'
-SKIP_AUTOFIX = False       # set from --skip-autofix flag or PANEL_SKIP_AUTOFIX env
-FORCE_FULL = False         # set from --force-full flag or PANEL_FORCE_FULL env
-SKIP_HUMAN_GATE = False    # set from --skip-human-gate flag or PANEL_SKIP_HUMAN_GATE env
-max_parallel_override = None  # set from --max-parallel=N flag in main()
-FALLBACK_MODELS = {}           # populated from PANEL_FALLBACK_* env vars in main()
-RESUME = None                  # set from --resume/--no-resume flag or PANEL_RESUME env
+# OUTPUT_LOG, DEFAULT_BRANCH, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE,
+# max_parallel_override, FALLBACK_MODELS, RESUME moved to PipelineContext (F040)
 MAX_CONTINUOUS = 20            # max iterations for --continuous mode
 
 # Read VERSION file from script directory (single source of truth)
@@ -88,7 +84,6 @@ except OSError:
 from utils import HELP_TEXT
 
 def main():
-    global API_KEY, PROJECT_DIR, REPO, TEST_CMD, BUILD_CMD, LINT_CMD, PANEL_FEATURE, DEFAULT_BRANCH, lock_fd, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME
     import argparse
     import shutil
 
@@ -106,6 +101,7 @@ def main():
     skip_human_gate = False
     fix_all = False
     max_parallel_override = None
+    resume = None          # set from --resume/--no-resume flag or PANEL_RESUME env
     base_branch_override = None
     args = None
     user_answers_prefill = None
@@ -273,7 +269,8 @@ def main():
             desc = getattr(args, "description", "") or ""
             init_dir = os.path.abspath(args.dir) if getattr(args, "dir", None) else os.getcwd()
             answers = getattr(args, "answers", None)
-            run_init(desc, init_dir, answers_path=answers)
+            _init_ctx = PipelineContext(project_dir=init_dir)
+            run_init(_init_ctx, desc, init_dir, answers_path=answers)
             return
 
         if cmd == "add":
@@ -284,7 +281,8 @@ def main():
                 sys.exit(1)
             add_dir = os.path.abspath(args.dir) if args.dir else os.getcwd()
             ap = args.priority.upper() if args.priority else None
-            run_add_to_roadmap(ft, add_dir, priority_hint=ap)
+            _add_ctx = PipelineContext(project_dir=add_dir)
+            run_add_to_roadmap(_add_ctx, ft, add_dir, priority_hint=ap)
             print("\n  Roadmap updated. Run 'dokima next' to build the next feature.")
             sys.exit(0)
 
@@ -303,14 +301,11 @@ def main():
             skip_human_gate = getattr(args, "skip_human_gate", False) or False
             max_parallel_override = args.max_parallel if hasattr(args, "max_parallel") else None
             if getattr(args, "resume", False):
-                RESUME = True
+                resume = True
             if getattr(args, "no_resume", False):
-                RESUME = False
+                resume = False
             base_branch_override = getattr(args, "base_branch", None) or os.environ.get("PANEL_BASE_BRANCH")
             vcs_override = getattr(args, "vcs", None)
-            FORCE_FULL = force_full
-            SKIP_AUTOFIX = skip_autofix
-            SKIP_HUMAN_GATE = skip_human_gate
             answers_path = getattr(args, "answers", None)
             user_answers_prefill = None
             fix_all = False
@@ -347,9 +342,6 @@ def main():
             max_parallel_override = None
             base_branch_override = None
             vcs_override = getattr(args, "vcs", None)
-            FORCE_FULL = force_full
-            SKIP_AUTOFIX = skip_autofix
-            SKIP_HUMAN_GATE = skip_human_gate
             issue_number = getattr(args, "issue", None)
             answers_path = getattr(args, "answers", None)
             user_answers_prefill = None
@@ -418,28 +410,25 @@ def main():
                 continue
             if arg == "--force-full":
                 force_full = True
-                FORCE_FULL = True
                 continue
             if arg == "--skip-autofix":
                 skip_autofix = True
-                SKIP_AUTOFIX = True
                 continue
             if arg == "--skip-auto-archive":
                 skip_auto_archive = True
                 continue
             if arg == "--skip-human-gate":
                 skip_human_gate = True
-                SKIP_HUMAN_GATE = True
                 continue
             if arg == "--fix-all":
                 fix_all = True
                 is_fix = True
                 continue
             if arg == "--resume":
-                RESUME = True
+                resume = True
                 continue
             if arg == "--no-resume":
-                RESUME = False
+                resume = False
                 continue
             if arg.startswith("--max-parallel="):
                 try:
@@ -551,31 +540,29 @@ def main():
         fix_all = True
     if not skip_autofix and os.environ.get("PANEL_SKIP_AUTOFIX") == "1":
         skip_autofix = True
-        SKIP_AUTOFIX = True
     if not force_full and os.environ.get("PANEL_FORCE_FULL") == "1":
         force_full = True
-        FORCE_FULL = True
     if not skip_auto_archive and os.environ.get("PANEL_SKIP_AUTO_ARCHIVE") == "1":
         skip_auto_archive = True
     if not skip_human_gate and os.environ.get("PANEL_SKIP_HUMAN_GATE") == "1":
         skip_human_gate = True
-        SKIP_HUMAN_GATE = True
     if max_parallel_override is None:
         mp = os.environ.get("PANEL_MAX_PARALLEL")
         if mp and mp.isdigit():
             max_parallel_override = int(mp)
-    if RESUME is None:
+    if resume is None:
         if os.environ.get("PANEL_RESUME") == "1":
-            RESUME = True
+            resume = True
         elif os.environ.get("PANEL_NO_RESUME") == "1":
-            RESUME = False
+            resume = False
 
     # ── INIT MODE: discovery & constitution, no pipeline ──
     if not is_next and feature == "init":
         # init <description> [project_dir] [--answers <path>]
         init_desc = filtered_argv[1] if len(filtered_argv) >= 2 else ""
         init_project_dir = os.path.abspath(filtered_argv[2]) if len(filtered_argv) >= 3 else PROJECT_DIR
-        run_init(init_desc, init_project_dir)
+        _init_ctx = PipelineContext(project_dir=init_project_dir)
+        run_init(_init_ctx, init_desc, init_project_dir)
         return
 
     # ── LOCK ACQUISITION ──
@@ -646,6 +633,30 @@ def main():
     _set_gh_token()
     TEST_CMD, BUILD_CMD, LINT_CMD = detect_commands()
 
+    # ── Construct PipelineContext (F040) ──
+    # Derive OUTPUT_LOG with timestamp inside main()
+    _output_log = f"/tmp/dokima-output-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+    ctx = PipelineContext(
+        project_dir=PROJECT_DIR,
+        repo=REPO,
+        default_branch=DEFAULT_BRANCH,
+        api_key=API_KEY,
+        panel_feature=PANEL_FEATURE,
+        output_log=_output_log,
+        hermes_bin=HERMES_BIN,
+        fallback_models=FALLBACK_MODELS,
+        skip_autofix=skip_autofix,
+        force_full=force_full,
+        skip_human_gate=skip_human_gate,
+        max_parallel_override=max_parallel_override,
+        resume=resume,
+        test_cmd=TEST_CMD,
+        build_cmd=BUILD_CMD,
+        lint_cmd=LINT_CMD,
+        vcs_backend=vcs.VCS_BACKEND,
+        vcs_token_env=vcs.VCS_TOKEN_ENV,
+    )
+
     # ── --answers interaction for --fix ──
     if is_fix and answers_path is not None:
         print("  ⚠ --fix mode ignores --answers (no strategist interview). Continuing...", flush=True)
@@ -654,9 +665,9 @@ def main():
     if is_fix:
         # Use _pipeline reference so test patches on pipeline module take effect
         if issue_number is not None:
-            _pipeline.run_fix_mode_issue(project_dir=PROJECT_DIR, issue_number=issue_number)
+            _pipeline.run_fix_mode_issue(ctx, project_dir=PROJECT_DIR, issue_number=issue_number)
         else:
-            _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate, create_blocker_issues=create_blocker_issues)
+            _pipeline.run_fix_mode(ctx, project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate, create_blocker_issues=create_blocker_issues)
         _cleanup_lock()
         return
 
@@ -693,7 +704,7 @@ def main():
         git("checkout", DEFAULT_BRANCH)
         git("pull", "origin", DEFAULT_BRANCH)
         feature_hint = getattr(args, "feature", None) or (filtered_argv[0] if len(filtered_argv) >= 2 else None)
-        feature = run_next_setup(interactive=is_interactive, feature_hint=feature_hint)
+        feature = run_next_setup(ctx, interactive=is_interactive, feature_hint=feature_hint)
         if feature is None:
             print("Nothing to do.")
             _cleanup_lock()
@@ -708,8 +719,7 @@ def main():
         _cleanup_lock()
         return
 
-    # ── Sync module globals before pipeline execution (F022b) ──
-    _sync_modules()
+    # ── ctx passes all config explicitly — no sync needed (F040) ──
 
     # ── RUN PIPELINE ──
     if is_continuous:
@@ -719,7 +729,7 @@ def main():
             print(f"  CONTINUOUS — Feature {iteration}")
             print(f"{'═'*60}\n")
 
-            run_pipeline(feature, is_next, True, user_answers_prefill, resume=RESUME)
+            run_pipeline(ctx, feature, is_next, True, user_answers_prefill, resume=resume)
 
             # Check stop file
             if os.path.exists(_stop_path()):
@@ -742,7 +752,7 @@ def main():
                 print("\n── Continuous: all features complete")
                 break
             feature = f"{next_feat.id}: {next_feat.title}"
-            PANEL_FEATURE = feature
+            ctx.panel_feature = feature
             update_roadmap_status(roadmap_path, next_feat.id, "in_progress")
             commit_roadmap_update(roadmap_path, next_feat.id, "start")
             status_path_c = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
@@ -750,26 +760,13 @@ def main():
             update_status_md(status_path_c, next_feat.id, next_feat.title, "in_progress", branch=branch_c, source="panel")
             print(f"\n  Next: {next_feat.id} — {next_feat.title}")
     else:
-        run_pipeline(feature, is_next, False, user_answers_prefill, resume=RESUME)
+        run_pipeline(ctx, feature, is_next, False, user_answers_prefill, resume=resume)
 
-    _sync_modules()
     _cleanup_lock()
 
 def _sync_modules():
-    """Propagate mutable globals to all module files (F022)."""
-    try:
-        for g in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                  'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                  'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                  'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                  'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-            val = globals().get(g)
-            if val is not None:
-                for mod in (_utils, _agent, _tasks, _roadmap, _pipeline):
-                    if hasattr(mod, g):
-                        setattr(mod, g, val)
-    except Exception:
-        pass
+    """No-op: ctx passes config explicitly (F040)."""
+    pass
 
 if __name__ == "__main__":
     main()

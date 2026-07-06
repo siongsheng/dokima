@@ -302,7 +302,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
-def run_fix_mode_issue(project_dir, issue_number):
+def run_fix_mode_issue(ctx, project_dir, issue_number):
     """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
 
     F034: dokima fix --issue N — pulls issue body, extracts structured fix
@@ -415,7 +415,7 @@ def run_fix_mode_issue(project_dir, issue_number):
 
 
 
-def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
+def run_fix_mode(ctx, project_dir, fix_all=False, skip_human_gate=False, create_blocker_issues=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
     PROJECT_DIR = project_dir
@@ -2518,7 +2518,7 @@ Output NOTHING ELSE."""
     }
 
 
-def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None):
+def run_pipeline(ctx, feature, is_next, is_continuous, user_answers_prefill, resume=None):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO
 

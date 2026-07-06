@@ -277,7 +277,7 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
 
     return repaired
 
-def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
+def run_add_to_roadmap(ctx, feature_desc, project_dir, priority_hint=None):
     """Add a feature to roadmap.md with auto-determined priority, dependencies,
     and section placement. Orders features by execution priority within each
     section: infrastructure/tests first, then critical bugs, resilience,
@@ -475,7 +475,7 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
 
 
 
-def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -> str | None:
+def run_next_setup(ctx, interactive: bool = False, feature_hint: str | None = None) -> str | None:
     """Parse roadmap, pick next feature, mark in-progress, return feature string.
        If feature_hint is provided (user-specified feature name), search for it
        in the roadmap instead of using pick_next_feature.
@@ -563,7 +563,7 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 
 
-def run_init(description, project_dir, answers_path=None):
+def run_init(ctx, description, project_dir, answers_path=None):
     """Discovery & constitution phase. Strategist produces spec-kit docs.
 
     F031: Implements a back-and-forth interview loop. The strategist identifies
