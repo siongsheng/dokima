@@ -14,13 +14,17 @@ PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "doki
 
 
 def _load_panel():
-    """Load dokima as a Python module via exec, setting required globals.
-    Registers in sys.modules so patch('dokima.X') works across all tests."""
+    """Load dokima as a Python module via exec.
+    Registers in sys.modules so patch('dokima.X') works across all tests.
+
+    No longer sets module globals or installs a setattr override —
+    PipelineContext replaces all those globals.
+    """
     module_name = "dokima"
     # Remove stale module if present
     if module_name in sys.modules:
         del sys.modules[module_name]
-    # F022: Also remove stale sub-modules so fresh imports pick up changes
+    # Also remove stale sub-modules so fresh imports pick up changes
     for sub in ('tasks', 'utils', 'agent', 'pipeline', 'roadmap'):
         if sub in sys.modules:
             del sys.modules[sub]
@@ -29,55 +33,10 @@ def _load_panel():
     module.__file__ = PANEL_PATH
     sys.modules[module_name] = module
 
-    # Set required globals BEFORE execution so functions reference them
-    module.PROJECT_DIR = "/tmp/test-project"
-    module.REPO = "test-owner/test-repo"
-    module.API_KEY = "test-key"
-    module.PANEL_FEATURE = "Test Feature"
-    module.PANEL_DIR = "/tmp/.dokima-test"
-    module.DEFAULT_BRANCH = "main"
-    module.TEST_CMD = "echo test"
-    module.BUILD_CMD = "echo build"
-    module.LINT_CMD = "echo lint"
-
-    # F022: Intercept global assignments to sync to sub-modules.
-    def _sync_globals_on_setattr(self, name, value):
-        object.__setattr__(self, name, value)
-        if name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                     'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                     'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                     'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                     'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-            for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
-                target = getattr(self, mod_ref, None)
-                if target is not None and hasattr(target, name):
-                    object.__setattr__(target, name, value)
-    module.__class__ = type('DokimaModule', (types.ModuleType,), {'__setattr__': _sync_globals_on_setattr})
-
     # Execute the script in the module's namespace
     with open(PANEL_PATH) as f:
         code = compile(f.read(), PANEL_PATH, "exec")
     exec(code, module.__dict__)
-
-    # F022b: Link each sub-module back to this panel so override detection
-    # uses the correct panel instance (not sys.modules which can be stale).
-    for mod_ref in ('_utils', '_agent', '_pipeline', '_tasks', '_roadmap'):
-        target = getattr(module, mod_ref, None)
-        if target is not None:
-            target._IMPORTING_PANEL = module
-
-    # F022: Sync initial globals (set before __setattr__ was active) to sub-modules
-    for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                   'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                   'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                   'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                   'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-        val = getattr(module, g_name, None)
-        if val is not None:
-            for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
-                target = getattr(module, mod_ref, None)
-                if target is not None and hasattr(target, g_name):
-                    object.__setattr__(target, g_name, val)
 
     return module
 
@@ -115,7 +74,7 @@ def _isolate_panel_modules():
 
 @pytest.fixture
 def panel():
-    """Loaded dokima module with globals set. Fresh per test.
+    """Loaded dokima module. Fresh per test.
     Saves/restores sys.modules so stale references from module-level
     imports in other test files don't leak into override detection
     (F022b: Modular Architecture — fix stale sys.modules references)."""
@@ -185,9 +144,9 @@ def fake_agents_md(tmpdir_path):
 
 
 @pytest.fixture
-def test_repo(panel, tmpdir_path):
+def test_repo(panel, ctx, tmpdir_path):
     """Create a temporary git repository with AGENTS.md and specs/roadmap.md.
-    Sets panel.PROJECT_DIR, panel.REPO, and panel.DEFAULT_BRANCH.
+    Sets ctx.project_dir, ctx.repo, and ctx.default_branch.
     Yields the project directory path as a string."""
     project_dir = os.path.join(tmpdir_path, "test-project")
     os.makedirs(os.path.join(project_dir, "specs"), exist_ok=True)
@@ -205,9 +164,9 @@ def test_repo(panel, tmpdir_path):
     subprocess.run(["git", "-C", project_dir, "commit", "-m", "init"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["git", "-C", project_dir, "remote", "add", "origin", "https://github.com/test-owner/test-repo.git"])
 
-    panel.PROJECT_DIR = project_dir
-    panel.REPO = "test-owner/test-repo"
-    panel.DEFAULT_BRANCH = "master"
+    ctx.project_dir = project_dir
+    ctx.repo = "test-owner/test-repo"
+    ctx.default_branch = "master"
 
     return project_dir
 
