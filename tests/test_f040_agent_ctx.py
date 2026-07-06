@@ -35,12 +35,23 @@ def _make_ctx(**overrides):
 # ── call_agent with ctx ────────────────────────────
 
 def test_call_agent_accepts_ctx_keyword():
-    """call_agent accepts ctx keyword argument (will raise TypeError before fix)."""
+    """call_agent accepts ctx keyword argument."""
     import agent
     ctx = _make_ctx()
 
-    with pytest.raises(TypeError, match="unexpected keyword argument"):
-        agent.call_agent(port=19999, system_prompt="sys", user_prompt="usr", ctx=ctx)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = (
+            b'{"choices":[{"message":{"content":"ok"}}],"usage":{"completion_tokens":1}}'
+        )
+        mock_resp.__enter__.return_value = mock_resp
+        mock_urlopen.return_value = mock_resp
+
+        # ctx is accepted — should not raise TypeError
+        result = agent.call_agent(
+            port=18647, system_prompt="sys", user_prompt="usr", ctx=ctx
+        )
+        assert result["content"] == "ok"
 
 
 def test_call_agent_uses_ctx_api_key():
@@ -80,8 +91,19 @@ def test_run_agent_accepts_ctx_keyword():
     import agent
     ctx = _make_ctx()
 
-    with pytest.raises(TypeError, match="unexpected keyword argument"):
-        agent._run_agent("test-profile", [], "test prompt", 30, None, None, ctx=ctx)
+    with patch("subprocess.Popen") as mock_popen:
+        mock_proc = MagicMock()
+        mock_proc.stdout = []
+        mock_proc.stderr = []
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
+
+        # ctx is accepted — should not raise TypeError
+        result, rc = agent._run_agent(
+            "test-profile", [], "test prompt", 30, None, None, ctx=ctx
+        )
+        assert rc == 0
 
 
 def test_run_agent_uses_ctx_hermes_bin():
@@ -116,8 +138,10 @@ def test_spawn_agent_accepts_ctx_keyword():
     import agent
     ctx = _make_ctx()
 
-    with pytest.raises(TypeError, match="unexpected keyword argument"):
-        agent.spawn_agent("test-profile", [], "test prompt", ctx=ctx)
+    with patch("agent._run_agent", return_value=("ok output", 0)):
+        # ctx is accepted — should not raise TypeError
+        result = agent.spawn_agent("test-profile", [], "test prompt", ctx=ctx)
+        assert result == "ok output"
 
 
 # ── Backward compatibility (no ctx) ────────────────
