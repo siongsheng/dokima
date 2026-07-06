@@ -1,9 +1,19 @@
-"""Tests for vcs.py — VCS abstraction layer."""
+"""Tests for vcs.py — VCS abstraction layer (with ctx parameter)."""
 import os
 import sys
 import subprocess
 import pytest
 from unittest.mock import patch, MagicMock
+from types import SimpleNamespace
+
+
+def _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo'):
+    """Create a minimal ctx-like object for vcs function tests."""
+    return SimpleNamespace(
+        vcs_backend=vcs_backend,
+        vcs_token_env=vcs_token_env,
+        repo=repo,
+    )
 
 
 # ── detect_vcs_backend() ────────────────────────────────────────────
@@ -12,8 +22,123 @@ class TestDetectVcsBackend:
     """Platform detection from git remote URL."""
 
     def test_github_ssh(self):
-        """git@github.com:owner/repo.git → 'github', 'owner/repo'"""
+        """git@github.com:owner/repo.git → 'github', ctx.repo='owner/repo'"""
         import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="git@github.com:owner/repo.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "github"
+            assert ctx.repo == "owner/repo"
+            assert ctx.vcs_backend == "github"
+            assert ctx.vcs_token_env == "GH_TOKEN"
+
+    def test_github_https(self):
+        """https://github.com/owner/repo.git → 'github', 'owner/repo'"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="https://github.com/owner/repo.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "github"
+
+    def test_gitlab_ssh(self):
+        """git@gitlab.com:group/project.git → 'gitlab', ctx.repo='group/project'"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="git@gitlab.com:group/project.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "gitlab"
+            assert ctx.repo == "group/project"
+            assert ctx.vcs_backend == "gitlab"
+
+    def test_gitlab_https(self):
+        """https://gitlab.com/group/project.git → 'gitlab'"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="https://gitlab.com/group/project.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "gitlab"
+
+    def test_gitlab_subgroup_ssh(self):
+        """git@gitlab.com:group/subgroup/project.git → 'gitlab', full path"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="git@gitlab.com:group/subgroup/project.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "gitlab"
+            assert ctx.repo == "group/subgroup/project"
+
+    def test_no_git_suffix(self):
+        """Trailing .git absent → still matches"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="https://gitlab.com/team/proj\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "gitlab"
+
+    def test_self_hosted_gitlab(self):
+        """git@gitlab.internal.company.com:team/proj.git → 'gitlab'"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="git@gitlab.internal.company.com:team/proj.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend == "gitlab"
+
+    def test_no_remote(self):
+        """No git remote → returns None"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="", stderr="fatal: not a git repository"
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend is None
+
+    def test_unsupported_vcs(self):
+        """Bitbucket remote → returns None"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        with patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="git@bitbucket.org:owner/repo.git\n", stderr=""
+            )
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend is None
+
+    def test_never_raises(self):
+        """detect_vcs_backend() never raises — returns str or None"""
+        import vcs
+        ctx = _make_ctx(vcs_backend='', vcs_token_env='', repo='')
+        # Even if git command fails entirely, should not raise
+        with patch.object(subprocess, 'run', side_effect=Exception("boom")):
+            backend = vcs.detect_vcs_backend("/tmp/test", ctx=ctx)
+            assert backend is None
+
+    def test_detect_vcs_backend_without_ctx(self):
+        """Backward compat: detect_vcs_backend works without ctx (sets module globals)."""
+        import vcs
+        vcs.VCS_BACKEND = "gitlab"  # ensure it changes
         with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="git@github.com:owner/repo.git\n", stderr=""
@@ -21,96 +146,7 @@ class TestDetectVcsBackend:
             backend = vcs.detect_vcs_backend("/tmp/test")
             assert backend == "github"
             assert vcs.REPO == "owner/repo"
-
-    def test_github_https(self):
-        """https://github.com/owner/repo.git → 'github', 'owner/repo'"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="https://github.com/owner/repo.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "github"
-
-    def test_gitlab_ssh(self):
-        """git@gitlab.com:group/project.git → 'gitlab', 'group/project'"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="git@gitlab.com:group/project.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "gitlab"
-            assert vcs.REPO == "group/project"
-
-    def test_gitlab_https(self):
-        """https://gitlab.com/group/project.git → 'gitlab'"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="https://gitlab.com/group/project.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "gitlab"
-
-    def test_gitlab_subgroup_ssh(self):
-        """git@gitlab.com:group/subgroup/project.git → 'gitlab', full path"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="git@gitlab.com:group/subgroup/project.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "gitlab"
-            assert vcs.REPO == "group/subgroup/project"
-
-    def test_no_git_suffix(self):
-        """Trailing .git absent → still matches"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="https://gitlab.com/team/proj\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "gitlab"
-
-    def test_self_hosted_gitlab(self):
-        """git@gitlab.internal.company.com:team/proj.git → 'gitlab'"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="git@gitlab.internal.company.com:team/proj.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend == "gitlab"
-
-    def test_no_remote(self):
-        """No git remote → returns None"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=1, stdout="", stderr="fatal: not a git repository"
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend is None
-
-    def test_unsupported_vcs(self):
-        """Bitbucket remote → returns None"""
-        import vcs
-        with patch.object(subprocess, 'run') as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="git@bitbucket.org:owner/repo.git\n", stderr=""
-            )
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend is None
-
-    def test_never_raises(self):
-        """detect_vcs_backend() never raises — returns str or None"""
-        import vcs
-        # Even if git command fails entirely, should not raise
-        with patch.object(subprocess, 'run', side_effect=Exception("boom")):
-            backend = vcs.detect_vcs_backend("/tmp/test")
-            assert backend is None
+            assert vcs.VCS_BACKEND == "github"
 
 
 # ── parse_vcs_flag() ────────────────────────────────────────────────
@@ -153,14 +189,12 @@ class TestVcsPrCreate:
     """PR/MR creation with correct CLI args per backend."""
 
     def test_github_pr_create(self):
-        """GitHub → calls gh pr create with original args"""
+        """GitHub → calls gh pr create with original args (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="https://github.com/owner/repo/pull/1", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_create("main", "feat/x", "Test PR", "Test body")
+            stdout, stderr, rc = vcs.vcs_pr_create("main", "feat/x", "Test PR", "Test body", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "gh"
@@ -172,14 +206,12 @@ class TestVcsPrCreate:
             assert "--body" in args
 
     def test_gitlab_mr_create(self):
-        """GitLab → calls glab mr create with mapped args"""
+        """GitLab → calls glab mr create with mapped args (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="https://gitlab.com/group/project/-/merge_requests/1", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_create("main", "feat/x", "Test MR", "Test body")
+            stdout, stderr, rc = vcs.vcs_pr_create("main", "feat/x", "Test MR", "Test body", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "glab"
@@ -190,6 +222,17 @@ class TestVcsPrCreate:
             assert "--title" in args
             assert "--description" in args
 
+    def test_pr_create_without_ctx(self):
+        """Backward compat: vcs_pr_create works without ctx (uses module globals)."""
+        import vcs
+        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
+             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
+             patch.object(vcs, 'REPO', 'owner/repo'), \
+             patch.object(subprocess, 'run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            stdout, stderr, rc = vcs.vcs_pr_create("main", "feat/x", "T", "B")
+            assert rc == 0
+
 
 # ── vcs_pr_merge() ──────────────────────────────────────────────────
 
@@ -198,12 +241,10 @@ class TestVcsPrMerge:
 
     def test_github_merge(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Merged", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_merge(42)
+            stdout, stderr, rc = vcs.vcs_pr_merge(42, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "gh" in args
@@ -212,24 +253,20 @@ class TestVcsPrMerge:
 
     def test_github_auto_merge(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_merge(42, auto=True)
+            stdout, stderr, rc = vcs.vcs_pr_merge(42, auto=True, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--auto" in args
 
     def test_gitlab_merge(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Merged", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_merge(42)
+            stdout, stderr, rc = vcs.vcs_pr_merge(42, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "glab" in args
@@ -238,12 +275,10 @@ class TestVcsPrMerge:
 
     def test_gitlab_auto_merge(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_merge(42, auto=True)
+            stdout, stderr, rc = vcs.vcs_pr_merge(42, auto=True, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--when-pipeline-succeeds" in args
@@ -256,28 +291,24 @@ class TestVcsPrView:
 
     def test_github_view(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout='{"state":"OPEN","merged":false}', stderr=""
             )
-            stdout, stderr, rc = vcs.vcs_pr_view(42)
+            stdout, stderr, rc = vcs.vcs_pr_view(42, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--json" in args
 
     def test_gitlab_view(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout='{"state":"opened","merged_at":null}', stderr=""
             )
-            stdout, stderr, rc = vcs.vcs_pr_view(42)
+            stdout, stderr, rc = vcs.vcs_pr_view(42, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "glab" in args
@@ -292,24 +323,20 @@ class TestVcsPrList:
 
     def test_github_list(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_list()
+            stdout, stderr, rc = vcs.vcs_pr_list(ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--json" in args
 
     def test_gitlab_list(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_list()
+            stdout, stderr, rc = vcs.vcs_pr_list(ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--output" in args or "json" in str(args).lower()
@@ -322,34 +349,28 @@ class TestVcsPrDiff:
 
     def test_github_diff(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="diff output", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_diff(42)
+            stdout, stderr, rc = vcs.vcs_pr_diff(42, ctx=ctx)
             assert rc == 0
 
     def test_github_diff_stat(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="stat output", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_diff(42, stat_only=True)
+            stdout, stderr, rc = vcs.vcs_pr_diff(42, stat_only=True, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--stat" in args
 
     def test_gitlab_diff(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="diff output", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_diff(42)
+            stdout, stderr, rc = vcs.vcs_pr_diff(42, ctx=ctx)
             assert rc == 0
 
 
@@ -375,14 +396,12 @@ class TestVcsIssueCreate:
     """Issue creation with correct CLI args per backend."""
 
     def test_github_issue_create(self):
-        """GitHub → calls gh issue create with --title, --body"""
+        """GitHub → calls gh issue create with --title, --body (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="https://github.com/owner/repo/issues/1", stderr="")
-            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "Something broke")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "Something broke", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "gh"
@@ -392,28 +411,24 @@ class TestVcsIssueCreate:
             assert "--body" in args
 
     def test_github_issue_create_with_labels(self):
-        """GitHub → includes --label when labels provided"""
+        """GitHub → includes --label when labels provided (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke", labels="bug,urgent")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke", labels="bug,urgent", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--label" in args
             assert "bug,urgent" in args
 
     def test_gitlab_issue_create(self):
-        """GitLab → calls glab issue create with --description instead of --body"""
+        """GitLab → calls glab issue create with --description instead of --body (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke")
+            stdout, stderr, rc = vcs.vcs_issue_create("Bug", "broke", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "glab"
@@ -429,12 +444,10 @@ class TestVcsIssueView:
 
     def test_github_issue_view(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout='{"title":"Bug"}', stderr="")
-            stdout, stderr, rc = vcs.vcs_issue_view(1)
+            stdout, stderr, rc = vcs.vcs_issue_view(1, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "gh" in args
@@ -444,12 +457,10 @@ class TestVcsIssueView:
 
     def test_gitlab_issue_view(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout='{"title":"Bug"}', stderr="")
-            stdout, stderr, rc = vcs.vcs_issue_view(1)
+            stdout, stderr, rc = vcs.vcs_issue_view(1, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "glab" in args
@@ -464,12 +475,10 @@ class TestVcsReleaseCreate:
 
     def test_github_release(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Release created", stderr="")
-            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main")
+            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "gh" in args
@@ -478,25 +487,21 @@ class TestVcsReleaseCreate:
 
     def test_github_release_generate_notes(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main", generate_notes=True)
+            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main", generate_notes=True, ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "--generate-notes" in args
 
     def test_gitlab_release_errors(self):
-        """GitLab → returns error, release is GitHub-only"""
+        """GitLab → returns error, release is GitHub-only (via ctx)"""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'):
-            stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main")
-            assert rc != 0
-            assert "release" in stderr.lower() or "github" in stderr.lower()
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        stdout, stderr, rc = vcs.vcs_release_create("v1.0", "v1.0", "main", ctx=ctx)
+        assert rc != 0
+        assert "release" in stderr.lower() or "github" in stderr.lower()
 
 
 # ── vcs_repo_clone() ────────────────────────────────────────────────
@@ -506,12 +511,10 @@ class TestVcsRepoClone:
 
     def test_github_clone(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GH_TOKEN'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_repo_clone("owner/repo", "/tmp/clone")
+            stdout, stderr, rc = vcs.vcs_repo_clone("owner/repo", "/tmp/clone", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "gh" in args
@@ -520,12 +523,10 @@ class TestVcsRepoClone:
 
     def test_gitlab_clone(self):
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'VCS_TOKEN_ENV', 'GLAB_TOKEN'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_repo_clone("group/project", "/tmp/clone")
+            stdout, stderr, rc = vcs.vcs_repo_clone("group/project", "/tmp/clone", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert "glab" in args
@@ -549,7 +550,6 @@ class TestPrUrlRegex:
     def test_gitlab_mr_url_regex(self):
         """GitLab MR URL: https://gitlab.com/group/project/-/merge_requests/42"""
         import re
-        # Updated pattern: matches both GitHub PR and GitLab MR URLs
         pattern = r'https://(?:github\.com/[\w.-]+/[\w.-]+/pull/\d+|gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+)'
         match = re.search(pattern, "MR at https://gitlab.com/group/project/-/merge_requests/42")
         assert match is not None
@@ -568,23 +568,17 @@ class TestTlPromptGitlab:
 
     def test_tl_prompt_mentions_gh(self):
         """TL prompt references gh pr review for GitHub."""
-        # This will pass once pipeline.py is updated
         import pipeline
-        # The TL_PROMPT template is in the pipeline module
-        # We just verify the module is importable
         assert hasattr(pipeline, 'run_pipeline')
 
     def test_tl_prompt_mentions_glab(self):
         """TL prompt references glab mr review for GitLab (post-migration)."""
-        # After migration, the prompt should contain glab reference
         import pipeline
-        # Check that pipeline imports vcs module
         assert pipeline is not None
 
     def test_pipeline_imports_vcs(self):
         """pipeline.py imports vcs module."""
         import pipeline
-        # Verify vcs is accessible from pipeline context
         assert 'vcs' in dir(pipeline) or hasattr(pipeline, 'vcs')
 
 
