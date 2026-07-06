@@ -401,3 +401,106 @@ class TestVetVerifyCode:
                 f"Expected exit 0, got {result.returncode}\n"
                 f"stdout: {result.stdout}\nstderr: {result.stderr}"
             )
+
+
+# ── Task 3: verify_imports.py standalone script tests ──
+
+
+class TestVerifyImportsScript:
+    """Tests for scripts/verify_imports.py standalone verification (Task 3)."""
+
+    def _run_verify_imports(self, project_dir):
+        """Run verify_imports.py as subprocess and return CompletedProcess."""
+        import subprocess
+        script = os.path.join(
+            os.path.dirname(__file__), "..", "scripts", "verify_imports.py"
+        )
+        return subprocess.run(
+            ["python3", script, project_dir],
+            capture_output=True, text=True, timeout=30
+        )
+
+    def test_all_real_imports_exits_zero(self):
+        """All functions exist → exit 0, prints success message."""
+        with tempfile.TemporaryDirectory() as tmp:
+            # Create source modules
+            with open(os.path.join(tmp, "utils.py"), "w") as f:
+                f.write("def slugify(s): pass\n")
+            # Create tests/
+            os.makedirs(os.path.join(tmp, "tests"), exist_ok=True)
+            with open(os.path.join(tmp, "tests", "test_real.py"), "w") as f:
+                f.write("from utils import slugify\n")
+                f.write("def test_slugify():\n")
+                f.write("    assert slugify('x') is not None\n")
+
+            result = self._run_verify_imports(tmp)
+            assert result.returncode == 0, (
+                f"Expected exit 0, got {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+
+    def test_missing_function_exits_two(self):
+        """Missing function → exit 2, diagnostic in output."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "utils.py"), "w") as f:
+                f.write("def slugify(s): pass\n")
+            os.makedirs(os.path.join(tmp, "tests"), exist_ok=True)
+            with open(os.path.join(tmp, "tests", "test_missing.py"), "w") as f:
+                f.write("from utils import nonexistent_func\n")
+                f.write("def test_foo():\n")
+                f.write("    pass\n")
+
+            result = self._run_verify_imports(tmp)
+            assert result.returncode == 2, (
+                f"Expected exit 2, got {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+            assert "nonexistent_func" in result.stdout, (
+                f"Diagnostic should mention nonexistent_func:\n{result.stdout}"
+            )
+
+    def test_no_tests_dir_exits_zero(self):
+        """No tests/ directory → exit 0 (nothing to verify)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "utils.py"), "w") as f:
+                f.write("def foo(): pass\n")
+            # No tests/ dir
+
+            result = self._run_verify_imports(tmp)
+            assert result.returncode == 0, (
+                f"Expected exit 0 for no tests dir, got {result.returncode}\n"
+                f"stdout: {result.stdout}"
+            )
+
+    def test_no_args_exits_three(self):
+        """No project dir argument → exit 3 (usage error)."""
+        import subprocess
+        script = os.path.join(
+            os.path.dirname(__file__), "..", "scripts", "verify_imports.py"
+        )
+        result = subprocess.run(
+            ["python3", script],
+            capture_output=True, text=True, timeout=30
+        )
+        assert result.returncode == 3, (
+            f"Expected exit 3 for no args, got {result.returncode}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    def test_mock_patch_missing_flagged(self):
+        """@patch('module.missing_func') → exit 2, flagged."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "utils.py"), "w") as f:
+                f.write("def slugify(s): pass\n")
+            os.makedirs(os.path.join(tmp, "tests"), exist_ok=True)
+            with open(os.path.join(tmp, "tests", "test_patch.py"), "w") as f:
+                f.write("from unittest.mock import patch\n")
+                f.write("@patch('utils.nonexistent_func')\n")
+                f.write("def test_foo(mock_func):\n")
+                f.write("    pass\n")
+
+            result = self._run_verify_imports(tmp)
+            assert result.returncode == 2, (
+                f"Expected exit 2, got {result.returncode}\nstdout: {result.stdout}"
+            )
+            assert "nonexistent_func" in result.stdout
