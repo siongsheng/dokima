@@ -295,10 +295,10 @@ def _cleanup_lock():
         # Sync to dokima module if loaded (F022 modular refactor)
         if dokima_mod is not None:
             dokima_mod._LOCK_FD = None
-    try:
-        os.remove(_lock_path())
-    except OSError:
-        pass
+    # Intentionally do NOT os.remove(_lock_path()) here.
+    # Removing the lock file after fd-close is a TOCTOU race: another
+    # process could create a new lock between close() and remove().
+    # acquire_lock() handles stale lock files via PID checking.
     if _STDOUT_ORIG:
         sys.stdout = _STDOUT_ORIG
     if _LOG_FILE:
