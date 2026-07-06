@@ -72,3 +72,47 @@ class TestMockOrchestratorFixture:
         assert isinstance(panel.load_github_token, MagicMock), "panel.load_github_token not patched"
         assert isinstance(panel.acquire_lock, MagicMock), "panel.acquire_lock not patched"
         assert isinstance(panel._cleanup_lock, MagicMock), "panel._cleanup_lock not patched"
+
+
+class TestCtxFixture:
+    """Tests for the ctx fixture in conftest.py."""
+
+    def test_ctx_is_pipelinecontext(self, ctx):
+        """ctx fixture returns a PipelineContext instance."""
+        from context import PipelineContext
+        assert isinstance(ctx, PipelineContext), (
+            f"Expected PipelineContext, got {type(ctx)}"
+        )
+
+    def test_ctx_default_values(self, ctx):
+        """ctx fixture has the expected test default values."""
+        assert ctx.project_dir == "/tmp/test-project", (
+            f"project_dir: expected /tmp/test-project, got {ctx.project_dir}"
+        )
+        assert ctx.repo == "test-owner/test-repo", (
+            f"repo: expected test-owner/test-repo, got {ctx.repo}"
+        )
+        assert ctx.api_key == "test-key", (
+            f"api_key: expected test-key, got {ctx.api_key}"
+        )
+        assert ctx.default_branch == "main", (
+            f"default_branch: expected main, got {ctx.default_branch}"
+        )
+        assert ctx.output_log == "/dev/null", (
+            f"output_log: expected /dev/null, got {ctx.output_log}"
+        )
+        assert ctx.test_cmd == "echo test", (
+            f"test_cmd: expected echo test, got {ctx.test_cmd}"
+        )
+        assert ctx.build_cmd == "echo build", (
+            f"build_cmd: expected echo build, got {ctx.build_cmd}"
+        )
+        assert ctx.lint_cmd == "echo lint", (
+            f"lint_cmd: expected echo lint, got {ctx.lint_cmd}"
+        )
+
+    def test_ctx_is_not_autouse(self, request):
+        """ctx fixture is not autouse — tests must request it explicitly."""
+        assert "ctx" not in request.fixturenames, (
+            "ctx fixture should not be autouse"
+        )

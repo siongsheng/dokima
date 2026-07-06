@@ -8,6 +8,8 @@ import subprocess
 import pytest
 from unittest.mock import patch
 
+from context import PipelineContext
+
 PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dokima"))
 
 
@@ -131,6 +133,26 @@ def panel():
             sys.modules[key] = _saved[key]
         elif key in sys.modules:
             del sys.modules[key]
+
+
+@pytest.fixture
+def ctx():
+    """Return a PipelineContext with test defaults.
+
+    This is the new way to create test contexts — no more _load_panel()
+    for simple tests that just need a PipelineContext. Tests opt in
+    explicitly by requesting this fixture (autouse=False).
+    """
+    return PipelineContext(
+        project_dir="/tmp/test-project",
+        repo="test-owner/test-repo",
+        api_key="test-key",
+        default_branch="main",
+        output_log="/dev/null",
+        test_cmd="echo test",
+        build_cmd="echo build",
+        lint_cmd="echo lint",
+    )
 
 
 @pytest.fixture

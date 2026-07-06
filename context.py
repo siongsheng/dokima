@@ -9,6 +9,17 @@ from dataclasses import dataclass, field
 
 @dataclass
 class PipelineContext:
+    """Mutable context object carrying all pipeline configuration.
+
+    Constructed in main(), passed to every phase function.
+    Fields match the module-level globals that this dataclass replaces:
+    PROJECT_DIR, REPO, DEFAULT_BRANCH, API_KEY, PANEL_FEATURE, etc.
+
+    Frozen? No — main() mutates fields during startup (e.g.,
+    detect_vcs_backend sets ctx.repo, ctx.vcs_backend).
+    Phase functions read-only. Tests mutate freely for setup.
+    """
+
     # ── Paths ──
     project_dir: str = ""
     panel_dir: str = ""
