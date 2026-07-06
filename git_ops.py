@@ -6,7 +6,9 @@ All functions extracted from dokima monolith utils.py (F041: Split utils.py into
 import sys, json, subprocess, os, pwd, time, shlex, re, datetime, tempfile
 
 # Module-level state (moved from utils.py)
+from utils import OUTPUT_LOG, DEFAULT_BRANCH, PROFILES, PROJECT_DIR, REPO
 _GH_TOKEN_CACHE = None
+_IMPORTING_PANEL = None
 
 
 def load_key():

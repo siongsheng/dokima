@@ -5,6 +5,7 @@ All functions extracted from dokima monolith utils.py (F041: Split utils.py into
 
 import sys, json, os, re, subprocess, time
 
+from utils import OUTPUT_LOG, HELP_TEXT, CLI_METADATA
 
 # Cross-module import: check_upgrade() calls do_release() from git_ops
 from git_ops import do_release

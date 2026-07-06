@@ -64,6 +64,25 @@ def _load_panel():
         if target is not None:
             target._IMPORTING_PANEL = module
 
+    # F041: Link new domain modules so override detection (gh, load_key, etc.)
+    # works when these modules' functions are called from roadmap/pipeline.
+    try:
+        import git_ops; git_ops._IMPORTING_PANEL = module
+    except ImportError:
+        pass
+    try:
+        import spec_extract; spec_extract._IMPORTING_PANEL = module
+    except ImportError:
+        pass
+    try:
+        import codebase_map; codebase_map._IMPORTING_PANEL = module
+    except ImportError:
+        pass
+    try:
+        import control_panel; control_panel._IMPORTING_PANEL = module
+    except ImportError:
+        pass
+
     # F022: Sync initial globals (set before __setattr__ was active) to sub-modules
     for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
                    'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
