@@ -253,37 +253,7 @@ def load_github_token():
                 return line.strip().split("=", 1)[1]
     return ""
 
-def git(*args, **kwargs):
-    """Run git in PROJECT_DIR. Returns (stdout, stderr, returncode)."""
-    # Allow test patching via dokima.git override (F022 modular refactor)
-    dokima_mod = _IMPORTING_PANEL
-    if dokima_mod is not None:
-        override = getattr(dokima_mod, 'git', None)
-        if override is not None and override is not git:
-            return override(*args, **kwargs)
-
-    result = subprocess.run(["git", "-C", PROJECT_DIR] + list(args),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=30)
-    return result.stdout.strip(), result.stderr.strip(), result.returncode
-
-def gh(*args, **kwargs):
-    """Run gh CLI with GH_TOKEN. Returns (stdout, stderr, returncode)."""
-    # Allow test patching via dokima.gh override (F022 modular refactor)
-    dokima_mod = _IMPORTING_PANEL
-    if dokima_mod is not None:
-        override = getattr(dokima_mod, 'gh', None)
-        if override is not None and override is not gh:
-            return override(*args, **kwargs)
-
-    global _GH_TOKEN_CACHE
-    env = os.environ.copy()
-    if _GH_TOKEN_CACHE is None:
-        _GH_TOKEN_CACHE = load_github_token()
-    if _GH_TOKEN_CACHE:
-        env["GH_TOKEN"] = _GH_TOKEN_CACHE
-    result = subprocess.run(["gh"] + list(args),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=30, env=env)
-    return result.stdout.strip(), result.stderr.strip(), result.returncode
+# git and gh functions moved to git_ops.py — imported below
 
 def _safe_run(cmd_str: str, cwd: str, timeout: int = 300):
     """Safely run a command string without shell injection.
@@ -576,29 +546,7 @@ def _check_pr_body_quality(spec_text: str, failures: list) -> None:
             "PR body degraded to fallback despite spec having real content."
         )
 
-def detect_repo():
-    """Extract owner/repo from git remote origin. Supports GitHub and GitLab."""
-    # Allow test patching via dokima.detect_repo override (F022b)
-    dokima_mod = _IMPORTING_PANEL
-    if dokima_mod is not None:
-        override = getattr(dokima_mod, 'detect_repo', None)
-        if override is not None and override is not detect_repo:
-            return override()
-    result = subprocess.run(["git", "-C", PROJECT_DIR, "remote", "get-url", "origin"],
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10)
-    if result.returncode == 0:
-        url = result.stdout.strip()
-        # GitHub: github.com[:/]owner/repo(.git)?
-        m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
-        if m:
-            return m.group(1)
-        # GitLab: gitlab.*[:/]namespace/project(.git)?
-        # Supports subgroups: group/subgroup/project
-        m = re.search(r'gitlab\.[^:/]+[:/](.+?)(?:\.git)?$', url)
-        if m:
-            return m.group(1)
-    print("WARNING: Could not detect repo from git remote. Some VCS commands may fail.")
-    return None
+# detect_repo moved to git_ops.py — imported below
 
 def detect_commands():
     """Read test/build/lint commands from AGENTS.md in PROJECT_DIR."""
@@ -898,19 +846,7 @@ def _supplement_pr_sections(pr_sections, project_dir, branch, default_branch):
             print(f"  ⚠ _supplement_pr_sections: git diff failed ({e}) — proceeding without supplement", flush=True)
     return result
 
-def _detect_default_branch(project_dir):
-    """Detect default branch from origin/HEAD. Returns branch name string."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", project_dir, "symbolic-ref", "refs/remotes/origin/HEAD"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            universal_newlines=True, timeout=10)
-        if result.returncode == 0:
-            ref = result.stdout.strip()
-            return ref.split("/")[-1] if "/" in ref else "master"
-    except Exception:
-        pass
-    return "master"
+# _detect_default_branch and _set_gh_token moved to git_ops.py — imported below
 
 def _set_vcs_token():
     """Load the appropriate VCS token based on VCS_BACKEND and export to environment.
@@ -955,10 +891,6 @@ def _load_token_from_env_file(env_var_name):
                 return line.strip().split("=", 1)[1]
     return ""
 
-
-def _set_gh_token():
-    """Backward-compatible alias for _set_vcs_token()."""
-    _set_vcs_token()
 
 def show_help():
     print(HELP_TEXT)
@@ -3348,4 +3280,7 @@ def collect_init_interview_answers(questions, interview_state, path=None):
         print("\n  ✓ No answers provided — proceeding with assumptions as-is.", flush=True)
 
     return (user_answers, 0)
+
+# ── Re-exports from domain modules (F041: Split utils.py) ──────────
+from git_ops import git, gh, detect_repo, _set_gh_token, _detect_default_branch  # noqa: E402,F401
 
