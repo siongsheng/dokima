@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "fcc32db77ad4620478f2577f885ab8bb",
+    "hash": "fb44de6527b6dd69475f82dd9793a29f",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -28,7 +28,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "8b656ab05582685a0b9da3d28a8bff05",
+    "hash": "2f57f65017f44fa31d6aa2a12e22f276",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -268,7 +268,7 @@
     "desc": "\u2500\u2500 Task 1: vcs_pr_update_body() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
   "tests/test_f038_nm_injection.py": {
-    "hash": "614f2d4d5719ef6bd35f475edf357215",
+    "hash": "eb941ece771df3d7b31a0cb20661d665",
     "desc": "Exports: panel"
   },
   "tests/test_final_coverage.py": {
