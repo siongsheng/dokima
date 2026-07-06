@@ -1201,9 +1201,34 @@ def _build_nm_review(nm_summary):
 
 _build_nm_review_section = _build_nm_review  # F038: test compatibility
 
-def _build_tl_review_body(feature, pr_url, branch, spec_path, impact, nm_output=""):
-    """Build TL review body. F038."""
-    return f"## Review\n**Verdict:** PENDING\n**Risk:** {impact}\n"
+def _build_tl_review_body(existing_body, tl_section, nm_output=""):
+    """Build combined TL Review body by injecting TL review section and optionally ### nm Review.
+
+    Strips old nm/TL review sections from existing_body, then rebuilds with
+    fresh TL review and (if nm_output is non-empty) nm review section.
+
+    Returns (combined_body, has_nm) tuple.
+    """
+    # Strip old nm and TL review sections
+    _TL_NM_STRIP_RE = (
+        r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
+        r'\n## Review\n\n.*?(?=\n## |\Z)'
+    )
+    cleaned = re.sub(_TL_NM_STRIP_RE, '', existing_body, flags=re.DOTALL)
+
+    # Extract nm summary if nm_output is provided
+    has_nm = bool(nm_output and nm_output.strip())
+    nm_section = ""
+    if has_nm:
+        nm_summary = _extract_nm_summary(nm_output)
+        nm_section = "\n\n" + _build_nm_review(nm_summary)
+
+    # Build combined body
+    combined = cleaned.rstrip() + "\n\n" + tl_section.strip()
+    if nm_section:
+        combined += nm_section
+
+    return combined, has_nm
 
 def _build_combined_review(nm_output, tl_output):
     """Build combined nm + TL review. F038."""
