@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-06 11:28:38 (incremental | 102 files)
+## Generated: 2026-07-06 13:03:13 (incremental | 102 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -131,7 +131,7 @@ Read the Domain Map below to understand the file organization before exploring i
 
 ## Impact Map
 - agent.py → imports from utils; external: urllib
-- pipeline.py → imports from agent, roadmap, status, tasks, utils, vcs; external: select, string
+- pipeline.py → imports from agent, roadmap, status, tasks, utils; external: select, string
 - roadmap.py → imports from agent, tasks, utils, vcs
 - status.py → external: dataclasses
 - tasks.py → imports from agent, status, utils; external: shutil
