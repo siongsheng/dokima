@@ -1,12 +1,13 @@
 """Dokima tasks module — infrastructure classes and parallel execution.
 
 All classes and functions extracted from dokima monolith (F022: Modular Architecture).
-Imports slugify, git, _safe_run, load_github_token from utils.
+Imports slugify from utils; imports git, _safe_run, load_github_token from git_ops.
 Imports spawn_agent from agent.
 """
 import sys, os, json, re, subprocess, time, shutil
 
-from utils import (slugify, git, _safe_run, load_github_token,
+from git_ops import git, _safe_run, load_github_token
+from utils import (slugify,
                    HERMES_BIN, DEFAULT_BRANCH, PANEL_FEATURE,
                    TEST_CMD, BUILD_CMD, LINT_CMD,
                    FALLBACK_MODELS, max_parallel_override,
