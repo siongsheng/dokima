@@ -278,7 +278,7 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
 
     return repaired
 
-def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
+def run_add_to_roadmap(ctx, feature_desc, project_dir, priority_hint=None):
     """Add a feature to roadmap.md with auto-determined priority, dependencies,
     and section placement. Orders features by execution priority within each
     section: infrastructure/tests first, then critical bugs, resilience,
