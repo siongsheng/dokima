@@ -1783,6 +1783,20 @@ Read the Domain Map below to understand the file organization before exploring i
 ## Test Map
 {test_map}
 """
+
+    # -- F028: Agent Guidance (accumulated enrichments) --
+    enrichments = load_map_enrichments(project_dir)
+    if enrichments:
+        guidance_lines = []
+        guidance_lines.append("## Agent Guidance")
+        guidance_lines.append("> Accumulated across features. Agents read this section as institutional knowledge.")
+        guidance_lines.append("")
+        for entry in enrichments:
+            feat = entry.get("feature", "???")
+            gtext = entry.get("guidance", "")
+            guidance_lines.append(f"- ({feat}) {gtext}")
+        map_content += "\n" + "\n".join(guidance_lines) + "\n"
+
     with open(map_path, 'w') as f:
         f.write(map_content)
     with open(cache_path, 'w') as f:
