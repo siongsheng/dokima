@@ -267,7 +267,7 @@
 ### F041: Split utils.py into domain modules — git_ops.py (git, gh wrappers), spec_extract.py (extract_pr_sections, extract_issue_sections, clean_spec_content), codebase_map.py (generate_codebase_map, _build_domain_map, _build_impact_map), control_panel.py (handle_status, handle_stop, handle_kill). 3,351 lines → ~4 × 800-line modules.
 **Priority:** P1
 **Dependencies:** F040
-**Status:** [ ] Pending Progress
+**Status:** [~] In Progress Progress
 **User Story:** As a contributor, I open the right module for the task instead of scrolling past 83 functions in one file.
 
 ### F042: CI pipeline — add .github/workflows/test.yml running pytest on push/PR. Add complexity gates (max CC=30), lint (pyflakes), and type checking (mypy --strict for new modules).
