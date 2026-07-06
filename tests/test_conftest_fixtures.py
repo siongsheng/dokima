@@ -32,16 +32,16 @@ class TestTestRepoFixture:
         assert "## Phase" in content, "roadmap.md missing Phase section"
         assert "### F001:" in content, "roadmap.md missing feature header"
 
-    def test_repo_sets_panel_globals(self, panel, test_repo):
-        """test_repo sets panel.PROJECT_DIR, panel.REPO, and panel.DEFAULT_BRANCH."""
-        assert panel.PROJECT_DIR == test_repo, (
-            f"Expected PROJECT_DIR={test_repo}, got {panel.PROJECT_DIR}"
+    def test_repo_sets_ctx_fields(self, panel, ctx, test_repo):
+        """test_repo sets ctx.project_dir, ctx.repo, and ctx.default_branch."""
+        assert ctx.project_dir == test_repo, (
+            f"Expected project_dir={test_repo}, got {ctx.project_dir}"
         )
-        assert panel.REPO == "test-owner/test-repo", (
-            f"Expected REPO=test-owner/test-repo, got {panel.REPO}"
+        assert ctx.repo == "test-owner/test-repo", (
+            f"Expected repo=test-owner/test-repo, got {ctx.repo}"
         )
-        assert panel.DEFAULT_BRANCH == "master", (
-            f"Expected DEFAULT_BRANCH=master, got {panel.DEFAULT_BRANCH}"
+        assert ctx.default_branch == "master", (
+            f"Expected default_branch=master, got {ctx.default_branch}"
         )
 
 
@@ -86,8 +86,8 @@ class TestCtxFixture:
 
     def test_ctx_default_values(self, ctx):
         """ctx fixture has the expected test default values."""
-        assert ctx.project_dir == "/tmp/test-project", (
-            f"project_dir: expected /tmp/test-project, got {ctx.project_dir}"
+        assert ctx.project_dir == "", (
+            f"project_dir: expected empty string, got {ctx.project_dir}"
         )
         assert ctx.repo == "test-owner/test-repo", (
             f"repo: expected test-owner/test-repo, got {ctx.repo}"

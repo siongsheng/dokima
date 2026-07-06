@@ -103,7 +103,7 @@ def ctx():
     explicitly by requesting this fixture (autouse=False).
     """
     return PipelineContext(
-        project_dir="/tmp/test-project",
+        project_dir="",
         repo="test-owner/test-repo",
         api_key="test-key",
         default_branch="main",
