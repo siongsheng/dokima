@@ -163,7 +163,7 @@
 ### F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [ ] Pending
+**Status:** [~] In Progress
 **User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
 
 
