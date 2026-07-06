@@ -516,3 +516,46 @@ class TestMapEnrichments:
                 f.write("this is not json {{{")
             result = panel.load_map_enrichments(d)
             assert result == []
+
+    def test_generate_map_includes_guidance(self, panel, tmp_project):
+        """When enrichments exist, map includes ## Agent Guidance section."""
+        # Pre-populate enrichment file
+        entries = [
+            {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+             "guidance": "test guidance", "category": "pattern"},
+        ]
+        panel.save_map_enrichments(tmp_project, "F028", entries)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        assert "## Agent Guidance" in content
+        assert "- (F028) test guidance" in content
+        assert "> Accumulated across features" in content
+
+    def test_generate_map_empty_enrichments(self, panel, tmp_project):
+        """When no enrichments, map does NOT include ## Agent Guidance section."""
+        # Ensure enrichment file doesn't exist
+        enrich_path = os.path.join(tmp_project, "specs", ".map-enrichments.json")
+        if os.path.exists(enrich_path):
+            os.remove(enrich_path)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        assert "## Agent Guidance" not in content
+
+    def test_guidance_section_after_test_map(self, panel, tmp_project):
+        """Agent Guidance section appears after Test Map in output."""
+        entries = [
+            {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+             "guidance": "test guidance", "category": "pattern"},
+        ]
+        panel.save_map_enrichments(tmp_project, "F028", entries)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        test_map_idx = content.index("## Test Map")
+        guidance_idx = content.index("## Agent Guidance")
+        assert guidance_idx > test_map_idx, "Agent Guidance must appear after Test Map"
