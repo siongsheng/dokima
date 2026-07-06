@@ -4,6 +4,59 @@ All functions extracted from dokima monolith (F022: Modular Architecture).
 Module-level globals are set by main() in the dokima entry script before any function calls.
 """
 import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+
+@dataclass
+class PipelineContext:
+    """Single source of truth for all pipeline configuration — replaces 25+ module-level globals."""
+
+    # Project identity
+    project_dir: str = ""
+    repo: str = ""
+    default_branch: str = "master"
+    panel_feature: str = ""
+    panel_dir: str = ""
+
+    # Paths (computed at startup, immutable per run)
+    real_home: str = ""
+    hermes_home: str = ""
+    hermes_bin: str = ""
+    profiles_dir: str = ""
+    output_log: str = ""
+
+    # API
+    api_key: str = ""
+
+    # Agent ports
+    panel_port: dict = field(default_factory=lambda: {
+        "strategist": 8647, "tech-lead": 8644,
+        "coder": 8645, "nm": 8648
+    })
+
+    # Model fallback
+    fallback_models: dict = field(default_factory=dict)
+
+    # Pipeline flags
+    skip_autofix: bool = False
+    force_full: bool = False
+    skip_human_gate: bool = False
+    max_parallel_override: Optional[int] = None
+    resume: Optional[bool] = None
+    max_continuous: int = 20
+
+    # Project commands (detected from AGENTS.md)
+    test_cmd: str = "npm test"
+    build_cmd: str = "npm run build"
+    lint_cmd: str = "npm run lint"
+
+    # Transient runtime state (was module-level globals in utils)
+    _log_file_handle: Any = field(default=None, repr=False)
+    _lock_fd: Any = field(default=None, repr=False)
+    _log_file: Any = field(default=None, repr=False)
+    _stdout_orig: Any = field(default=None, repr=False)
+    _gh_token_cache: Optional[str] = field(default=None, repr=False)
 
 # shutil imported dynamically where needed (deploy_profile_skills)
 

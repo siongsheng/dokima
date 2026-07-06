@@ -32,6 +32,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
                    extract_map_enrichments, save_map_enrichments,
+                   PipelineContext,
                    HERMES_BIN, DEFAULT_BRANCH, PROJECT_DIR, REPO, PANEL_FEATURE,
                    PANEL_DIR, PROFILES, OUTPUT_LOG, FALLBACK_MODELS, PANEL_PORT,
                    API_KEY, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE,
@@ -117,32 +118,31 @@ def _status_update(**kwargs):
     except Exception:
         pass
 
-def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode):
+def run_post_pipeline(ctx, feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode):
     """Post-pipeline: report, roadmap update, auto-merge. Returns continue_loop."""
-    global PANEL_FEATURE, PROJECT_DIR, REPO, OUTPUT_LOG
     print("\n" + "═" * 55)
     print("  PANEL REPORT")
     print("═" * 55)
     print(f"Feature:    {feature}")
-    print(f"Project:    {PROJECT_DIR}")
-    print(f"Repo:       {REPO}")
+    print(f"Project:    {ctx.project_dir}")
+    print(f"Repo:       {ctx.repo}")
     print(f"Branch:     {branch}")
     print(f"PR:         {pr_url or 'N/A'}")
     print(f"Spec:       {spec_path}")
     print(f"Strategist: {len(strat_output)} chars output")
     print(f"Mode:       {mode.upper()}")
     print(f"Verdict:    {verdict}")
-    print(f"Full log:   {OUTPUT_LOG}")
+    print(f"Full log:   {ctx.output_log}")
     print("✓ Pipeline complete.")
 
     # Auto-refresh codebase map after pipeline completes
-    generate_codebase_map(PROJECT_DIR)
+    generate_codebase_map(ctx.project_dir)
 
     if is_next:
-        roadmap_path = os.path.join(PROJECT_DIR, "specs", "roadmap.md")
-        fid_match = re.match(r'(F\d{3})', PANEL_FEATURE) if PANEL_FEATURE else None
+        roadmap_path = os.path.join(ctx.project_dir, "specs", "roadmap.md")
+        fid_match = re.match(r'(F\d{3})', ctx.panel_feature) if ctx.panel_feature else None
         fid = fid_match.group(1) if fid_match else ""
-        title = PANEL_FEATURE.split(": ", 1)[1] if fid and ": " in PANEL_FEATURE else PANEL_FEATURE
+        title = ctx.panel_feature.split(": ", 1)[1] if fid and ": " in ctx.panel_feature else ctx.panel_feature
 
         if verdict in ("CODER_FAILED", "TIMED_OUT", "UNKNOWN"):
             continue_loop = False
@@ -173,7 +173,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
             if continue_loop:
                 if fid and os.path.exists(roadmap_path):
                     update_roadmap_status(roadmap_path, fid, "done")
-                    status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+                    status_path = os.path.join(ctx.project_dir, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
                     commit_roadmap_update(roadmap_path, fid, "done")
@@ -182,7 +182,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
             if verdict == "APPROVED":
                 if fid and os.path.exists(roadmap_path):
                     update_roadmap_status(roadmap_path, fid, "done")
-                    status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+                    status_path = os.path.join(ctx.project_dir, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
                     commit_roadmap_update(roadmap_path, fid, "done")
@@ -200,7 +200,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
     return continue_loop
 
 
-def discover_blocked_pr():
+def discover_blocked_pr(ctx):
     """Detect most recent BLOCKED PR via gh CLI.
     Returns {number, title, headRefName, body} or None."""
     # Allow test patching via dokima.discover_blocked_pr override (F022 modular refactor)
@@ -210,9 +210,8 @@ def discover_blocked_pr():
         if override is not None and override is not discover_blocked_pr:
             return override()
 
-    global REPO
     stdout, _, rc = gh("pr", "list", "--state", "open",
-                       "--repo", REPO,
+                       "--repo", ctx.repo,
                        "--json", "number,title,body,headRefName,updatedAt",
                        "--jq", "sort_by(.updatedAt) | reverse")
     if rc != 0 or not stdout.strip():
@@ -258,11 +257,10 @@ def discover_blocked_pr():
 
 
 
-def extract_blockers_from_pr(pr_body, pr_number=None):
+def extract_blockers_from_pr(ctx, pr_body, pr_number=None):
     """Parse PR body for blocker descriptions under ### Blockers section.
     Returns list of blocker strings with ARCHITECTURAL lines excluded.
     Falls back to PR comments if pr_number provided."""
-    global REPO
     blockers = []
 
     # Primary: ### Blockers section
@@ -288,11 +286,11 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     # Fallback: PR comments if no blockers found and pr_number given
     if not blockers and pr_number:
         try:
-            stdout, _, rc = gh("pr", "view", str(pr_number), "--repo", REPO, "--comments",
+            stdout, _, rc = gh("pr", "view", str(pr_number), "--repo", ctx.repo, "--comments",
                                "--json", "body", "--jq", ".body")
             if rc == 0 and stdout.strip():
                 # Recurse with comment body as pr_body
-                return extract_blockers_from_pr(stdout)
+                return extract_blockers_from_pr(ctx, stdout)
         except Exception:
             print("  ⚠ Failed to fetch PR comments for blocker extraction", flush=True)
 
@@ -302,7 +300,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
-def run_fix_mode_issue(project_dir, issue_number):
+def run_fix_mode_issue(ctx, project_dir, issue_number):
     """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
 
     F034: dokima fix --issue N — pulls issue body, extracts structured fix
@@ -315,8 +313,6 @@ def run_fix_mode_issue(project_dir, issue_number):
     4. Create fix/issue-{N} branch, spawn coder via run_phase2_coder(mode="fix")
     5. Run vet + nm if coder succeeds
     """
-    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
-    PROJECT_DIR = project_dir
 
     print(f"\n{'═'*60}", flush=True)
     print(f"  FIX MODE (issue #{issue_number}) — {project_dir}", flush=True)
@@ -326,7 +322,7 @@ def run_fix_mode_issue(project_dir, issue_number):
 
     # Step 1: Fetch issue body
     view_stdout, view_stderr, view_rc = gh(
-        "issue", "view", str(issue_number), "--repo", REPO,
+        "issue", "view", str(issue_number), "--repo", ctx.repo,
         "--json", "body,title", "--jq", "{body, title}"
     )
     if view_rc != 0:
@@ -370,7 +366,7 @@ def run_fix_mode_issue(project_dir, issue_number):
         f"Constraints: Fix mode — only implement what is described above. "
         f"Do NOT add features. TDD with two separate commits. "
         f"Single commit message: fix: address issue #{issue_number}. "
-        f"Run {TEST_CMD} before pushing."
+        f"Run {ctx.test_cmd} before pushing."
     )
 
     pr_sections = (
@@ -379,7 +375,7 @@ def run_fix_mode_issue(project_dir, issue_number):
     )
 
     # Step 4: Create branch and spawn coder
-    git("checkout", DEFAULT_BRANCH)
+    git("checkout", ctx.default_branch)
     git("checkout", "-b", branch)
 
     coder_result = run_phase2_coder(
@@ -415,17 +411,15 @@ def run_fix_mode_issue(project_dir, issue_number):
 
 
 
-def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
+def run_fix_mode(ctx, project_dir, fix_all=False, skip_human_gate=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
-    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
-    PROJECT_DIR = project_dir
 
     print(f"\n{'═'*60}", flush=True)
     print(f"  FIX MODE — {project_dir}", flush=True)
     print(f"{'═'*60}\n", flush=True)
 
     # Step 1: Discover BLOCKED PR
-    pr = discover_blocked_pr()
+    pr = discover_blocked_pr(ctx)
     if pr is None:
         print("  No BLOCKED PRs found. Run `dokima --next` for new features.", flush=True)
         return
@@ -434,14 +428,14 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
     pr_title = pr["title"]
     pr_branch = pr["headRefName"]
     pr_body = pr["body"]
-    pr_url = f"https://github.com/{REPO}/pull/{pr_num}"
+    pr_url = f"https://github.com/{ctx.repo}/pull/{pr_num}"
     print(f"  Found PR #{pr_num}: {pr_title}", flush=True)
     print(f"  Branch: {pr_branch}", flush=True)
     print(f"  URL: {pr_url}\n", flush=True)
 
     # Step 2: Check PR state (EC8: merged, closed)
     import json as _json
-    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", ctx.repo,
                                  "--json", "state,merged", "--jq", "{state, merged}")
     if view_rc == 0:
         try:
@@ -456,7 +450,7 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             pass  # Proceed anyway
 
     # Step 2.5: Check most recent TL review verdict — skip if already APPROVED
-    reviews_out, _, reviews_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+    reviews_out, _, reviews_rc = gh("pr", "view", str(pr_num), "--repo", ctx.repo,
                                     "--json", "reviews", "--jq", ".reviews")
     if reviews_rc == 0 and reviews_out.strip():
         try:
@@ -472,10 +466,10 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             pass  # Proceed — best-effort check
 
     # Step 3: Extract blockers (EC13: no TL review fallback)
-    blockers = extract_blockers_from_pr(pr_body, pr_number=pr_num)
+    blockers = extract_blockers_from_pr(ctx, pr_body, pr_number=pr_num)
     if not blockers:
         # EC13: check PR comments via fallback
-        blockers = extract_blockers_from_pr("", pr_number=pr_num)
+        blockers = extract_blockers_from_pr(ctx, "", pr_number=pr_num)
     if not blockers:
         print(f"  Cannot extract blockers automatically. Review PR manually:", flush=True)
         print(f"  {pr_url}", flush=True)
