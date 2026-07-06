@@ -26,7 +26,8 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    _extract_nm_summary,
                    _extract_convention_rules, _append_convention_rules,
-                   extract_issue_sections,
+                   extract_issue_sections, extract_should_fix_from_text,
+                   format_blocker_cross_reference,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
@@ -1233,6 +1234,95 @@ def _build_tl_review_body(existing_body, tl_section, nm_output=""):
 def _build_combined_review(nm_output, tl_output):
     """Build combined nm + TL review. F038."""
     return f"{nm_output}\n\n{tl_output}"
+
+
+def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
+                           create_blocker_issues=True):
+    """Create GitHub issues for each blocker.
+
+    Returns list of created issue URLs.
+    Skips when create_blocker_issues=False or blockers list is empty.
+    """
+    if not create_blocker_issues or not blockers:
+        return []
+    urls = []
+    for blocker in blockers:
+        title = f"BLOCKER: {blocker[:80]}"
+        body = (
+            f"## Blocker identified during TL review\n\n"
+            f"**Feature:** {feature}\n"
+            f"**Branch:** {branch}\n"
+            f"**PR:** {pr_url}\n"
+            f"**Spec:** {spec_path}\n\n"
+            f"### Details\n{blocker}\n\n"
+            f"Blocker identified during TL review of PR #{pr_num}.\n"
+            f"Must be resolved before merge."
+        )
+        stdout, _, rc = vcs.vcs_issue_create(title, body, labels=["blocker"])
+        if rc == 0 and stdout.strip():
+            urls.append(stdout.strip())
+    return urls
+
+
+def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
+                               spec_path, feature, create_issues=False):
+    """Update original PR body after fix PR to show blocker resolution.
+
+    Fetches the original PR body, finds the ### Blockers section, applies
+    cross-reference formatting (strikethrough for APPROVED), and adds a
+    ### Resolution section.
+
+    Returns True if update succeeded, False otherwise (best-effort, no crash).
+    """
+    try:
+        current_body, _, rc = vcs.vcs_pr_view(pr_num, fields="body")
+        if rc != 0 or not current_body:
+            return False
+        if "### Blockers" not in current_body:
+            return False
+
+        cross_ref = format_blocker_cross_reference(
+            blockers, fix_pr_url=pr_url, fix_verdict=fix_verdict
+        )
+        resolution_section = (
+            f"\n\n### Resolution\n\n"
+            f"**Verdict:** {fix_verdict}  \n"
+            f"**Fix PR:** {pr_url}  \n"
+        )
+        updated_body = current_body + "\n" + cross_ref + resolution_section
+        _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body)
+        return rc == 0
+    except Exception:
+        return False
+
+
+def auto_close_referenced_issues(pr_body, pr_num, pr_url):
+    """Scan PR body for Closes #N / Fixes #N references and close those issues.
+
+    Posts a closing comment on each referenced issue.
+    Returns list of issue numbers that were referenced.
+    """
+    if not pr_body:
+        return []
+    refs = re.findall(r'(?:Closes|Fixes)\s+#(\d+)', pr_body)
+    if not refs:
+        return []
+    issue_nums = []
+    for issue_num in refs:
+        try:
+            # Verify issue exists
+            _, _, rc = vcs.vcs_issue_view(issue_num)
+            if rc != 0:
+                continue
+            comment = (
+                f"Closed via PR [#{pr_num}]({pr_url}).\n\n"
+                f"Resolution applied in {pr_url}."
+            )
+            gh("issue", "comment", str(issue_num), "--body", comment)
+            issue_nums.append(int(issue_num))
+        except Exception:
+            continue
+    return issue_nums
 
 
 def _inject_nm_into_pr_body(pr_url, nm_stdout):
