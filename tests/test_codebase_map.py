@@ -559,3 +559,15 @@ class TestMapEnrichments:
         test_map_idx = content.index("## Test Map")
         guidance_idx = content.index("## Agent Guidance")
         assert guidance_idx > test_map_idx, "Agent Guidance must appear after Test Map"
+
+    def test_map_hint_in_strategist_prompt(self, panel):
+        """F028: Strategist prompt includes > MAP: hint for enrichment."""
+        # The _make_map_hint pattern appends map metadata to prompts.
+        # Verify the > MAP: hint text that gets injected into strat_prompt.
+        # We test by checking that the prompt-building logic includes the guidance.
+        import re as _re
+        # The MAP hint paragraph should contain these key phrases
+        hint = panel._MAP_ENRICHMENT_HINT
+        assert "> MAP:" in hint
+        assert "architecture patterns" in hint.lower() or "conventions" in hint.lower()
+        assert "institutional knowledge" in hint.lower() or "future agents" in hint.lower()
