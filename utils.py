@@ -1249,6 +1249,7 @@ def collect_init_interview_answers(questions, interview_state, path=None):
 # ── Re-exports from domain modules (F041: Split utils.py) ──────────
 from codebase_map import generate_codebase_map, _build_domain_map, _build_impact_map, _classify_domain, load_map_enrichments, save_map_enrichments, extract_map_enrichments, _build_test_map, _find_key_files, _describe_file  # noqa: E402,F401
 from control_panel import handle_status, handle_stop, handle_kill, handle_list_crons, show_help, show_help_json, check_upgrade, _version_newer, _check_pid, _verify_pid_owner, _get_lock_state, HELP_TEXT, CLI_METADATA  # noqa: E402,F401
+CLI_METADATA["version"] = VERSION  # patch version from utils module-level global
 from spec_extract import extract_pr_sections, clean_spec_content, verify_spec_quality, _check_pr_body_quality, extract_should_fix_from_text, _extract_nm_summary, extract_issue_sections, extract_agent_messages, extract_file_paths, _extract_tl_verdict, _extract_tl_blockers, format_blocker_cross_reference, _extract_convention_rules, _append_convention_rules  # noqa: E402,F401
 from git_ops import git, gh, detect_repo, load_key, load_github_token, _safe_run, detect_commands, _detect_referenced_repo, _detect_default_branch, _set_vcs_token, _set_gh_token, _load_token_from_env_file, try_auto_merge, _supplement_pr_sections  # noqa: E402,F401
 

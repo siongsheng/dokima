@@ -67,7 +67,7 @@ EXAMPLES:
 # KEEP IN SYNC with HELP_TEXT — add any new command/flag/env_var here too
 CLI_METADATA = {
     "tool": "dokima",
-    "version": "unknown",  # re-exported from utils.VERSION at import time
+    "version": "unknown",  # patched by utils.py re-export
     "commands": [
         {"name": "run", "syntax": "dokima \"Feature description\" [dir]", "description": "Run full pipeline for a feature"},
         {"name": "init", "syntax": "dokima init \"description\" [dir]", "description": "Project discovery & constitution"},
