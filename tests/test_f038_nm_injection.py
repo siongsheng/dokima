@@ -387,3 +387,115 @@ class TestNmInjectionIntegration:
             result = pl._inject_nm_into_pr_body(pr_url, summary)
 
         assert result is False
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Task 3: TL PR body injection preserves and refreshes nm section
+# ═══════════════════════════════════════════════════════════════════
+
+TL_NM_COMBINED_STRIP_RE = (
+    r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
+    r'\n## Review\n\n.*?(?=\n## |\Z)'
+)
+
+
+class TestTlStripNmSection:
+    """Tests for combined TL + nm section stripping regex."""
+
+    def test_strips_both_tl_and_nm_sections(self):
+        body = "## Description\n\ntext\n\n### nm Review\n\nnm content\n\n## Review\n\nTL content\n\n## Validation\nok"
+        import re
+        cleaned = re.sub(TL_NM_COMBINED_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "### nm Review" not in cleaned
+        assert "nm content" not in cleaned
+        assert "## Review" not in cleaned
+        assert "TL content" not in cleaned
+        assert "## Description" in cleaned
+        assert "## Validation" in cleaned
+
+    def test_strips_tl_review_only_when_no_nm(self):
+        body = "## Description\n\ntext\n\n## Review\n\nTL content\n\n## Validation\nok"
+        import re
+        cleaned = re.sub(TL_NM_COMBINED_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "## Review" not in cleaned
+        assert "TL content" not in cleaned
+        assert "## Description" in cleaned
+        assert "## Validation" in cleaned
+
+    def test_strips_nm_only_when_no_tl(self):
+        body = "## Description\n\ntext\n\n### nm Review\n\nnm content\n\n## Validation\nok"
+        import re
+        cleaned = re.sub(TL_NM_COMBINED_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "### nm Review" not in cleaned
+        assert "nm content" not in cleaned
+        assert "## Description" in cleaned
+        assert "## Validation" in cleaned
+
+    def test_no_sections_unchanged(self):
+        body = "## Description\n\nSome text\n\n## Validation\nok"
+        import re
+        cleaned = re.sub(TL_NM_COMBINED_STRIP_RE, '', body, flags=re.DOTALL)
+        assert cleaned == body
+
+
+class TestTlNmRefresh:
+    """Tests for nm section refresh during TL PR body injection."""
+
+    def test_build_combined_review_with_nm_output(self):
+        """When nm_output is non-empty, builds both TL Review and nm Review."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        nm_output = "RISK: LOW\n\nSTAGE 1: Diff\nAll good."
+        summary = {"risk": "LOW", "auto_fix_count": 0, "auto_fix_labels": [],
+                   "key_findings": "All good.", "should_fix_items": []}
+
+        tl_section = "\n\n## Review\n\n**Verdict:** APPROVED  \n**Risk:** LOW\n"
+        existing_body = "## Description\n\nSome text"
+
+        with patch.object(pl, '_extract_nm_summary', return_value=summary):
+            combined, has_nm = pl._build_tl_review_body(
+                existing_body, tl_section, nm_output
+            )
+
+        assert "## Review" in combined
+        assert "### nm Review" in combined
+        assert "All good." in combined
+        assert has_nm is True
+
+    def test_build_combined_review_without_nm_output(self):
+        """When nm_output is empty, builds only TL Review without nm section."""
+        import pipeline as pl
+
+        tl_section = "\n\n## Review\n\n**Verdict:** APPROVED  \n**Risk:** LOW\n"
+        existing_body = "## Description\n\nSome text"
+
+        combined, has_nm = pl._build_tl_review_body(
+            existing_body, tl_section, ""
+        )
+
+        assert "## Review" in combined
+        assert "### nm Review" not in combined
+        assert has_nm is False
+
+    def test_build_combined_review_strips_old_nm(self):
+        """When existing body has old nm section, it's stripped before rebuild."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        nm_output = "RISK: LOW\n\nSTAGE 1: Diff\nFresh findings."
+        summary = {"risk": "LOW", "auto_fix_count": 0, "auto_fix_labels": [],
+                   "key_findings": "Fresh findings.", "should_fix_items": []}
+        tl_section = "\n\n## Review\n\n**Verdict:** APPROVED  \n**Risk:** LOW\n"
+        existing_body = "## Description\n\nSome text\n\n### nm Review\n\nOld nm content\n\n## Review\n\nOld TL content"
+
+        with patch.object(pl, '_extract_nm_summary', return_value=summary):
+            combined, has_nm = pl._build_tl_review_body(
+                existing_body, tl_section, nm_output
+            )
+
+        assert "Old nm content" not in combined
+        assert "Old TL content" not in combined
+        assert "Fresh findings." in combined
+        assert "### nm Review" in combined
+        assert "## Review" in combined
