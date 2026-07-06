@@ -19,6 +19,7 @@
 - **F035: GitLab support: swap gh CLI for glab or abstract VCS layer** — in progress since 2026-07-05 15:04, branch `feat/f035-gitlab-support-swap-gh-cli-for-glab-b1d7132e` [panel]
 - **F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.** — in progress since 2026-07-06 10:03, branch `feat/f032-agent-as-judge-self-assessment-code-99fe357b` [panel]
 - **F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.** — in progress since 2026-07-06 12:37, branch `feat/f028-strategist-enriches-codebase-mapmd--a52dfa82` [panel]
+- **F040: PipelineContext dataclass — replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, etc.) with a single PipelineContext dataclass passed to each phase function. Eliminates conftest __setattr__ override hack. Makes testing trivial — create a context, pass it in. All 1,029 tests protect this refactor.** — in progress since 2026-07-06 20:42, branch `feat/f040-pipelinecontext-dataclass--replace--45dfc111` [panel]
 
 ## Archived
 | Feature | Status | PR | Completed |
