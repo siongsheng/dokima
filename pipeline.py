@@ -1352,6 +1352,74 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
         return False
 
 
+def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
+    """Create GitHub issues for nm SHOULD FIX findings.
+
+    Extracts SHOULD FIX items from nm_stdout and creates GitHub issues
+    with title prefix SHOULD FIX [nm] and body header ## nm Review Finding.
+
+    Uses the same gh issue create pattern as Phase 5 TL (lines 1691-1731).
+    Gracefully handles missing pr_url, empty nm_stdout, and gh failures.
+
+    Returns True if issues were created (or if no items found but process ran),
+    False if pr_url was None (skipped).
+    """
+    if not pr_url:
+        return False
+    if not nm_stdout or not nm_stdout.strip():
+        return True
+
+    try:
+        should_fix_items = extract_should_fix_from_text(nm_stdout)
+    except Exception:
+        return True
+
+    if not should_fix_items:
+        return True
+
+    print(f"\n── Creating GitHub Issues for {len(should_fix_items)} nm SHOULD FIX items ──", flush=True)
+
+    for item in should_fix_items[:5]:
+        detail = item.get("detail", "")
+        dimension = item.get("dimension", "")
+        location = item.get("location", "")
+
+        if dimension:
+            title = f"SHOULD FIX [nm] [{dimension}]: {detail[:80]}"
+        else:
+            title = f"SHOULD FIX [nm]: {detail[:80]}"
+
+        what_lines = [detail]
+        if location:
+            what_lines.append(f"\n**Location:** {location}")
+        what_section = "\n".join(what_lines)
+
+        body = (
+            f"## nm Review Finding\n\n"
+            f"**Feature:** {feature}\n"
+            f"**Branch:** {branch}\n"
+            f"**PR:** {pr_url or 'N/A'}\n"
+            f"**Spec:** {spec_path}\n\n"
+            f"### What\n{what_section}\n\n"
+            f"### Fix\nApply the recommended change. "
+            f"See {pr_url} for full review details.\n\n"
+            f"### Verify\nRun tests and confirm the fix resolves the finding.\n\n"
+            f"### Source\nFound during adversarial review of `{branch}`. "
+            f"See {pr_url} for full review details and other findings."
+        )
+        try:
+            stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
+                                    "--title", title, "--body", body)
+            if rc == 0:
+                print(f"  Created: {stdout}", flush=True)
+            else:
+                print(f"  Failed: {stderr}", flush=True)
+        except Exception:
+            pass  # Best-effort: don't crash on individual issue failures
+
+    return True
+
+
 def run_phase4_nm(feature, branch, impact, pr_url_in):
     """Phase 4: nm — adversarial review, parse PR. Returns dict with nm_ok, pr_url, risk."""
     global PROJECT_DIR, REPO
@@ -1651,14 +1719,10 @@ Report: what you fixed, commit hash."""
         # Extract impact from TL output
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
-        # Fetch existing PR body, strip old Review sections
+        # Fetch existing PR body, strip old Review sections via _build_tl_review_body
         existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
                                  "--json", "body", "--jq", ".body")
-        existing_body = re.sub(
-            r'\n## Review\n\n.*?(?=\n## |\Z)',
-            '', existing_body or '', flags=re.DOTALL
-        )
-        review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
+        review_section = f"## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
             review_section += f"\n**Impact:** {tl_impact}\n"
         if blocker_lines:
@@ -1676,7 +1740,7 @@ Report: what you fixed, commit hash."""
                         review_section += f"{match2.group(1)}. **{match2.group(2).strip()}**\n"
                     else:
                         review_section += f"- {bl}\n"
-        new_body = (existing_body or "") + review_section
+        new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
         _, edit_err, edit_rc = gh("api",
             f"repos/{REPO}/pulls/{pr_num}",
@@ -2632,6 +2696,11 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
         if pr_url and nm_result.get("nm_stdout"):
             if _inject_nm_into_pr_body(pr_url, nm_result["nm_stdout"]):
                 print(f"  ✓ nm Review injected into PR body", flush=True)
+            # Create GitHub Issues for nm SHOULD FIX items
+            _create_nm_should_fix_issues(
+                nm_result.get("nm_stdout", ""), feature, branch,
+                pr_url, spec_path
+            )
         # Save checkpoint after nm
         if resume is not False:
             cp_data = {
