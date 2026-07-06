@@ -100,6 +100,60 @@ class TestControlPanelModule:
         assert hasattr(control_panel, "handle_list_crons")
         assert callable(control_panel.handle_list_crons)
 
+    def test_has_show_help(self):
+        import control_panel
+
+        assert hasattr(control_panel, "show_help")
+        assert callable(control_panel.show_help)
+
+    def test_has_show_help_json(self):
+        import control_panel
+
+        assert hasattr(control_panel, "show_help_json")
+        assert callable(control_panel.show_help_json)
+
+    def test_has_check_upgrade(self):
+        import control_panel
+
+        assert hasattr(control_panel, "check_upgrade")
+        assert callable(control_panel.check_upgrade)
+
+    def test_has_version_newer(self):
+        import control_panel
+
+        assert hasattr(control_panel, "_version_newer")
+        assert callable(control_panel._version_newer)
+
+    def test_has_check_pid(self):
+        import control_panel
+
+        assert hasattr(control_panel, "_check_pid")
+        assert callable(control_panel._check_pid)
+
+    def test_has_verify_pid_owner(self):
+        import control_panel
+
+        assert hasattr(control_panel, "_verify_pid_owner")
+        assert callable(control_panel._verify_pid_owner)
+
+    def test_has_get_lock_state(self):
+        import control_panel
+
+        assert hasattr(control_panel, "_get_lock_state")
+        assert callable(control_panel._get_lock_state)
+
+    def test_has_help_text(self):
+        import control_panel
+
+        assert hasattr(control_panel, "HELP_TEXT")
+        assert isinstance(control_panel.HELP_TEXT, str)
+
+    def test_has_cli_metadata(self):
+        import control_panel
+
+        assert hasattr(control_panel, "CLI_METADATA")
+        assert isinstance(control_panel.CLI_METADATA, dict)
+
 
 class TestUtilsReExport:
     """Verify utils.py re-exports the moved functions."""
