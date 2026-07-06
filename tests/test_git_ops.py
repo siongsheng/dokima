@@ -57,6 +57,69 @@ class TestGitOpsModule:
         assert hasattr(git_ops, "_detect_default_branch")
         assert callable(git_ops._detect_default_branch)
 
+    def test_has_load_key(self):
+        """git_ops exports load_key()."""
+        import git_ops
+
+        assert hasattr(git_ops, "load_key")
+        assert callable(git_ops.load_key)
+
+    def test_has_load_github_token(self):
+        """git_ops exports load_github_token()."""
+        import git_ops
+
+        assert hasattr(git_ops, "load_github_token")
+        assert callable(git_ops.load_github_token)
+
+    def test_has_safe_run(self):
+        """git_ops exports _safe_run()."""
+        import git_ops
+
+        assert hasattr(git_ops, "_safe_run")
+        assert callable(git_ops._safe_run)
+
+    def test_has_detect_commands(self):
+        """git_ops exports detect_commands()."""
+        import git_ops
+
+        assert hasattr(git_ops, "detect_commands")
+        assert callable(git_ops.detect_commands)
+
+    def test_has_detect_referenced_repo(self):
+        """git_ops exports _detect_referenced_repo()."""
+        import git_ops
+
+        assert hasattr(git_ops, "_detect_referenced_repo")
+        assert callable(git_ops._detect_referenced_repo)
+
+    def test_has_set_vcs_token(self):
+        """git_ops exports _set_vcs_token()."""
+        import git_ops
+
+        assert hasattr(git_ops, "_set_vcs_token")
+        assert callable(git_ops._set_vcs_token)
+
+    def test_has_load_token_from_env_file(self):
+        """git_ops exports _load_token_from_env_file()."""
+        import git_ops
+
+        assert hasattr(git_ops, "_load_token_from_env_file")
+        assert callable(git_ops._load_token_from_env_file)
+
+    def test_has_try_auto_merge(self):
+        """git_ops exports try_auto_merge()."""
+        import git_ops
+
+        assert hasattr(git_ops, "try_auto_merge")
+        assert callable(git_ops.try_auto_merge)
+
+    def test_has_supplement_pr_sections(self):
+        """git_ops exports _supplement_pr_sections()."""
+        import git_ops
+
+        assert hasattr(git_ops, "_supplement_pr_sections")
+        assert callable(git_ops._supplement_pr_sections)
+
 
 class TestUtilsReExport:
     """Verify utils.py re-exports git_ops functions for backward compat."""
@@ -95,6 +158,48 @@ class TestUtilsReExport:
 
         assert hasattr(utils, "_detect_default_branch")
         assert callable(utils._detect_default_branch)
+
+    def test_utils_has_load_key(self):
+        """utils.load_key exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "load_key")
+        assert callable(utils.load_key)
+
+    def test_utils_has_load_github_token(self):
+        """utils.load_github_token exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "load_github_token")
+        assert callable(utils.load_github_token)
+
+    def test_utils_has_safe_run(self):
+        """utils._safe_run exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "_safe_run")
+        assert callable(utils._safe_run)
+
+    def test_utils_has_detect_commands(self):
+        """utils.detect_commands exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "detect_commands")
+        assert callable(utils.detect_commands)
+
+    def test_utils_has_try_auto_merge(self):
+        """utils.try_auto_merge exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "try_auto_merge")
+        assert callable(utils.try_auto_merge)
+
+    def test_utils_has_set_vcs_token(self):
+        """utils._set_vcs_token exists (re-exported from git_ops)."""
+        import utils
+
+        assert hasattr(utils, "_set_vcs_token")
+        assert callable(utils._set_vcs_token)
 
 
 class TestGitFunction:
