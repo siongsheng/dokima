@@ -138,7 +138,7 @@
 ### F036: Fix SHOULD FIX issue creation: extract from PR review text (not just nm_stdout), handle table-format findings (R1 | RELIABILITY | ... | SHOULD FIX). Add tests for all extraction formats.
 **Priority:** P2
 **Dependencies:** F034
-**Status:** [x] Done Progress
+**Status:** [x] Done
 **User Story:** As a user, I can fix should fix issue creation: extract from pr review text (not just nm_stdout), handle table-format findings (r1 | reliability | ... | should fix). add tests for all extraction formats.
 
 ### F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.
@@ -163,7 +163,7 @@
 ### F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done Progress
+**Status:** [x] Done
 **User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
 
 
