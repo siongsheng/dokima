@@ -1659,6 +1659,46 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
             "Regenerate PR body from spec or update Impact to match.")
 
 
+def _build_tl_review_body(existing_body, tl_section, nm_output=""):
+    """Build the combined PR body with TL Review and optional nm Review.
+
+    Strips old ### nm Review and ## Review sections, then appends fresh
+    TL Review and (if nm_output is non-empty) nm Review sections.
+
+    Args:
+        existing_body: Current PR body text
+        tl_section: Pre-built ## Review markdown section
+        nm_output: Raw nm stdout (empty string if no nm ran)
+
+    Returns:
+        (combined_body, has_nm) — the full PR body and whether nm was injected
+    """
+    # Strip both old nm Review and TL Review sections
+    combined_strip_re = re.compile(
+        r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
+        r'\n## Review\n\n.*?(?=\n## |\Z)',
+        re.DOTALL
+    )
+    cleaned = combined_strip_re.sub('', existing_body or '')
+
+    # Append TL Review
+    new_body = cleaned + tl_section
+
+    # Append nm Review if nm_output is available
+    has_nm = False
+    if nm_output and nm_output.strip():
+        try:
+            nm_summary = _extract_nm_summary(nm_output)
+            nm_section = _build_nm_review_section(nm_summary)
+            new_body += nm_section
+            has_nm = True
+        except Exception:
+            # Best-effort: nm section build failure must not block TL injection
+            pass
+
+    return new_body, has_nm
+
+
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
@@ -1818,13 +1858,10 @@ Report: what you fixed, commit hash."""
         # Extract impact from TL output
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
-        # Fetch existing PR body, strip old Review sections
+        # Fetch existing PR body, strip old Review + nm Review sections,
+        # and build fresh combined body
         existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
                                  "--json", "body", "--jq", ".body")
-        existing_body = re.sub(
-            r'\n## Review\n\n.*?(?=\n## |\Z)',
-            '', existing_body or '', flags=re.DOTALL
-        )
         review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
             review_section += f"\n**Impact:** {tl_impact}\n"
@@ -1843,7 +1880,9 @@ Report: what you fixed, commit hash."""
                         review_section += f"{match2.group(1)}. **{match2.group(2).strip()}**\n"
                     else:
                         review_section += f"- {bl}\n"
-        new_body = (existing_body or "") + review_section
+        new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
+        if has_nm:
+            print(f"  ✅ nm Review refreshed alongside TL Review", flush=True)
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
         _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
         if edit_rc == 0:
