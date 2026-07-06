@@ -3375,3 +3375,183 @@ def verify_source_function_exists(module_name, attr_name):
         return (False, f"AttributeError: module '{module_name}' has no attribute '{attr_name}'")
     return (True, None)
 
+
+def _is_decorator_node(call_node, tree):
+    """Check if an AST Call node is used as a decorator in the tree.
+
+    Decorators like @patch('x.y') appear as both decorator_list entries
+    AND standalone Call nodes in ast.walk(). This detects the duplicate.
+    """
+    import ast as _ast
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef):
+            for decorator in node.decorator_list:
+                if decorator is call_node:
+                    return True
+    return False
+
+
+def _parse_test_references(test_file_path):
+    """Parse a test file for mock/import references that need verification.
+
+    Extracts references from three patterns:
+    (a) @patch('module.func') decorators
+    (b) patch.object(target, 'attr', ...) calls
+    (c) from module import name statements
+
+    Uses ast.parse() for structured parsing; falls back to regex for
+    malformed Python files (returns empty list).
+
+    Args:
+        test_file_path: Absolute path to a test .py file.
+
+    Returns:
+        list[dict]: [
+            {
+                "test_file": str,
+                "line_no": int,
+                "module_target": str,
+                "attr_name": str,
+                "create_flag": bool,
+            },
+            ...
+        ]
+    """
+    import ast as _ast
+    refs = []
+
+    try:
+        with open(test_file_path, "r") as f:
+            source = f.read()
+    except (OSError, IOError):
+        return refs
+
+    # Check if the file has any content worth parsing
+    stripped = source.strip()
+    if not stripped:
+        return refs
+
+    try:
+        tree = _ast.parse(source, filename=test_file_path)
+    except SyntaxError:
+        return refs
+
+    for node in _ast.walk(tree):
+        # Pattern (c): from module import name
+        if isinstance(node, _ast.ImportFrom) and node.module is not None:
+            # Skip stdlib mock imports — those are test infrastructure, not source code
+            if node.module.startswith("unittest.mock") or node.module.startswith("unittest."):
+                continue
+            for alias in node.names:
+                if alias.name.startswith("_"):
+                    continue
+                refs.append({
+                    "test_file": test_file_path,
+                    "line_no": getattr(node, "lineno", 0),
+                    "module_target": node.module,
+                    "attr_name": alias.name,
+                    "create_flag": False,
+                })
+
+        # Pattern (a): @patch('module.func') decorators
+        if isinstance(node, _ast.FunctionDef):
+            for decorator in node.decorator_list:
+                # Only extract if the decorator itself is a Call (e.g. @patch('x.y'))
+                if isinstance(decorator, _ast.Call):
+                    _extract_refs_from_patch_call(decorator, test_file_path, refs)
+
+        # Pattern (a)/(b): patch('module.func') or patch.object(...)
+        # as context managers or direct calls (NOT decorators)
+        if isinstance(node, _ast.Call):
+            # Skip if this Call is a decorator — already handled above
+            if _is_decorator_node(node, tree):
+                continue
+            _extract_refs_from_patch_call(node, test_file_path, refs)
+
+    return refs
+
+
+def _extract_refs_from_patch_call(node, test_file_path, refs):
+    """Extract references from a patch() or patch.object() AST Call node.
+
+    Modifies refs list in place.
+    """
+    import ast as _ast
+
+    if not isinstance(node, _ast.Call):
+        return
+
+    # Determine if this is patch() or *.patch() / *.patch.object()
+    func_name = None
+    if isinstance(node.func, _ast.Name):
+        func_name = node.func.id
+    elif isinstance(node.func, _ast.Attribute):
+        func_name = node.func.attr
+
+    if func_name is None:
+        return
+
+    # Detect create=True keyword argument
+    create_flag = False
+    for kw in node.keywords:
+        if kw.arg == "create" and isinstance(kw.value, _ast.Constant):
+            create_flag = bool(kw.value.value)
+
+    if func_name == "patch":
+        # patch('module.func', ...)
+        if not node.args:
+            return
+        first_arg = node.args[0]
+        if not isinstance(first_arg, _ast.Constant) or not isinstance(first_arg.value, str):
+            return
+        target = first_arg.value
+        if "." not in target:
+            return
+        parts = target.split(".", 1)
+        module_target = parts[0]
+        attr_name = parts[1]
+        lineno = getattr(node, "lineno", 0)
+        refs.append({
+            "test_file": test_file_path,
+            "line_no": lineno,
+            "module_target": module_target,
+            "attr_name": attr_name,
+            "create_flag": create_flag,
+        })
+
+    elif func_name == "object":
+        # patch.object(target, 'attr_name', ...)
+        if len(node.args) < 2:
+            return
+        target_arg = node.args[0]
+        attr_arg = node.args[1]
+        if not isinstance(attr_arg, _ast.Constant) or not isinstance(attr_arg.value, str):
+            return
+        attr_name = attr_arg.value
+        if attr_name.startswith("_"):
+            return
+
+        # Determine module_target from first argument
+        module_target = ""
+        if isinstance(target_arg, _ast.Name):
+            module_target = target_arg.id
+        elif isinstance(target_arg, _ast.Attribute):
+            # e.g., panel._pipeline → "panel._pipeline"
+            parts = []
+            current = target_arg
+            while isinstance(current, _ast.Attribute):
+                parts.insert(0, current.attr)
+                current = current.value
+            if isinstance(current, _ast.Name):
+                parts.insert(0, current.id)
+            module_target = ".".join(parts)
+
+        lineno = getattr(node, "lineno", 0)
+        refs.append({
+            "test_file": test_file_path,
+            "line_no": lineno,
+            "module_target": module_target,
+            "attr_name": attr_name,
+            "create_flag": create_flag,
+        })
+
