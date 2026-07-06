@@ -33,10 +33,9 @@ The implementation follows the spec but has several issues:
 2. The error handling in utils.py uncaught exception on line 42
 3. TDD violation: bundled commit at commit abc123
 
-SHOULD FIX items:
-- [RELIABILITY] utils.py:42: Naming conventions for internal functions
-- [RELIABILITY] pipeline.py:100: Extract long method
-- [MAINTAINABILITY] tests/: Add missing edge case test
+SHOULD FIX — Naming conventions for internal functions in utils.py:42
+SHOULD FIX: Extract long method in pipeline.py:100
+SHOULD FIX — Add missing edge case test in tests/
 
 Summary: Overall acceptable but needs test coverage improvements.
 """
@@ -181,3 +180,208 @@ def test_extract_nm_summary_unhandled_error_pattern(panel):
     result = panel._extract_nm_summary(output)
     labels = [l.lower() for l in result["auto_fix_labels"]]
     assert any("unhandled error" in l for l in labels)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Task 2: nm PR body injection
+# ═══════════════════════════════════════════════════════════════════
+
+
+NM_REVIEW_STRIP_RE = r'\n### nm Review\n.*?(?=\n### |\n## |\Z)'
+
+
+class TestNmReviewMarkdown:
+    """Tests for building the ### nm Review markdown section."""
+
+    def test_build_nm_review_risk_and_findings(self):
+        """Builds markdown with risk header and key findings."""
+        import pipeline as pl
+        summary = {
+            "risk": "MEDIUM",
+            "auto_fix_count": 2,
+            "auto_fix_labels": ["missing test", "uncaught exception"],
+            "key_findings": "The implementation has several issues.",
+            "should_fix_items": [],
+        }
+        md = pl._build_nm_review_section(summary)
+        assert "### nm Review" in md
+        assert "**Risk:** MEDIUM" in md
+        assert "Auto-Fix Applied: 2 issue(s)" in md
+        assert "missing test" in md
+        assert "uncaught exception" in md
+        assert "The implementation has several issues." in md
+
+    def test_build_nm_review_minimal(self):
+        """Minimal output — no auto-fix, no findings, no SHOULD FIX."""
+        import pipeline as pl
+        summary = {
+            "risk": "UNKNOWN",
+            "auto_fix_count": 0,
+            "auto_fix_labels": [],
+            "key_findings": "",
+            "should_fix_items": [],
+        }
+        md = pl._build_nm_review_section(summary)
+        assert "### nm Review" in md
+        assert "**Risk:** UNKNOWN" in md
+        assert "Auto-Fix Applied" not in md
+        assert "No findings" in md
+
+    def test_build_nm_review_with_should_fix(self):
+        """Builds markdown with SHOULD FIX list."""
+        import pipeline as pl
+        summary = {
+            "risk": "HIGH",
+            "auto_fix_count": 0,
+            "auto_fix_labels": [],
+            "key_findings": "Critical issues found.",
+            "should_fix_items": [
+                {"detail": "Naming conventions in utils.py"},
+                {"detail": "Extract long method in pipeline.py"},
+            ],
+        }
+        md = pl._build_nm_review_section(summary)
+        assert "### SHOULD FIX (2)" in md
+        assert "Naming conventions in utils.py" in md
+        assert "Extract long method in pipeline.py" in md
+
+    def test_build_nm_review_auto_fix_no_should_fix(self):
+        """Auto-fix section without SHOULD FIX items."""
+        import pipeline as pl
+        summary = {
+            "risk": "LOW",
+            "auto_fix_count": 1,
+            "auto_fix_labels": ["missing test"],
+            "key_findings": "One test missing.",
+            "should_fix_items": [],
+        }
+        md = pl._build_nm_review_section(summary)
+        assert "Auto-Fix Applied: 1 issue(s)" in md
+        assert "missing test" in md
+        assert "SHOULD FIX" not in md
+
+
+class TestNmReviewStripRegex:
+    """Tests for the regex that strips old ### nm Review sections."""
+
+    def test_strips_nm_section(self):
+        body = "## Description\n\nSome text\n\n### nm Review\n\nOld nm content\n\n## Review\n\nTL section"
+        import re
+        cleaned = re.sub(NM_REVIEW_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "### nm Review" not in cleaned
+        assert "Old nm content" not in cleaned
+        assert "## Description" in cleaned
+        assert "## Review" in cleaned
+
+    def test_preserves_other_sections(self):
+        body = "## Description\n\ntext\n\n### nm Review\n\nnm stuff\n\n## Review\nTL\n\n## Validation\nok"
+        import re
+        cleaned = re.sub(NM_REVIEW_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "## Description" in cleaned
+        assert "## Review" in cleaned
+        assert "## Validation" in cleaned
+        assert "### nm Review" not in cleaned
+
+    def test_no_nm_section_unchanged(self):
+        body = "## Description\n\nSome text\n\n## Review\n\nTL section"
+        import re
+        cleaned = re.sub(NM_REVIEW_STRIP_RE, '', body, flags=re.DOTALL)
+        assert cleaned == body
+
+    def test_strips_multiple_nm_sections(self):
+        body = "\n### nm Review\nfirst\n\n## Review\nTL\n\n### nm Review\nsecond\n\n## End"
+        import re
+        cleaned = re.sub(NM_REVIEW_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "first" not in cleaned
+        assert "second" not in cleaned
+        assert "## Review" in cleaned
+        assert "## End" in cleaned
+
+    def test_nm_review_at_end_of_body(self):
+        body = "## Description\n\ntext\n\n### nm Review\n\nlast section"
+        import re
+        cleaned = re.sub(NM_REVIEW_STRIP_RE, '', body, flags=re.DOTALL)
+        assert "### nm Review" not in cleaned
+        assert "last section" not in cleaned
+        assert "## Description" in cleaned
+
+
+class TestNmInjectionIntegration:
+    """Integration tests for nm PR body injection in run_phase4_nm."""
+
+    def test_inject_nm_into_pr_body_updates_body(self):
+        """When pr_url is set, injects nm section into PR body."""
+        from unittest.mock import patch
+        import vcs
+        import pipeline as pl
+
+        summary = {
+            "risk": "MEDIUM",
+            "auto_fix_count": 0,
+            "auto_fix_labels": [],
+            "key_findings": "Some findings.",
+            "should_fix_items": [],
+        }
+
+        existing_body = "## Description\n\nExisting content\n\n## Review\n\nTL stuff"
+        pr_url = "https://github.com/owner/repo/pull/42"
+        pr_num = "42"
+
+        with patch.object(vcs, 'vcs_pr_view') as mock_view, \
+             patch.object(vcs, 'vcs_pr_update_body') as mock_update:
+            mock_view.return_value = (existing_body, "", 0)
+            mock_update.return_value = ("", "", 0)
+
+            result = pl._inject_nm_into_pr_body(pr_url, summary)
+
+        assert result is True
+        mock_view.assert_called_once()
+        mock_update.assert_called_once()
+        updated_body = mock_update.call_args[0][1]
+        assert "### nm Review" in updated_body
+        assert "**Risk:** MEDIUM" in updated_body
+        assert "Existing content" in updated_body
+
+    def test_inject_nm_into_pr_body_no_pr_url(self):
+        """When pr_url is None, skips injection gracefully."""
+        import pipeline as pl
+        summary = {"risk": "LOW", "auto_fix_count": 0, "auto_fix_labels": [],
+                   "key_findings": "", "should_fix_items": []}
+        result = pl._inject_nm_into_pr_body(None, summary)
+        assert result is False
+
+    def test_inject_nm_into_pr_body_vcs_view_fails(self):
+        """When vcs_pr_view fails, returns False without crashing."""
+        from unittest.mock import patch
+        import vcs
+        import pipeline as pl
+
+        summary = {"risk": "LOW", "auto_fix_count": 0, "auto_fix_labels": [],
+                   "key_findings": "", "should_fix_items": []}
+        pr_url = "https://github.com/owner/repo/pull/42"
+
+        with patch.object(vcs, 'vcs_pr_view') as mock_view:
+            mock_view.return_value = ("", "error", 1)
+
+            result = pl._inject_nm_into_pr_body(pr_url, summary)
+
+        assert result is False
+
+    def test_inject_nm_into_pr_body_vcs_update_fails(self):
+        """When vcs_pr_update_body fails, returns False without crashing."""
+        from unittest.mock import patch
+        import vcs
+        import pipeline as pl
+
+        summary = {"risk": "LOW", "auto_fix_count": 0, "auto_fix_labels": [],
+                   "key_findings": "", "should_fix_items": []}
+        pr_url = "https://github.com/owner/repo/pull/42"
+
+        with patch.object(vcs, 'vcs_pr_view') as mock_view, \
+             patch.object(vcs, 'vcs_pr_update_body') as mock_update:
+            mock_view.return_value = ("body", "", 0)
+            mock_update.return_value = ("", "update error", 1)
+
+            result = pl._inject_nm_into_pr_body(pr_url, summary)
+
+        assert result is False
