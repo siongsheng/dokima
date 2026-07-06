@@ -557,3 +557,211 @@ class TestUpdateDocsCache:
             output = mock_stdout.getvalue()
             assert "[DRY RUN] Would update docs cache" in output, \
                 f"Expected docs dry-run message, got: {output}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Tests for refactored sub-functions (F093: God-function refactor)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestBumpVersionFunction:
+    """Tests for bump_version() — validates preconditions + bumps VERSION."""
+
+    def test_function_exists(self):
+        """bump_version is importable from utils."""
+        assert hasattr(utils, "bump_version"), \
+            "Expected bump_version to be defined in utils"
+
+    def test_returns_version_tuple_on_success(self):
+        """bump_version returns (new_version, tag_name, default_branch)."""
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            if args[0] == "diff-index":
+                return ("", "", 0)
+            if args[0] == "fetch":
+                return ("", "", 0)
+            if args[0] == "rev-list":
+                return ("", "", 0)
+            if args[0] == "rev-parse":
+                return ("main", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch("builtins.open", create=True) as mock_open, \
+             patch("os.path.exists", return_value=True), \
+             patch("os.replace"), \
+             patch("tempfile.mkstemp", return_value=(99, "/tmp/.VERSION.abc")):
+            mock_open.return_value.__enter__.return_value.read.return_value = "1.2.1\n"
+            result = utils.bump_version("patch", "/tmp/test")
+            assert isinstance(result, tuple), f"Expected tuple, got {type(result)}"
+            assert len(result) == 3, f"Expected 3-tuple, got len {len(result)}"
+            new_version, tag_name, default_branch = result
+            assert new_version == "1.2.2", f"Expected 1.2.2, got {new_version}"
+            assert tag_name == "v1.2.2", f"Expected v1.2.2, got {tag_name}"
+            assert default_branch == "main"
+
+    def test_dry_run_returns_without_writing(self):
+        """bump_version dry_run returns versions without git writes."""
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            if args[0] == "diff-index":
+                return ("", "", 0)
+            if args[0] == "fetch":
+                return ("", "", 0)
+            if args[0] == "rev-list":
+                return ("", "", 0)
+            if args[0] == "rev-parse":
+                return ("main", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch("builtins.open", create=True) as mock_open, \
+             patch("os.path.exists", return_value=True):
+            mock_open.return_value.__enter__.return_value.read.return_value = "1.2.1\n"
+            result = utils.bump_version("patch", "/tmp/test", dry_run=True)
+            new_version, tag_name, _ = result
+            assert new_version == "1.2.2"
+            assert tag_name == "v1.2.2"
+            # No commit or tag operations
+            write_ops = [c for c in git_calls
+                         if c[0] in ("commit", "tag") or
+                         (len(c) >= 1 and c[0] == "push")]
+            assert len(write_ops) == 0, \
+                f"Expected no git writes in dry-run, got: {write_ops}"
+
+    def test_invalid_bump_exits(self):
+        """bump_version with invalid bump raises SystemExit(1)."""
+        try:
+            utils.bump_version("nonsense", "/tmp")
+            assert False, "Expected SystemExit"
+        except SystemExit as e:
+            assert e.code == 1
+
+    def test_non_git_dir_exits(self):
+        """bump_version on non-git dir raises SystemExit(1)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                utils.bump_version("patch", tmpdir)
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_dirty_tree_exits(self):
+        """bump_version on dirty tree raises SystemExit(1)."""
+        def fake_git(*args):
+            if args[0] == "diff-index":
+                return ("M file.py", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True):
+            try:
+                utils.bump_version("patch", "/tmp/test")
+                assert False, "Expected SystemExit"
+            except SystemExit as e:
+                assert e.code == 1
+
+
+class TestGenerateChangelog:
+    """Tests for generate_changelog() — generates release notes from git."""
+
+    def test_function_exists(self):
+        """generate_changelog is importable from utils."""
+        assert hasattr(utils, "generate_changelog"), \
+            "Expected generate_changelog to be defined in utils"
+
+    def test_returns_string(self):
+        """generate_changelog returns a string (may be empty)."""
+        result = utils.generate_changelog("/tmp/test", "v1.2.2")
+        assert isinstance(result, str), \
+            f"Expected str, got {type(result)}"
+
+    def test_with_previous_tag(self):
+        """generate_changelog uses git log since last tag."""
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            if args[0] == "describe":
+                return ("v1.1.0", "", 0)
+            if args[0] == "log":
+                return ("abc123 feat: add thing\ndef456 fix: bug", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git):
+            result = utils.generate_changelog("/tmp/test", "v1.2.0", "main")
+            assert "feat: add thing" in result
+            assert "fix: bug" in result
+
+    def test_first_release_no_previous_tag(self):
+        """generate_changelog with no prior tag gets all commits."""
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            if args[0] == "describe":
+                return ("", "fatal: no tag", 128)
+            if args[0] == "log":
+                return ("initial commit", "", 0)
+            return ("", "", 0)
+
+        with patch.object(utils, "git", side_effect=fake_git):
+            result = utils.generate_changelog("/tmp/test", "v0.1.0", "main")
+            assert "initial commit" in result
+
+
+class TestCreateRelease:
+    """Tests for create_release() — orchestrator for full release pipeline."""
+
+    def test_function_exists(self):
+        """create_release is importable from utils."""
+        assert hasattr(utils, "create_release"), \
+            "Expected create_release to be defined in utils"
+
+    def test_dry_run_prints_full_plan(self):
+        """create_release dry_run prints plan for all phases."""
+        from io import StringIO
+        git_calls = []
+
+        def fake_git(*args):
+            git_calls.append(args)
+            subcmd = args[2] if len(args) > 2 else args[0]
+            if subcmd == "diff-index":
+                return ("", "", 0)
+            if subcmd == "fetch":
+                return ("", "", 0)
+            if subcmd == "rev-list":
+                return ("", "", 0)
+            if subcmd == "rev-parse":
+                return ("main", "", 0)
+            return ("", "", 0)
+
+        mock_stdout = StringIO()
+        with patch.object(utils, "git", side_effect=fake_git), \
+             patch.object(utils, "_detect_default_branch", return_value="main"), \
+             patch.object(utils, "_validate_project_dir", return_value=True), \
+             patch("builtins.open", create=True) as mock_open, \
+             patch("os.path.exists", return_value=True), \
+             patch("sys.stdout", mock_stdout):
+            mock_open.return_value.__enter__.return_value.read.return_value = "1.2.1\n"
+            utils.create_release("patch", "/tmp/test", dry_run=True)
+            output = mock_stdout.getvalue()
+            assert "[DRY RUN]" in output, \
+                f"Expected [DRY RUN] in output, got: {output}"
+
+    def test_errors_on_invalid_bump(self):
+        """create_release with invalid bump propagates error."""
+        try:
+            utils.create_release("nonsense", "/tmp")
+            assert False, "Expected SystemExit"
+        except SystemExit as e:
+            assert e.code == 1
