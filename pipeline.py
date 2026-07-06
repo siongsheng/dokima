@@ -12,6 +12,7 @@ _IMPORTING_PANEL = None
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
                    _extract_tl_verdict, _extract_tl_blockers, extract_should_fix_from_text,
+                   _extract_nm_summary,
                    format_blocker_cross_reference,
                    extract_issue_sections,
                    extract_pr_sections,
@@ -1483,7 +1484,128 @@ Report: what you fixed, commit hash."""
     elif nm_auto_fixable:
         print("  ⚠ Auto-fix skipped (--skip-autofix)", flush=True)
 
+    # ── Inject nm review into PR body ──
+    if pr_url:
+        summary = _extract_nm_summary(nm_stdout)
+        _inject_nm_into_pr_body(pr_url, summary)
+
+        # ── Create GitHub Issues for SHOULD FIX from nm ──
+        findings = summary.get("should_fix_items", [])
+        if findings:
+            print(f"\n  ── Creating GitHub Issues for {len(findings)} nm SHOULD FIX items ──",
+                  flush=True)
+            for finding in findings[:5]:
+                detail = finding.get("detail", "").strip()
+                if not detail:
+                    continue
+                title = detail[:80]
+                body = f"### What\n\n{detail}\n\n### Fix\n\n(TBD)\n\n### Verify\n\nRun tests and nm review."
+                try:
+                    stdout, stderr, rc = gh("issue", "create",
+                                           "--repo", REPO,
+                                           "--title", f"nm SHOULD FIX: {title}",
+                                           "--body", body,
+                                           "--label", "nm-review,should-fix")
+                    if rc == 0:
+                        print(f"    ✓ Created: {title[:60]}", flush=True)
+                    else:
+                        brief = (stderr or stdout or "")[:120]
+                        print(f"    ⚠ Failed: {brief}", flush=True)
+                except Exception as e:
+                    print(f"    ⚠ Exception creating issue: {e}", flush=True)
+    else:
+        print("  ⚠ No PR URL — skipping nm review injection", flush=True)
+
     return {"nm_ok": True, "pr_url": pr_url, "risk": risk, "nm_stdout": nm_stdout}
+
+
+def _build_nm_review_section(summary):
+    """Build the ### nm Review markdown section from an _extract_nm_summary dict.
+
+    Returns a string suitable for appending to the PR body.
+    """
+    risk = summary.get("risk", "UNKNOWN")
+    auto_fix_count = summary.get("auto_fix_count", 0)
+    auto_fix_labels = summary.get("auto_fix_labels", [])
+    key_findings = summary.get("key_findings", "")
+    should_fix_items = summary.get("should_fix_items", [])
+
+    section = "\n\n### nm Review\n\n"
+    section += f"**Risk:** {risk}  \n"
+
+    if auto_fix_count > 0 and auto_fix_labels:
+        labels_text = ", ".join(auto_fix_labels)
+        section += f"**Auto-Fix Applied:** {auto_fix_count} issue(s) — {labels_text}  \n"
+
+    if key_findings.strip():
+        section += f"\n**Key Findings:**\n{key_findings.strip()}\n"
+    else:
+        section += "\n**Key Findings:** No findings.\n"
+
+    if should_fix_items:
+        section += f"\n### SHOULD FIX ({len(should_fix_items)})\n\n"
+        for item in should_fix_items:
+            detail = item.get("detail", "")
+            if detail:
+                section += f"- {detail}\n"
+
+    return section
+
+
+def _inject_nm_into_pr_body(pr_url, summary):
+    """Inject the ### nm Review section into the PR body via vcs.
+
+    Best-effort: prints warnings on failure, never raises.
+
+    Args:
+        pr_url: Full PR/merge request URL (e.g. https://github.com/owner/repo/pull/42)
+        summary: Dict from _extract_nm_summary
+
+    Returns:
+        True if injection succeeded, False otherwise.
+    """
+    if not pr_url:
+        print("  ⚠ No PR URL — skipping nm review injection", flush=True)
+        return False
+
+    pr_num = pr_url.rstrip("/").split("/")[-1]
+    if not pr_num.isdigit():
+        print(f"  ⚠ Cannot parse PR number from {pr_url}", flush=True)
+        return False
+
+    # Fetch existing PR body
+    try:
+        existing_body, view_err, view_rc = vcs.vcs_pr_view(pr_num)
+    except Exception as e:
+        print(f"  ⚠ Failed to fetch PR body: {e}", flush=True)
+        return False
+
+    if view_rc != 0 or not existing_body:
+        print(f"  ⚠ Could not fetch PR body (rc={view_rc}): {view_err[:120]}", flush=True)
+        return False
+
+    # Strip old ### nm Review section
+    nm_strip_re = re.compile(r'\n### nm Review\n.*?(?=\n### |\n## |\Z)', re.DOTALL)
+    cleaned_body = nm_strip_re.sub('', existing_body)
+
+    # Build and append new nm Review section
+    nm_section = _build_nm_review_section(summary)
+    new_body = cleaned_body + nm_section
+
+    # Update PR body
+    try:
+        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
+    except Exception as e:
+        print(f"  ⚠ Failed to update PR body: {e}", flush=True)
+        return False
+
+    if edit_rc == 0:
+        print("  ✅ nm Review injected into PR body", flush=True)
+        return True
+    else:
+        print(f"  ⚠ Could not update PR body with nm review (rc={edit_rc}): {edit_err[:120]}",
+              flush=True)
+        return False
 
 
 def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
@@ -1535,6 +1657,46 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
     return ("🔴 BLOCKER: PR body Impact section does not align with spec. "
             "Spec Impact must be reflected in the PR body. "
             "Regenerate PR body from spec or update Impact to match.")
+
+
+def _build_tl_review_body(existing_body, tl_section, nm_output=""):
+    """Build the combined PR body with TL Review and optional nm Review.
+
+    Strips old ### nm Review and ## Review sections, then appends fresh
+    TL Review and (if nm_output is non-empty) nm Review sections.
+
+    Args:
+        existing_body: Current PR body text
+        tl_section: Pre-built ## Review markdown section
+        nm_output: Raw nm stdout (empty string if no nm ran)
+
+    Returns:
+        (combined_body, has_nm) — the full PR body and whether nm was injected
+    """
+    # Strip both old nm Review and TL Review sections
+    combined_strip_re = re.compile(
+        r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
+        r'\n## Review\n\n.*?(?=\n## |\Z)',
+        re.DOTALL
+    )
+    cleaned = combined_strip_re.sub('', existing_body or '')
+
+    # Append TL Review
+    new_body = cleaned + tl_section
+
+    # Append nm Review if nm_output is available
+    has_nm = False
+    if nm_output and nm_output.strip():
+        try:
+            nm_summary = _extract_nm_summary(nm_output)
+            nm_section = _build_nm_review_section(nm_summary)
+            new_body += nm_section
+            has_nm = True
+        except Exception:
+            # Best-effort: nm section build failure must not block TL injection
+            pass
+
+    return new_body, has_nm
 
 
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
@@ -1696,13 +1858,10 @@ Report: what you fixed, commit hash."""
         # Extract impact from TL output
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
-        # Fetch existing PR body, strip old Review sections
+        # Fetch existing PR body, strip old Review + nm Review sections,
+        # and build fresh combined body
         existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
                                  "--json", "body", "--jq", ".body")
-        existing_body = re.sub(
-            r'\n## Review\n\n.*?(?=\n## |\Z)',
-            '', existing_body or '', flags=re.DOTALL
-        )
         review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
             review_section += f"\n**Impact:** {tl_impact}\n"
@@ -1721,7 +1880,9 @@ Report: what you fixed, commit hash."""
                         review_section += f"{match2.group(1)}. **{match2.group(2).strip()}**\n"
                     else:
                         review_section += f"- {bl}\n"
-        new_body = (existing_body or "") + review_section
+        new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
+        if has_nm:
+            print(f"  ✅ nm Review refreshed alongside TL Review", flush=True)
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
         _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
         if edit_rc == 0:

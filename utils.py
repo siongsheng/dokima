@@ -2255,6 +2255,100 @@ def extract_should_fix_from_text(text):
     return deduped
 
 
+def _extract_nm_summary(nm_stdout):
+    """Extract a structured summary from raw nm (adversarial review) output.
+
+    Parses up to 37K chars of nm output into a compact dict suitable for
+    injection into a PR body as an ### nm Review section.
+
+    Returns dict with keys:
+        risk (str): LOW/MEDIUM/HIGH/UNKNOWN
+        auto_fix_count (int): number of auto-fixable patterns matched
+        auto_fix_labels (list[str]): labels of matched auto-fix patterns
+        key_findings (str): first ~2500 chars of substantive review content
+        should_fix_items (list[dict]): from extract_should_fix_from_text()
+
+    Returns a fully-defaulted dict if nm_stdout is empty/None.
+    """
+    if not nm_stdout or not str(nm_stdout).strip():
+        return {
+            "risk": "UNKNOWN",
+            "auto_fix_count": 0,
+            "auto_fix_labels": [],
+            "key_findings": "",
+            "should_fix_items": [],
+        }
+
+    text = str(nm_stdout)
+
+    # ── Extract risk ──
+    risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', text, re.IGNORECASE)
+    risk = risk_match.group(1).upper() if risk_match else "UNKNOWN"
+
+    # ── Auto-fix pattern detection (mirrors pipeline.py run_phase4_nm) ──
+    nm_auto_fix_patterns = [
+        (r'(?i)missing\s+test', "missing test"),
+        (r'(?i)uncaught\s+(panic|exception)', "uncaught exception"),
+        (r'(?i)\bunwrap\b.*\b(result|option)\b', "unwrap on Result/Option"),
+        (r'(?i)bundled\s+commit', "TDD violation: bundled commit"),
+        (r'(?i)TDD\s+violation', "TDD violation"),
+        (r'(?i)unhandled\s+error', "unhandled error"),
+    ]
+    auto_fix_labels = []
+    for pattern, label in nm_auto_fix_patterns:
+        if re.search(pattern, text):
+            auto_fix_labels.append(label)
+
+    # ── Extract key findings (first ~2500 chars of substantive review) ──
+    # Skip nm script boilerplate: lines matching setup/header patterns.
+    # The actual review body starts after "STAGE 1" / "You are running" and
+    # continues past STAGE headers.
+    lines = text.split("\n")
+
+    # Find the content start: first line matching STAGE 1 or "You are running"
+    content_start = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if re.match(r'^(STAGE\s*1|You\s+are\s+running)', stripped, re.IGNORECASE):
+            content_start = i
+            break
+
+    # Collect lines after boilerplate, filtering out known boilerplate markers
+    boilerplate_re = re.compile(
+        r'^(You\s+are\s+running|Initializ|Loading|STAGE\s*\d|RISK:\s*(LOW|MEDIUM|HIGH))',
+        re.IGNORECASE
+    )
+    key_findings_parts = []
+    char_count = 0
+    max_chars = 2500
+    for line in lines[content_start:]:
+        stripped = line.strip()
+        if boilerplate_re.match(stripped):
+            continue
+        if not stripped and not key_findings_parts:
+            continue  # skip leading blank lines
+        key_findings_parts.append(line)
+        char_count += len(line) + 1  # +1 for newline
+        if char_count >= max_chars:
+            break
+
+    key_findings = "\n".join(key_findings_parts).strip()
+
+    # ── Extract SHOULD FIX items (delegate) ──
+    try:
+        should_fix_items = extract_should_fix_from_text(text)
+    except Exception:
+        should_fix_items = []
+
+    return {
+        "risk": risk,
+        "auto_fix_count": len(auto_fix_labels),
+        "auto_fix_labels": auto_fix_labels,
+        "key_findings": key_findings,
+        "should_fix_items": should_fix_items,
+    }
+
+
 def extract_issue_sections(issue_body):
     """Extract structured sections from a GitHub issue body.
 
