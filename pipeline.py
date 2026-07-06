@@ -1952,28 +1952,38 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     1. DECISION TABLE: For novel/complex features, compare ≥2 approaches. For features with an obvious pattern match (visual change, config, docs, standard CRUD), use "SINGLE APPROACH: <one sentence>" — skip the comparison table.
 
-    2. ## N. Impact — MANDATORY SECTION. You MUST start this line with "## " followed by a number, a dot, and the word "Impact". DO NOT write "3. Impact Assessment" without ##. DO NOT write "Impact: MEDIUM". Only "## N. Impact" is accepted. Example:
+    2. ## N. Impact — MANDATORY. One sentence answering "what does the user gain?" — product value, NOT implementation details. Max 120 characters. DO NOT mention test files, LOC counts, functions, or file paths here. Use the example format EXACTLY:
        ## 3. Impact
 
-       Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs. No more manual tagging.
+       Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs.
 
-    3. ## N. What Changed — a section header with a bullet list of key files and what they do. Max 6 bullets. Example:
+       BAD (too long, describes implementation):
+       ## 3. Impact
+       New tests in tests/test_f038.py. _extract_nm_summary handles real nm output, empty output. Integration verifies PR body has ### nm Review. 5 test files, 501 LOC.
+
+    3. ## N. Why — one sentence on why this feature exists. Context the PR reviewer needs. Max 100 characters. Example:
+       ## 2. Why
+
+       Merged PRs aren't auto-deployed to staging, causing drift between what's merged and what's live.
+
+    4. ## N. What Changed — a section header with a bullet list of key files and what they do. Max 6 bullets. Example:
        ## 4. What Changed
 
        - `dokima`: Add --release flag and dispatch
        - `utils.py`: Add bump_version(), generate_changelog(), do_release()
 
-    4. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
+    5. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
+
        **Confidence:** (High)/(Medium)/(Low)
        **Impact:** (LOW)/(MEDIUM)/(HIGH)
 
-    5. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
+    6. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
 
-    6. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
+    7. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
 
-    7. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
+    8. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
 
-    8. TASK BREAKDOWN — DAG FORMAT MANDATORY:
+    9. TASK BREAKDOWN — DAG FORMAT MANDATORY:
     ### Task N: Brief description
     **Files:** path/to/file1, path/to/file2
     **Dependencies:** [none] or [Task N]
