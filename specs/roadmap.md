@@ -287,3 +287,9 @@
 **Dependencies:** F038
 **Status:** [ ] Pending
 **User Story:** As a reviewer, I open a PR and immediately understand what changed and why — no walls of strategist text, no shell commands in review sections.
+
+### F045: Roadmap auto-update verification — `commit_roadmap_update()` marks features Done without verifying implementation exists. When a pipeline merges, it updates ALL feature statuses in roadmap.md — including unrelated ones. Fix: only update the specific feature that was built, and verify source changes exist before marking Done.
+**Priority:** P1
+**Dependencies:** F039
+**Status:** [ ] Pending
+**User Story:** As a developer, I trust that [x] Done in the roadmap means the feature was actually implemented — not that an unrelated merge touched the file.
