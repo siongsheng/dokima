@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "aba71b03179d72cc482deb169fbb55c8",
+    "hash": "4b2f459d9fc7c181e355a1090872015f",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -23,18 +23,6 @@
     "hash": "63c6d1a078b5ecf07bcc11fcd0f362d7",
     "desc": "\u2500\u2500 Module-level globals (set by main()) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
-  "codebase_map.py": {
-    "hash": "31a2b5f0737dd692dd3f0cc5937e42fb",
-    "desc": "Exports: _classify_domain"
-  },
-  "control_panel.py": {
-    "hash": "8ad057841bb862e91ad90fbb36265c32",
-    "desc": "Exports: handle_status"
-  },
-  "git_ops.py": {
-    "hash": "37fcd7df4bc0127d8a1db7bbfba85bed",
-    "desc": "Exports: git, gh"
-  },
   "install.sh": {
     "hash": "25a6c3e4e7e33ef2ddc1e9a9c13b70dc",
     "desc": "Dokima Installer \u2014 one-command setup"
@@ -47,10 +35,6 @@
     "hash": "acb380565c758ca6feb0293d75f9c62c",
     "desc": "Exports: parse_roadmap"
   },
-  "spec_extract.py": {
-    "hash": "35d353bef6300d831c57b5f3ff67a4eb",
-    "desc": "Exports: extract_pr_sections"
-  },
   "status.py": {
     "hash": "bed92ed77b605d764ae28f4a94a2c07b",
     "desc": "Exports: TaskStatus, PhaseTiming, PipelineStatus"
@@ -60,7 +44,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "677e9dc5bfdee108fbbb479ac5b6e572",
+    "hash": "995eb6129c673a0c6771726e0d8d69a7",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "vcs.py": {
@@ -287,10 +271,6 @@
     "hash": "e05abaac82fad5969f1247cea18a8a23",
     "desc": "Exports: panel"
   },
-  "tests/test_f041_modules.py": {
-    "hash": "51d4323acb9bdaa1b5f76b85b62d5967",
-    "desc": "Exports: TestCodebaseMapModule, TestControlPanelModule"
-  },
   "tests/test_final_coverage.py": {
     "hash": "63bd93c57437b723a16f02ca7faee1ed",
     "desc": "Exports: _setup"
@@ -306,10 +286,6 @@
   "tests/test_functions_unit.py": {
     "hash": "30b28480519d8d1231041db04a67815a",
     "desc": "Exports: TestSafeRun, TestGit"
-  },
-  "tests/test_git_ops.py": {
-    "hash": "e109b2a765769095ba92e8f360554f92",
-    "desc": "Exports: TestGitOpsModule"
   },
   "tests/test_help_text.py": {
     "hash": "5008b36dad6e635ee1a947a5e027f8e8",
@@ -382,10 +358,6 @@
   "tests/test_slugify.py": {
     "hash": "4408cde97f3a1c91cb556dca039bc4ae",
     "desc": "Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash"
-  },
-  "tests/test_spec_extract.py": {
-    "hash": "957dd2af6b87dd1e0b515b3745df7ec4",
-    "desc": "Exports: TestSpecExtractModule"
   },
   "tests/test_spec_quality_gates.py": {
     "hash": "dd8a9d5a4c10724380a4e9bfa6dca805",
