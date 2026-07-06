@@ -144,8 +144,14 @@
 ### F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.
 **Priority:** P2
 **Dependencies:** F034
-**Status:** [x] Done Progress
+**Status:** [x] Done
 **User Story:** As a developer, when I run `dokima fix` to resolve TL blockers, I know exactly which blockers were fixed and where — no manual cross-referencing between PRs. The original PR's blocker section links to the resolution PR, and GitHub issues (if created) auto-close on merge.
+
+### F038: Surface nm and TL findings in PR body — when nm runs (Phase 4) or TL reviews (Phase 5), inject their findings into the PR body as `### nm Review` and `### TL Review` sections. At depth=vet+nm (no TL), nm findings still appear. Currently nm output is invisible (37K chars logged but never surfaced); TL findings only appear via a separate PR comment. SHOULD FIX items from both nm and TL are extracted as GitHub issues regardless of depth.
+**Priority:** P2
+**Dependencies:** F036, F037
+**Status:** [ ] Pending
+**User Story:** As a developer reviewing a pipeline PR, I see all review findings directly in the PR body — nm adversarial review and TL review each have their own section with risk assessment, blockers, and SHOULD FIX items. I don't need to dig through pipeline logs or click through to separate comments to know what was found.
 
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 **Priority:** P2
