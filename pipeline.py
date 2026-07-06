@@ -412,6 +412,49 @@ def run_fix_mode_issue(project_dir, issue_number):
             print(f"  nm risk: {nm_result.get('risk', 'UNKNOWN')}", flush=True)
 
 
+def run_fix_mode_issue(project_dir, issue_number):
+    """Fix a GitHub issue via What/Fix/Verify extraction. F034."""
+    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    PROJECT_DIR = project_dir
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  FIX MODE (issue #{issue_number}) — {project_dir}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
+    import json as _json
+    view_stdout, view_stderr, view_rc = gh(
+        "issue", "view", str(issue_number), "--repo", REPO,
+        "--json", "body,title", "--jq", "{body, title}"
+    )
+    if view_rc != 0:
+        print(f"  ✗ Could not fetch issue #{issue_number}", flush=True)
+        return
+    try:
+        issue_data = _json.loads(view_stdout)
+    except _json.JSONDecodeError:
+        return
+    body = issue_data.get("body", "")
+    title = issue_data.get("title", f"Issue #{issue_number}")
+    if not body or not body.strip():
+        return
+    try:
+        s = extract_issue_sections(body)
+    except ValueError as e:
+        print(f"  ✗ {e}", flush=True)
+        return
+    branch = f"fix/issue-{issue_number}"
+    feature = f"fix: issue #{issue_number}: {title[:80]}"
+    pr = f"## Why\nFix #{issue_number}: {title}\n\n## What Changed\nPer issue #{issue_number}"
+    git("checkout", DEFAULT_BRANCH)
+    git("checkout", "-b", branch)
+    cr = run_phase2_coder(feature, f"### What\n{s['what']}\n\n### Fix\n{s['fix']}\n\n### Verify\n{s.get('verify','')}",
+                          "", "", pr, branch, "full", "fix", False)
+    if cr.get("coder_failed"):
+        return
+    vr = run_phase3_vet(feature, branch, pr, "MEDIUM", "")
+    if not vr.get("coder_failed"):
+        nm = run_phase4_nm(feature, branch, "MEDIUM", vr.get("pr_url", ""))
+        if nm.get("nm_ok"):
+            print(f"  ✓ Fixed issue #{issue_number}: {nm.get('pr_url')}", flush=True)
+
 def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
