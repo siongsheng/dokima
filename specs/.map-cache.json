@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "e4ff83782cc5a64682cf9e0dec9582fd",
+    "hash": "fb44de6527b6dd69475f82dd9793a29f",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -28,7 +28,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "8a978f9fa2753588c22f72123e4cca10",
+    "hash": "290e67e03803c61a2f2d5eeed8e938b9",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: TaskStatus, PhaseTiming, PipelineStatus"
   },
   "tasks.py": {
-    "hash": "3b40fddc14111b0928ad689556e78572",
+    "hash": "ed993fff2fbed76d6c86ecc10a67bfb1",
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
