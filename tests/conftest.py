@@ -7,13 +7,73 @@ import tempfile
 import subprocess
 import pytest
 from unittest.mock import patch
+from dataclasses import dataclass, field
+from typing import Dict, Optional, Any
 
 PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dokima"))
 
 
+# ── PipelineContext (F040) ─────────────────────────────────────────
+# Defined here for test isolation. After F040 merge, this will be
+# importable from utils as `from utils import PipelineContext`.
+# The `try` block prefers the canonical definition when available.
+
+try:
+    from utils import PipelineContext
+except ImportError:
+    @dataclass
+    class PipelineContext:
+        """Single dataclass holding all pipeline configuration."""
+        # Project identity
+        project_dir: str = ""
+        repo: str = ""
+        default_branch: str = "master"
+        panel_feature: str = ""
+        panel_dir: str = ""
+
+        # Paths
+        real_home: str = ""
+        hermes_home: str = ""
+        hermes_bin: str = ""
+        profiles_dir: str = ""
+        output_log: str = ""
+
+        # API
+        api_key: str = ""
+
+        # Agent ports
+        panel_port: Dict[str, int] = field(default_factory=lambda: {
+            "strategist": 8647, "tech-lead": 8644,
+            "coder": 8645, "nm": 8648
+        })
+
+        # Model fallback
+        fallback_models: Dict = field(default_factory=dict)
+
+        # Pipeline flags
+        skip_autofix: bool = False
+        force_full: bool = False
+        skip_human_gate: bool = False
+        max_parallel_override: Optional[int] = None
+        resume: Optional[bool] = None
+        max_continuous: int = 20
+
+        # Project commands
+        test_cmd: str = "npm test"
+        build_cmd: str = "npm run build"
+        lint_cmd: str = "npm run lint"
+
+
 def _load_panel():
-    """Load dokima as a Python module via exec, setting required globals.
-    Registers in sys.modules so patch('dokima.X') works across all tests."""
+    """Load dokima as a Python module via exec, setting required globals
+    and creating a PipelineContext (F040).
+
+    The module-level globals are still set for backward compatibility
+    during the F040 transition.  The ctx PipelineContext is the
+    canonical configuration object that phase functions receive.
+
+    Registers in sys.modules so patch('dokima.X') works across all tests.
+    """
     module_name = "dokima"
     # Remove stale module if present
     if module_name in sys.modules:
@@ -39,6 +99,9 @@ def _load_panel():
     module.LINT_CMD = "echo lint"
 
     # F022: Intercept global assignments to sync to sub-modules.
+    # During the F040 transition, sub-modules still read globals directly,
+    # so we keep this sync. PipelineContext (ctx) is the canonical config
+    # for new code; once all sub-modules use ctx, this hook can be removed.
     def _sync_globals_on_setattr(self, name, value):
         object.__setattr__(self, name, value)
         if name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
@@ -50,9 +113,7 @@ def _load_panel():
                 target = getattr(self, mod_ref, None)
                 if target is not None and hasattr(target, name):
                     object.__setattr__(target, name, value)
-    module.__class__ = type('DokimaModule', (types.ModuleType,), {'__setattr__': _sync_globals_on_setattr})
-
-    # Execute the script in the module's namespace
+    module.__class__ = type('module', (types.ModuleType,), {'__setattr__': _sync_globals_on_setattr})
     with open(PANEL_PATH) as f:
         code = compile(f.read(), PANEL_PATH, "exec")
     exec(code, module.__dict__)
@@ -64,18 +125,53 @@ def _load_panel():
         if target is not None:
             target._IMPORTING_PANEL = module
 
-    # F022: Sync initial globals (set before __setattr__ was active) to sub-modules
-    for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                   'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                   'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                   'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                   'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-        val = getattr(module, g_name, None)
-        if val is not None:
-            for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
-                target = getattr(module, mod_ref, None)
-                if target is not None and hasattr(target, g_name):
-                    object.__setattr__(target, g_name, val)
+    # ── F040: PipelineContext replaces the __setattr__ override hack ──
+    # Instead of intercepting every global assignment to sync sub-modules,
+    # we create a single ctx PipelineContext that phase functions receive.
+    # Any remaining global reads go through the one-time sync below.
+    ctx = PipelineContext(
+        project_dir=getattr(module, 'PROJECT_DIR', ''),
+        repo=getattr(module, 'REPO', ''),
+        default_branch=getattr(module, 'DEFAULT_BRANCH', 'master'),
+        panel_feature=getattr(module, 'PANEL_FEATURE', ''),
+        panel_dir=getattr(module, 'PANEL_DIR', ''),
+        real_home=getattr(module, 'REAL_HOME', ''),
+        hermes_home=getattr(module, 'HERMES', ''),
+        hermes_bin=getattr(module, 'HERMES_BIN', ''),
+        profiles_dir=getattr(module, 'PROFILES', ''),
+        output_log=getattr(module, 'OUTPUT_LOG', '/tmp/dokima-output.txt'),
+        api_key=getattr(module, 'API_KEY', ''),
+        panel_port=getattr(module, 'PANEL_PORT', {
+            'strategist': 8647, 'tech-lead': 8644, 'coder': 8645, 'nm': 8648
+        }),
+        fallback_models=getattr(module, 'FALLBACK_MODELS', {}),
+        skip_autofix=getattr(module, 'SKIP_AUTOFIX', False),
+        force_full=getattr(module, 'FORCE_FULL', False),
+        skip_human_gate=getattr(module, 'SKIP_HUMAN_GATE', False),
+        max_parallel_override=getattr(module, 'max_parallel_override', None),
+        resume=getattr(module, 'RESUME', None),
+        max_continuous=getattr(module, 'MAX_CONTINUOUS', 20),
+        test_cmd=getattr(module, 'TEST_CMD', 'npm test'),
+        build_cmd=getattr(module, 'BUILD_CMD', 'npm run build'),
+        lint_cmd=getattr(module, 'LINT_CMD', 'npm run lint'),
+    )
+    module.ctx = ctx
+
+    # F022: One-time sync of initial globals from panel module to sub-modules.
+    # With PipelineContext, sub-modules read from ctx, but some legacy code
+    # may still reference module globals directly during the transition.
+    for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
+        target = getattr(module, mod_ref, None)
+        if target is None:
+            continue
+        for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
+                       'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
+                       'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
+                       'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
+                       'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
+            val = getattr(module, g_name, None)
+            if val is not None and hasattr(target, g_name):
+                object.__setattr__(target, g_name, val)
 
     return module
 
@@ -113,7 +209,7 @@ def _isolate_panel_modules():
 
 @pytest.fixture
 def panel():
-    """Loaded dokima module with globals set. Fresh per test.
+    """Loaded dokima module with globals set and ctx PipelineContext. Fresh per test.
     Saves/restores sys.modules so stale references from module-level
     imports in other test files don't leak into override detection
     (F022b: Modular Architecture — fix stale sys.modules references)."""
