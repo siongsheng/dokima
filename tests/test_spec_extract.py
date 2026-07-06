@@ -61,6 +61,55 @@ class TestSpecExtractModule:
         assert hasattr(spec_extract, "extract_issue_sections")
         assert callable(spec_extract.extract_issue_sections)
 
+    def test_has_extract_agent_messages(self):
+        """spec_extract exports extract_agent_messages()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "extract_agent_messages")
+        assert callable(spec_extract.extract_agent_messages)
+
+    def test_has_extract_file_paths(self):
+        """spec_extract exports extract_file_paths()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "extract_file_paths")
+        assert callable(spec_extract.extract_file_paths)
+
+    def test_has_extract_tl_verdict(self):
+        """spec_extract exports _extract_tl_verdict()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "_extract_tl_verdict")
+        assert callable(spec_extract._extract_tl_verdict)
+
+    def test_has_extract_tl_blockers(self):
+        """spec_extract exports _extract_tl_blockers()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "_extract_tl_blockers")
+        assert callable(spec_extract._extract_tl_blockers)
+
+    def test_has_format_blocker_cross_reference(self):
+        """spec_extract exports format_blocker_cross_reference()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "format_blocker_cross_reference")
+        assert callable(spec_extract.format_blocker_cross_reference)
+
+    def test_has_extract_convention_rules(self):
+        """spec_extract exports _extract_convention_rules()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "_extract_convention_rules")
+        assert callable(spec_extract._extract_convention_rules)
+
+    def test_has_append_convention_rules(self):
+        """spec_extract exports _append_convention_rules()."""
+        import spec_extract
+
+        assert hasattr(spec_extract, "_append_convention_rules")
+        assert callable(spec_extract._append_convention_rules)
+
 
 class TestUtilsReExport:
     """Verify utils.py re-exports spec_extract functions for backward compat."""
@@ -100,6 +149,36 @@ class TestUtilsReExport:
 
         assert hasattr(utils, "extract_issue_sections")
         assert callable(utils.extract_issue_sections)
+
+    def test_utils_has_extract_agent_messages(self):
+        import utils
+
+        assert hasattr(utils, "extract_agent_messages")
+        assert callable(utils.extract_agent_messages)
+
+    def test_utils_has_extract_file_paths(self):
+        import utils
+
+        assert hasattr(utils, "extract_file_paths")
+        assert callable(utils.extract_file_paths)
+
+    def test_utils_has_extract_tl_verdict(self):
+        import utils
+
+        assert hasattr(utils, "_extract_tl_verdict")
+        assert callable(utils._extract_tl_verdict)
+
+    def test_utils_has_extract_tl_blockers(self):
+        import utils
+
+        assert hasattr(utils, "_extract_tl_blockers")
+        assert callable(utils._extract_tl_blockers)
+
+    def test_utils_has_format_blocker_cross_reference(self):
+        import utils
+
+        assert hasattr(utils, "format_blocker_cross_reference")
+        assert callable(utils.format_blocker_cross_reference)
 
 
 class TestSpecExtractFunctions:
