@@ -894,7 +894,7 @@ def _supplement_pr_sections(pr_sections, project_dir, branch, default_branch):
                     result += f"\n\n## Impact\n\nMinimal — see What Changed."
                 if "## What Changed" not in pr_sections:
                     result += f"\n\n## What Changed\n\n```\n{diff_summary}\n```"
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        except (subprocess.TimeoutExpired, OSError) as e:
             print(f"  ⚠ _supplement_pr_sections: git diff failed ({e}) — proceeding without supplement", flush=True)
     return result
 
