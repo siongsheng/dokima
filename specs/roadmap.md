@@ -261,7 +261,7 @@
 ### F040: PipelineContext dataclass — replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, etc.) with a single PipelineContext dataclass passed to each phase function. Eliminates conftest __setattr__ override hack. Makes testing trivial — create a context, pass it in. All 1,029 tests protect this refactor.
 **Priority:** P1
 **Dependencies:** None
-**Status:** [ ] Pending Progress Progress Progress Progress
+**Status:** [~] In Progress Progress Progress Progress Progress
 **User Story:** As a contributor, I can write a test by creating a PipelineContext instead of monkey-patching 20+ module globals through conftest.
 
 ### F041: Split utils.py into domain modules — git_ops.py (git, gh wrappers), spec_extract.py (extract_pr_sections, extract_issue_sections, clean_spec_content), codebase_map.py (generate_codebase_map, _build_domain_map, _build_impact_map), control_panel.py (handle_status, handle_stop, handle_kill). 3,351 lines → ~4 × 800-line modules.
