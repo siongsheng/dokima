@@ -34,7 +34,7 @@ _PROVIDER_FAILURE_PATTERNS = [
 
 FALLBACK_MODEL_RE = re.compile(r'^[a-zA-Z0-9_./-]+$')
 
-def call_agent(port, system_prompt, user_prompt, model="deepseek-v4-pro", max_tokens=1500):
+def call_agent(port, system_prompt, user_prompt, model="deepseek-v4-pro", max_tokens=1500, ctx=None):
     payload = {"model": model, "messages": [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
@@ -42,7 +42,8 @@ def call_agent(port, system_prompt, user_prompt, model="deepseek-v4-pro", max_to
     import urllib.request
     data = json.dumps(payload).encode()
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
-    auth_header = "Bearer " + API_KEY
+    api_key = ctx.API_KEY if ctx and hasattr(ctx, 'API_KEY') else API_KEY
+    auth_header = "Bearer " + api_key
     req = urllib.request.Request(url, data=data,
         headers={"Authorization": auth_header,
                  "Content-Type": "application/json"})
@@ -99,7 +100,7 @@ def _load_fallback_config():
         config[role] = val
     return config
 
-def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None, fallback_model=None):
+def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None, fallback_model=None, ctx=None):
     """Spawn a Hermes agent as a subprocess. Returns stdout or raises on failure.
     If model is specified (e.g. 'deepseek-v4-pro'), passes -m/--provider to override the profile default.
     If fallback_model is specified, on provider failure the agent is re-spawned
@@ -119,12 +120,12 @@ def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None, fall
         if dokima_override is not None and dokima_override is not _SPAWN_ORIGINAL:
             return dokima_override(profile, skills, prompt, timeout=timeout, cwd=cwd, model=model, fallback_model=fallback_model)
 
-    result, returncode = _run_agent(profile, skills, prompt, timeout, cwd, model)
+    result, returncode = _run_agent(profile, skills, prompt, timeout, cwd, model, ctx=ctx)
 
     # Check if fallback is needed
     if fallback_model and _detect_provider_failure(result, returncode):
         print(f"\n[{profile}] ⚠ Primary model failed — retrying with fallback model {fallback_model}", flush=True)
-        fallback_result, fb_returncode = _run_agent(profile, skills, prompt, timeout, cwd, fallback_model)
+        fallback_result, fb_returncode = _run_agent(profile, skills, prompt, timeout, cwd, fallback_model, ctx=ctx)
         if not _detect_provider_failure(fallback_result, fb_returncode):
             print(f"\n[{profile}] ✓ Fallback model succeeded", flush=True)
             return f"[{profile}:fallback] {fallback_result}"
@@ -134,10 +135,11 @@ def spawn_agent(profile, skills, prompt, timeout=900, cwd=None, model=None, fall
 
     return result
 
-def _run_agent(profile, skills, prompt, timeout, cwd, model):
+def _run_agent(profile, skills, prompt, timeout, cwd, model, ctx=None):
     """Core logic for spawning and running a single Hermes agent subprocess.
     Returns (output_string, returncode). Extracted for reuse with fallback."""
-    cmd = [HERMES_BIN, "--profile", profile, "--yolo"]
+    hermes_bin = ctx.HERMES_BIN if ctx and hasattr(ctx, 'HERMES_BIN') else HERMES_BIN
+    cmd = [hermes_bin, "--profile", profile, "--yolo"]
     if model:
         if "/" in model:
             provider, model_name = model.split("/", 1)
