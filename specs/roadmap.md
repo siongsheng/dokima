@@ -281,3 +281,9 @@
 **Dependencies:** F040
 **Status:** [x] Done
 **User Story:** As a contributor, I can understand and modify a phase function without tracing 125 branching paths.
+
+### F044: PR body quality — `extract_pr_sections()` currently dumps the strategist's full spec into Why/Impact instead of extracting concise summaries. Fix: trim Why to first 2 sentences (max 200 chars), Impact to product-value-only (strip meta-commentary and internal thinking), strip nm Review of shell commands and reasoning noise.
+**Priority:** P1
+**Dependencies:** F038
+**Status:** [ ] Pending
+**User Story:** As a reviewer, I open a PR and immediately understand what changed and why — no walls of strategist text, no shell commands in review sections.
