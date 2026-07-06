@@ -296,10 +296,11 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
         except Exception:
             print("  ⚠ Failed to fetch PR comments for blocker extraction", flush=True)
 
-    # Filter out ARCHITECTURAL blockers
-    filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
+    # Filter out ARCHITECTURAL blockers — removed.
+    # extract_blockers_from_pr now returns ALL blockers including architectural.
+    # Filtering is consolidated in run_fix_mode as the single filtering point (H1 fix).
 
-    return filtered
+    return blockers
 
 
 def run_fix_mode_issue(project_dir, issue_number):
