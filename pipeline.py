@@ -4,6 +4,7 @@ All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
 import sys, os, json, re, subprocess, time
+import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 _IMPORTING_PANEL = None
@@ -23,6 +24,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    _extract_code_context, _describe_file,
                    handle_status, handle_stop, handle_kill, handle_list_crons,
                    _check_pid, _verify_pid_owner, _get_lock_state,
+                   _extract_nm_summary,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
@@ -521,7 +523,9 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
             branch=pr_branch,
             pr_sections=f"## What Changed\n\nFixed blockers on PR #{pr_num}",
             impact="MEDIUM",
-            spec_path=spec_path or ""
+            spec_path=spec_path or "",
+            depth="full",
+            confidence="Medium"
         )
         if vet_result.get("coder_failed"):
             coder_failed = True
@@ -847,7 +851,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     }
 
 
-def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
+def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet", confidence="High"):
     """Phase 3: vet — checkout branch, run tests, run build, create PR, merge worktrees.
     Returns dict with: nm_output, pr_url, coder_failed, verdict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -998,6 +1002,7 @@ Report: what was broken, what you fixed, commit hash."""
     passed_str = f"{tests_passed}/{total_tests}" if total_tests != "?" else f"{tests_passed} passed"
     pr_body = (
         f"{pr_sections_final}\n\n"
+        f"{_depth_section(confidence, impact, depth)}\n\n"
         f"## Validation\n"
         f"- {passed_str} tests\n"
         f"- Build passes\n"
@@ -1038,6 +1043,55 @@ Report: what was broken, what you fixed, commit hash."""
     print(f"✓ Verification passed ({len(nm_output)} chars)", flush=True)
 
     return {"nm_output": nm_output, "pr_url": pr_url, "coder_failed": coder_failed, "verdict": verdict, "tests_passed": tests_passed, "tests_failed": tests_failed, "test_pass": test_pass, "build_pass": build_pass}
+
+
+def _build_nm_review(nm_summary):
+    """Build ### nm Review markdown section from nm summary dict."""
+    risk = nm_summary.get("risk", "UNKNOWN")
+    lines = [f"### nm Review", f"**Risk:** {risk}"]
+    findings = nm_summary.get("key_findings", "")
+    if findings:
+        lines.append("")
+        lines.append(findings[:2000])
+    sf_items = nm_summary.get("should_fix_items", [])
+    if sf_items:
+        lines.append("")
+        lines.append(f"**SHOULD FIX ({len(sf_items)}):**")
+        for item in sf_items[:5]:
+            desc = item.get("description", str(item))[:120]
+            lines.append(f"- {desc}")
+    auto_fix = nm_summary.get("auto_fix_labels", [])
+    if auto_fix:
+        lines.append("")
+        lines.append(f"**Auto-fixed ({len(auto_fix)}):** {', '.join(auto_fix)}")
+    return "\n".join(lines)
+
+
+def _inject_nm_into_pr_body(pr_url, nm_stdout):
+    """Update PR body with ### nm Review section from nm output.
+    Accepts nm_stdout string or pre-built nm_summary dict.
+    Returns True if injection succeeded, False otherwise."""
+    if not pr_url or not nm_stdout:
+        return False
+    try:
+        if isinstance(nm_stdout, dict):
+            nm_summary = nm_stdout
+        else:
+            nm_summary = _extract_nm_summary(nm_stdout)
+        nm_section = _build_nm_review(nm_summary)
+        pr_num_match = re.search(r'/pull/(\d+)', pr_url)
+        if not pr_num_match:
+            return False
+        current_body, _, rc = vcs.vcs_pr_view(pr_num_match.group(1), fields="body")
+        if rc != 0 or not current_body:
+            return False
+        if "### nm Review" in current_body:
+            current_body = re.sub(r'\n*### nm Review.*$', '', current_body, flags=re.DOTALL)
+        updated_body = current_body.rstrip() + "\n\n" + nm_section
+        _, _, rc = vcs.vcs_pr_update_body(pr_num_match.group(1), updated_body)
+        return rc == 0
+    except Exception:
+        return False
 
 
 def run_phase4_nm(feature, branch, impact, pr_url_in):
@@ -2264,7 +2318,7 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
 
     # Phase 3: vet
     if not coder_failed and depth in ("vet+nm", "full"):
-        vet_result = run_phase3_vet(feature, branch, pr_sections, impact, spec_path)
+        vet_result = run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth=depth, confidence=confidence)
         nm_output = vet_result["nm_output"]
         pr_url = vet_result["pr_url"] or pr_url
         if vet_result["coder_failed"]:
@@ -2290,6 +2344,10 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
     if not coder_failed and depth in ("vet+nm", "full"):
         nm_result = run_phase4_nm(feature, branch, impact, pr_url)
         pr_url = nm_result["pr_url"]
+        # Inject nm Review into PR body
+        if pr_url and nm_result.get("nm_stdout"):
+            if _inject_nm_into_pr_body(pr_url, nm_result["nm_stdout"]):
+                print(f"  ✓ nm Review injected into PR body", flush=True)
         # Save checkpoint after nm
         if resume is not False:
             cp_data = {
