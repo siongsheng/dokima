@@ -1,11 +1,11 @@
 {
-  "feature": "F038: Surface nm and TL findings in PR body \u2014 when nm runs (Phase 4) or TL reviews (Phase 5), inject their findings into the PR body as and sections. At depth=vet+nm (no TL), nm findings still appear. Currently nm output is invisible (37K chars logged but never surfaced); TL findings only appear via a separate PR comment. SHOULD FIX items from both nm and TL are extracted as GitHub issues regardless of depth.",
+  "feature": "F041: Split utils.py into domain modules \u2014 git_ops.py (git, gh wrappers), spec_extract.py (extract_pr_sections, extract_issue_sections, clean_spec_content), codebase_map.py (generate_codebase_map, _build_domain_map, _build_impact_map), control_panel.py (handle_status, handle_stop, handle_kill). 3,351 lines \u2192 ~4 \u00d7 800-line modules.",
   "project": "/home/opc/dokima",
-  "branch": "feat/f038-surface-nm-and-tl-findings-in-pr-bo-2318e714",
+  "branch": "feat/f041-split-utilspy-into-domain-modules---b6582d67",
   "depth": "vet+nm",
   "risk": "MEDIUM",
   "mode": "passive",
-  "log_path": "/tmp/dokima-output-20260706-174914.txt",
+  "log_path": "/tmp/dokima-output-20260707-015934.txt",
   "started_at": "2026-07-02T19:42:33.093216",
   "current_phase": "init",
   "phases": {
