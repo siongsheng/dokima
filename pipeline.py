@@ -983,7 +983,24 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
 def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet", confidence="High", ctx=None):
     """Phase 3: vet — checkout branch, run tests, run build, create PR, merge worktrees.
     Returns dict with: nm_output, pr_url, coder_failed, verdict."""
-    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    # Resolve from ctx if provided, else fall back to module globals
+    if ctx is None:
+        import utils as _u_phase3
+        _pd = _u_phase3.PROJECT_DIR
+        _rp = _u_phase3.REPO
+        _db = _u_phase3.DEFAULT_BRANCH
+        _tc = _u_phase3.TEST_CMD
+        _bc = _u_phase3.BUILD_CMD
+        _lc = _u_phase3.LINT_CMD
+        _fm = _u_phase3.FALLBACK_MODELS
+    else:
+        _pd = ctx.PROJECT_DIR
+        _rp = ctx.REPO
+        _db = ctx.DEFAULT_BRANCH
+        _tc = ctx.TEST_CMD
+        _bc = ctx.BUILD_CMD
+        _lc = ctx.LINT_CMD
+        _fm = ctx.FALLBACK_MODELS
     nm_output = ""
     pr_url = None
     coder_failed = False
@@ -1002,8 +1019,11 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
         return {"nm_output": "Checkout: FAILED", "pr_url": None, "coder_failed": True, "verdict": "VET_FAILED", "test_pass": False, "build_pass": False}
 
     # Refresh detect_commands after checkout to use feature branch's AGENTS.md
-    global TEST_CMD, BUILD_CMD, LINT_CMD
-    TEST_CMD, BUILD_CMD, LINT_CMD = detect_commands()
+    _tc, _bc, _lc = detect_commands()
+    if ctx is not None:
+        ctx._tc = _tc
+        ctx._bc = _bc
+        ctx._lc = _lc
 
     # ── Verification loop: fail → coder fixes → re-verify ──
     MAX_VERIFY_RETRIES = 2
@@ -1021,7 +1041,7 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
         # Run test suite
         print("  ⏳ Running test suite...", flush=True)
         t0 = time.time()
-        test_result = _safe_run(TEST_CMD, cwd=PROJECT_DIR, timeout=300)
+        test_result = _safe_run(_tc, cwd=_pd, timeout=300)
         test_output = test_result.stdout or ""
         test_pass = test_result.returncode == 0
         pm = re.search(r'(\d+)\s+passed', test_output)
@@ -1033,7 +1053,7 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
         # Run build
         print("  ⏳ Running build...", flush=True)
         t0 = time.time()
-        build_result = _safe_run(BUILD_CMD, cwd=PROJECT_DIR, timeout=300)
+        build_result = _safe_run(_bc, cwd=_pd, timeout=300)
         build_pass = build_result.returncode == 0
         build_output = build_result.stdout or ""
         print(f"  {'✅' if build_pass else '❌'} Build: {'passed' if build_pass else 'FAILED'} ({time.time()-t0:.0f}s)", flush=True)
@@ -1083,10 +1103,10 @@ BUILD FAILURES:
 
 Fix the code so both pass. Then: git add <fixed files> && git commit -m "fix: verification failures" && git push origin {branch}
 Do NOT change tests unless they are wrong. Do NOT change code outside this scope.
-WORKING DIRECTORY: {PROJECT_DIR}. Do NOT cd to other directories.
+WORKING DIRECTORY: {_pd}. Do NOT cd to other directories.
 Report: what was broken, what you fixed, commit hash."""
             spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                        fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
+                        fix_prompt, cwd=_pd, fallback_model=_fm.get("coder"))
             print(f"  ✓ Coder fix attempt finished", flush=True)
         else:
             print(f"\n  🔴 BLOCKED — Verification failed after {MAX_VERIFY_RETRIES} retries", flush=True)
@@ -1102,7 +1122,7 @@ Report: what was broken, what you fixed, commit hash."""
 
     # 4. Verify coder produced actual code changes (not just spec/docs)
     print("  ⏳ Checking diff for code changes...", flush=True)
-    diff_stat, _, _ = git("diff", "--stat=200", DEFAULT_BRANCH + "..." + branch)
+    diff_stat, _, _ = git("diff", "--stat=200", _db + "..." + branch)
     source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
     spec_only = re.findall(r'^\s*specs/[\w/.-]+\.(?:md)\s*\|', diff_stat, re.MULTILINE)
     if not source_files and (spec_only or not diff_stat.strip()):
@@ -1117,7 +1137,7 @@ Report: what was broken, what you fixed, commit hash."""
 
     # F039: Real-code verification — ensure functions tested exist in source
     if test_pass:
-        missing = _verify_test_imports_exist(PROJECT_DIR)
+        missing = _verify_test_imports_exist(_pd)
         if missing:
             print(f"  🔴 BLOCKED — {len(missing)} tested function(s) not found in source:", flush=True)
             for m in missing[:5]:
@@ -1130,7 +1150,7 @@ Report: what was broken, what you fixed, commit hash."""
     # 4. Create PR (verification passed)
     print("  ⏳ Creating PR...", flush=True)
 
-    pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+    pr_sections_final = _supplement_pr_sections(pr_sections, _pd, branch, _db)
     try:
         tp = int(tests_passed)
     except (ValueError, TypeError):
@@ -1148,8 +1168,8 @@ Report: what was broken, what you fixed, commit hash."""
         f"- {passed_str} tests\n"
         f"- Build passes\n"
     )
-    pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
-        "--base", DEFAULT_BRANCH, "--head", branch,
+    pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", _rp,
+        "--base", _db, "--head", branch,
         "--title", f"feat: {feature}",
         "--body", pr_body)
     if pr_rc == 0 and pr_stdout.strip():
@@ -1161,7 +1181,7 @@ Report: what was broken, what you fixed, commit hash."""
             pr_url = None
     else:
         # Try finding existing PR
-        stdout, _, rc = gh("pr", "list", "--repo", REPO, "--head", branch,
+        stdout, _, rc = gh("pr", "list", "--repo", _rp, "--head", branch,
                            "--json", "url", "--jq", ".[0].url")
         if rc == 0 and stdout:
             pr_url = stdout
@@ -1485,11 +1505,26 @@ def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
 
 def run_phase4_nm(feature, branch, impact, pr_url_in, ctx=None):
     """Phase 4: nm — adversarial review, parse PR. Returns dict with nm_ok, pr_url, risk."""
-    global PROJECT_DIR, REPO
+    # Resolve from ctx if provided, else fall back to module globals
+    if ctx is None:
+        import utils as _u_phase4
+        _pd = _u_phase4.PROJECT_DIR
+        _rp = _u_phase4.REPO
+        _tc = _u_phase4.TEST_CMD
+        _bc = _u_phase4.BUILD_CMD
+        _sa = _u_phase4.SKIP_AUTOFIX
+        _fm = _u_phase4.FALLBACK_MODELS
+    else:
+        _pd = ctx.PROJECT_DIR
+        _rp = ctx.REPO
+        _tc = ctx.TEST_CMD
+        _bc = ctx.BUILD_CMD
+        _sa = ctx.SKIP_AUTOFIX
+        _fm = ctx.FALLBACK_MODELS
     print("\n── Phase 4: nm (adversarial review) ──", flush=True)
     print("  ⏳ Spawning fresh Hermes session with different model family...", flush=True)
-    nm_cmd = os.path.join(PROJECT_DIR, "scripts", "nm") + " --skip-tests"
-    nm_result = _safe_run(nm_cmd, cwd=PROJECT_DIR, timeout=600)
+    nm_cmd = os.path.join(_pd, "scripts", "nm") + " --skip-tests"
+    nm_result = _safe_run(nm_cmd, cwd=_pd, timeout=600)
     nm_stdout = nm_result.stdout or ""
     print(f"  ✓ nm finished ({len(nm_stdout)} chars)", flush=True)
 
@@ -1502,7 +1537,7 @@ def run_phase4_nm(feature, branch, impact, pr_url_in, ctx=None):
             pr_url = pr_match.group(1)
             print(f"  PR: {pr_url}", flush=True)
     if not pr_url:
-        stdout, _, rc = gh("pr", "list", "--repo", REPO, "--head", branch,
+        stdout, _, rc = gh("pr", "list", "--repo", _rp, "--head", branch,
                            "--json", "url", "--jq", ".[0].url")
         if rc == 0 and stdout:
             pr_url = stdout
@@ -1531,7 +1566,7 @@ def run_phase4_nm(feature, branch, impact, pr_url_in, ctx=None):
         if re.search(pattern, nm_stdout):
             nm_auto_fixable.append(label)
 
-    if nm_auto_fixable and not SKIP_AUTOFIX:
+    if nm_auto_fixable and not _sa:
         issues_text = "\n".join(f"  - {i}" for i in nm_auto_fixable)
         print(f"\n  ↻ nm found {len(nm_auto_fixable)} auto-fixable issue(s):", flush=True)
         print(issues_text, flush=True)
@@ -1547,22 +1582,22 @@ RULES:
 - Fix uncaught exceptions/panics — use proper error handling (Result, ?).
 - Fix TDD violations — split bundled commits into separate RED + GREEN.
 - Do NOT change architecture, spec design, or anything not listed above.
-- WORKING DIRECTORY: {PROJECT_DIR}. Do NOT cd to other directories.
+- WORKING DIRECTORY: {_pd}. Do NOT cd to other directories.
 - After fixing: git add <files> && git commit -m "fix: address nm review findings" && git push origin {branch}
-- Run {TEST_CMD} before pushing. Fix if it fails.
+- Run {_tc} before pushing. Fix if it fails.
 Report: what you fixed, commit hash."""
         spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                    fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
+                    fix_prompt, cwd=_pd, fallback_model=_fm.get("coder"))
         print(f"  ✓ Coder fix finished", flush=True)
 
         # Re-vet after fix
         print("  ⏳ Re-verifying after auto-fix...", flush=True)
-        test_result = _safe_run(TEST_CMD, cwd=PROJECT_DIR, timeout=300)
-        build_result = _safe_run(BUILD_CMD, cwd=PROJECT_DIR, timeout=300)
+        test_result = _safe_run(_tc, cwd=_pd, timeout=300)
+        build_result = _safe_run(_bc, cwd=_pd, timeout=300)
         if test_result.returncode == 0 and build_result.returncode == 0:
             # Re-run nm to refresh PR with fixes
             print("  ✓ Re-verify passed — re-running nm with fixes...", flush=True)
-            nm_result = _safe_run(nm_cmd, cwd=PROJECT_DIR, timeout=600)
+            nm_result = _safe_run(nm_cmd, cwd=_pd, timeout=600)
             nm_stdout = nm_result.stdout or ""
             pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
             if pr_match:
@@ -1630,7 +1665,24 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output="", ctx=None):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
-    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    # Resolve from ctx if provided, else fall back to module globals
+    if ctx is None:
+        import utils as _u_phase5
+        _pd = _u_phase5.PROJECT_DIR
+        _rp = _u_phase5.REPO
+        _db = _u_phase5.DEFAULT_BRANCH
+        _tc = _u_phase5.TEST_CMD
+        _bc = _u_phase5.BUILD_CMD
+        _sa = _u_phase5.SKIP_AUTOFIX
+        _fm = _u_phase5.FALLBACK_MODELS
+    else:
+        _pd = ctx.PROJECT_DIR
+        _rp = ctx.REPO
+        _db = ctx.DEFAULT_BRANCH
+        _tc = ctx.TEST_CMD
+        _bc = ctx.BUILD_CMD
+        _sa = ctx.SKIP_AUTOFIX
+        _fm = ctx.FALLBACK_MODELS
     tl_output = ""
 
     print("\n── Phase 5: Tech Lead (PR review) ──", flush=True)
@@ -1641,7 +1693,7 @@ def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output="
             with open(spec_path) as f:
                 spec_text = f.read()
             # Fetch PR body from GitHub
-            pr_body, _, rc = gh("pr", "view", pr_url.split("/")[-1], "--repo", REPO,
+            pr_body, _, rc = gh("pr", "view", pr_url.split("/")[-1], "--repo", _rp,
                                "--json", "body", "--jq", ".body")
             if rc == 0 and pr_body.strip():
                 alignment_issue = _verify_pr_impact_alignment(pr_body, spec_text)
@@ -1654,15 +1706,15 @@ def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output="
             print(f"  ⚠ Impact alignment check failed: {e}", flush=True)
 
     tl_prompt = f"""You are the Tech Lead — your job is a THREE-PART adversarial review against the spec at {spec_path}.
-{_make_map_hint(PROJECT_DIR)}
+{_make_map_hint(_pd)}
 
 FIRST — read the spec: the chosen approach, API/interface proposal, and task breakdown.
 
 THEN — review the pull request{' at ' + pr_url if pr_url else ' for branch ' + branch}:
 1. Source .env: export $(grep -v '^#' .env | xargs) 2>/dev/null
-2. Fetch PR: gh pr view --repo {REPO} {'--json body,additions,deletions,files,reviews' if pr_url else ''}
-3. Check out branch, review diff: git diff {DEFAULT_BRANCH}...{branch}
-4. Verify TDD: git log {DEFAULT_BRANCH}..{branch} --oneline — RED before GREEN
+2. Fetch PR: gh pr view --repo {_rp} {'--json body,additions,deletions,files,reviews' if pr_url else ''}
+3. Check out branch, review diff: git diff {_db}...{branch}
+4. Verify TDD: git log {_db}..{branch} --oneline — RED before GREEN
 5. Read changed files — understand what was built
 
 THREE DIMENSIONS (every finding: severity + dimension + file:line + rule violated):
@@ -1675,7 +1727,7 @@ NM FINDINGS (supplementary): The nm pipeline stage already reviewed this diff wi
 
 SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missing guards, uncaught exceptions, security, missing tests, missing README update when spec required it) | SHOULD FIX (conventions, naming, AGENTS.md, redundant code, stale docs referencing old behavior) | NIT (formatting, comments, style)
 
-FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {REPO} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
+FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {_rp} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
 Do NOT --approve (self-approval blocked). User merges manually.
 
 CRITICAL — your final output MUST end with this exact format (these lines are parsed):
@@ -1687,13 +1739,13 @@ RELEASE: NO
  Use YES + semver or NO for RELEASE.)
 RELEASE determination: Check if this feature introduces new functionality, API changes, or breaking changes visible to users. YES → recommend semver level (patch/minor/major). NO → no release needed."""
     tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
-                            tl_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("tech-lead"))
+                            tl_prompt, cwd=_pd, fallback_model=_fm.get("tech-lead"))
     print(f"\n✓ Tech Lead finished ({len(tl_output)} chars)", flush=True)
 
     # ── TL AUTO-FIX LOOPBACK ──
     # Auto-fix objective TL BLOCKERs (missing tests, TDD violations, uncaught exceptions).
     # Skips subjective BLOCKERs (spec violation, architecture, security) — human judges.
-    if not SKIP_AUTOFIX:
+    if not _sa:
         tl_auto_fix_keywords = {
             "tdd violation": "TDD violation",
             "missing test": "missing test",
@@ -1732,22 +1784,22 @@ RULES:
 - Fix TDD violations — split bundled commits into separate RED + GREEN.
 - Add missing guard clauses for null/error conditions.
 - Do NOT change architecture, spec design, security posture, or anything not in the list above.
-- WORKING DIRECTORY: {PROJECT_DIR}. Do NOT cd to other directories.
+- WORKING DIRECTORY: {_pd}. Do NOT cd to other directories.
 - After fixing: git add <files> && git commit -m "fix: address TL review blockers" && git push origin {branch}
-- Run {TEST_CMD} + {BUILD_CMD} before pushing. Fix if either fails.
+- Run {_tc} + {_bc} before pushing. Fix if either fails.
 Report: what you fixed, commit hash."""
             spawn_agent("coder", ["ai-coding-best-practices-lite"],
-                        fix_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("coder"))
+                        fix_prompt, cwd=_pd, fallback_model=_fm.get("coder"))
             print(f"  ✓ Coder fix finished", flush=True)
 
             # Re-vet + re-TL
             print("  ⏳ Re-verifying after auto-fix...", flush=True)
-            test_result = _safe_run(TEST_CMD, cwd=PROJECT_DIR, timeout=300)
-            build_result = _safe_run(BUILD_CMD, cwd=PROJECT_DIR, timeout=300)
+            test_result = _safe_run(_tc, cwd=_pd, timeout=300)
+            build_result = _safe_run(_bc, cwd=_pd, timeout=300)
             if test_result.returncode == 0 and build_result.returncode == 0:
                 print("  ✓ Re-verify passed — re-running Tech Lead with fixes...", flush=True)
                 tl_output = spawn_agent("tech-lead", ["adversarial-review-lite", "ponytail-guard"],
-                                        tl_prompt, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("tech-lead"))
+                                        tl_prompt, cwd=_pd, fallback_model=_fm.get("tech-lead"))
                 print(f"  ✓ Tech Lead re-run finished ({len(tl_output)} chars)", flush=True)
             else:
                 print("  ⚠ Re-verify failed after auto-fix — proceeding with original TL output", flush=True)
@@ -1771,7 +1823,7 @@ Report: what you fixed, commit hash."""
             if blocker_lines and verdict in ("BLOCKED", "CHANGES REQUESTED"):
                 convention_rules = _extract_convention_rules(blocker_lines)
                 if convention_rules:
-                    appended = _append_convention_rules(PROJECT_DIR, convention_rules)
+                    appended = _append_convention_rules(_pd, convention_rules)
                     if appended > 0:
                         print(f"  📋 Appended {appended} convention rule(s) to specs/conventions.md", flush=True)
         except Exception:
@@ -1783,7 +1835,7 @@ Report: what you fixed, commit hash."""
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
         # Fetch existing PR body, strip old Review sections via _build_tl_review_body
-        existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
+        existing_body, _, _ = gh("pr", "view", pr_num, "--repo", _rp,
                                  "--json", "body", "--jq", ".body")
         review_section = f"## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
@@ -1806,7 +1858,7 @@ Report: what you fixed, commit hash."""
         new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
         _, edit_err, edit_rc = gh("api",
-            f"repos/{REPO}/pulls/{pr_num}",
+            f"repos/{_rp}/pulls/{pr_num}",
             "--method", "PATCH",
             "-f", f"body={new_body}")
         if edit_rc == 0:
@@ -1849,7 +1901,7 @@ Report: what you fixed, commit hash."""
                 f"### Source\nFound during adversarial review of `{branch}` against the spec. "
                 f"See {pr_url} for full review details and other findings."
             )
-            stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
+            stdout, stderr, rc = gh("issue", "create", "--repo", _rp,
                                     "--title", title, "--body", body)
             if rc == 0:
                 print(f"  Created: {stdout}", flush=True)
