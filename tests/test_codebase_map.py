@@ -423,3 +423,96 @@ def test_incremental_regenerates_all_sections(tmp_project, panel):
     assert "## Domain Map" in content
     assert "## Impact Map" in content
     assert "## Test Map" in content
+
+
+# ── F028: Map Enrichments ─────────────────────────────────────
+
+class TestMapEnrichments:
+    """Tests for extract_map_enrichments(), save_map_enrichments(), load_map_enrichments()."""
+
+    def test_extract_single_map_line(self, panel):
+        strat_output = "some text\n> MAP: pipeline phases are sequential\nmore text"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["feature"] == "F028"
+        assert result[0]["guidance"] == "pipeline phases are sequential"
+        assert "timestamp" in result[0]
+        assert result[0]["category"] == "pattern"
+
+    def test_extract_multiple_map_lines(self, panel):
+        strat_output = "> MAP: first note\n> MAP: second note\n> MAP: third note"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 3
+        assert result[0]["guidance"] == "first note"
+        assert result[1]["guidance"] == "second note"
+        assert result[2]["guidance"] == "third note"
+
+    def test_extract_no_map_lines(self, panel):
+        strat_output = "some text\nno map markers here\njust regular output"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert result == []
+
+    def test_extract_category_warning(self, panel):
+        strat_output = "> MAP: WARNING: this is unsafe"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["category"] == "warning"
+        assert result[0]["guidance"] == "WARNING: this is unsafe"
+
+    def test_extract_category_arch(self, panel):
+        strat_output = "> MAP: ARCH: pipeline order matters"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["category"] == "architecture"
+        assert result[0]["guidance"] == "ARCH: pipeline order matters"
+
+    def test_extract_truncation(self, panel):
+        long_text = "x" * 600
+        strat_output = f"> MAP: {long_text}"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert len(result[0]["guidance"]) == 500
+
+    def test_save_and_load_roundtrip(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            entries = [
+                {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+                 "guidance": "test guidance 1", "category": "pattern"},
+                {"feature": "F029", "timestamp": "2026-07-06T13:00:00",
+                 "guidance": "test guidance 2", "category": "architecture"},
+            ]
+            panel.save_map_enrichments(d, "F029", entries)
+            loaded = panel.load_map_enrichments(d)
+            assert len(loaded) == 2
+            assert loaded[0]["guidance"] == "test guidance 1"
+            assert loaded[1]["guidance"] == "test guidance 2"
+
+    def test_save_dedup_by_feature(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            entries_a = [
+                {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+                 "guidance": "entry A", "category": "pattern"},
+            ]
+            panel.save_map_enrichments(d, "F028", entries_a)
+            entries_b = [
+                {"feature": "F028", "timestamp": "2026-07-06T13:00:00",
+                 "guidance": "entry B", "category": "pattern"},
+            ]
+            panel.save_map_enrichments(d, "F028", entries_b)
+            loaded = panel.load_map_enrichments(d)
+            assert len(loaded) == 1
+            assert loaded[0]["guidance"] == "entry B"
+
+    def test_load_missing_file(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            result = panel.load_map_enrichments(d)
+            assert result == []
+
+    def test_load_malformed_json(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            enrich_path = os.path.join(d, "specs", ".map-enrichments.json")
+            os.makedirs(os.path.join(d, "specs"), exist_ok=True)
+            with open(enrich_path, "w") as f:
+                f.write("this is not json {{{")
+            result = panel.load_map_enrichments(d)
+            assert result == []
