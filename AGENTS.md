@@ -4,7 +4,7 @@ Python script that routes feature development through a pipeline of AI agents.
 This repo IS the panel — you don't run the panel on itself.
 
 ## Tech Stack
-- Python 3.6+ (modular: dokima entry point + utils.py, agent.py, pipeline.py, roadmap.py, tasks.py)
+- Python 3.6+ (modular: dokima entry point + utils.py, agent.py, pipeline.py, roadmap.py, tasks.py, git_ops.py, spec_extract.py, codebase_map.py, control_panel.py)
 - Bash for companion scripts (nm, vet)
 - Hermes Agent for profile spawning
 - GitHub CLI (gh) or GitLab CLI (glab) for PR/issue management — auto-detected from git remote
