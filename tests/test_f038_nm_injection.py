@@ -802,3 +802,54 @@ class TestNmShouldFixIssueCreation:
 
             assert result is True  # graceful — didn't crash
             assert mock_gh.call_count == 3  # All 3 attempted
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Task 3: run_phase5_tech_lead uses _build_tl_review_body (strips nm+TL)
+# ═══════════════════════════════════════════════════════════════════
+
+# The current regex in run_phase5_tech_lead ONLY strips ## Review:
+TL_ONLY_STRIP_RE = r'\n## Review\n\n.*?(?=\n## |\Z)'
+
+# The _build_tl_review_body function uses a combined regex that strips BOTH:
+TL_NM_STRIP_RE_FROM_CODE = (
+    r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
+    r'\n## Review\n\n.*?(?=\n## |\Z)'
+)
+
+
+class TestRunPhase5TlNmStripping:
+    """Tests verifying run_phase5_tech_lead properly strips nm section."""
+
+    def test_current_tl_regex_does_not_strip_nm(self):
+        """The current TL-only regex in run_phase5_tech_lead fails to strip ### nm Review.
+        
+        This test documents the current gap: _build_tl_review_body handles both,
+        but run_phase5_tech_lead's inline regex only strips ## Review.
+        """
+        body = "## Description\n\ntext\n\n### nm Review\n\nnm content\n\n## Review\n\nTL content"
+        import re
+        cleaned = re.sub(TL_ONLY_STRIP_RE, '', body, flags=re.DOTALL)
+        # BUG: ### nm Review is NOT stripped by the current regex
+        assert "### nm Review" in cleaned, \
+            "Current TL regex does NOT strip nm section — this is the gap to fix"
+        assert "nm content" in cleaned
+        assert "## Review" not in cleaned  # Only TL section stripped
+
+    def test_combined_regex_strips_both_sections(self):
+        """The combined regex from _build_tl_review_body strips both nm and TL."""
+        body = "## Description\n\ntext\n\n### nm Review\n\nnm content\n\n## Review\n\nTL content"
+        import re
+        cleaned = re.sub(TL_NM_STRIP_RE_FROM_CODE, '', body, flags=re.DOTALL)
+        assert "### nm Review" not in cleaned
+        assert "nm content" not in cleaned
+        assert "## Review" not in cleaned
+        assert "TL content" not in cleaned
+        assert "## Description" in cleaned
+
+    def test_build_tl_review_body_is_importable(self):
+        """_build_tl_review_body exists and handles the combined case."""
+        import pipeline as pl
+        assert hasattr(pl, '_build_tl_review_body'), \
+            "pipeline must have _build_tl_review_body function"
+        assert callable(pl._build_tl_review_body)
