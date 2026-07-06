@@ -25,6 +25,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    handle_status, handle_stop, handle_kill, handle_list_crons,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    _extract_nm_summary,
+                   extract_issue_sections,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
@@ -297,6 +298,118 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
 
     return filtered
+
+
+def run_fix_mode_issue(project_dir, issue_number):
+    """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
+
+    F034: dokima fix --issue N — pulls issue body, extracts structured fix
+    instructions, spawns coder to implement, runs vet + nm.
+
+    Steps:
+    1. Fetch issue body via gh issue view
+    2. Extract ### What, ### Fix, ### Verify sections via extract_issue_sections()
+    3. Construct coder prompt from extracted sections
+    4. Create fix/issue-{N} branch, spawn coder via run_phase2_coder(mode="fix")
+    5. Run vet + nm if coder succeeds
+    """
+    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
+    PROJECT_DIR = project_dir
+
+    print(f"\n{'═'*60}", flush=True)
+    print(f"  FIX MODE (issue #{issue_number}) — {project_dir}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
+
+    import json as _json
+
+    # Step 1: Fetch issue body
+    view_stdout, view_stderr, view_rc = gh(
+        "issue", "view", str(issue_number), "--repo", REPO,
+        "--json", "body,title", "--jq", "{body, title}"
+    )
+    if view_rc != 0:
+        print(f"  ✗ Could not fetch issue #{issue_number}: {view_stderr[:200]}", flush=True)
+        return
+    try:
+        issue_data = _json.loads(view_stdout)
+    except _json.JSONDecodeError:
+        print(f"  ✗ Failed to parse issue #{issue_number} response", flush=True)
+        return
+
+    issue_body = issue_data.get("body", "")
+    issue_title = issue_data.get("title", f"Issue #{issue_number}")
+    if not issue_body or not issue_body.strip():
+        print(f"  ✗ Issue #{issue_number} has no body", flush=True)
+        return
+
+    # Step 2: Extract sections
+    try:
+        sections = extract_issue_sections(issue_body)
+    except ValueError as e:
+        print(f"  ✗ Could not extract sections from issue #{issue_number}: {e}", flush=True)
+        print(f"  Issue must have ### What and ### Fix sections.", flush=True)
+        return
+
+    what = sections.get("what", "")
+    fix = sections.get("fix", "")
+    verify = sections.get("verify", "")
+
+    print(f"  Issue: {issue_title}", flush=True)
+    print(f"  What: {what[:120]}{'...' if len(what) > 120 else ''}", flush=True)
+
+    # Step 3: Construct coder prompt + branch
+    branch = f"fix/issue-{issue_number}"
+    feature = f"fix: issue #{issue_number}: {issue_title[:80]}"
+
+    coder_prompt = (
+        f"### What\n{what}\n\n"
+        f"### Fix\n{fix}\n\n"
+        f"### Verify\n{verify}\n\n"
+        f"Constraints: Fix mode — only implement what is described above. "
+        f"Do NOT add features. TDD with two separate commits. "
+        f"Single commit message: fix: address issue #{issue_number}. "
+        f"Run {TEST_CMD} before pushing."
+    )
+
+    pr_sections = (
+        f"## Why\nFix GitHub issue #{issue_number}: {issue_title}\n\n"
+        f"## What Changed\nImplemented fix per issue #{issue_number} instructions."
+    )
+
+    # Step 4: Create branch and spawn coder
+    git("checkout", DEFAULT_BRANCH)
+    git("checkout", "-b", branch)
+
+    coder_result = run_phase2_coder(
+        feature=feature,
+        spec=coder_prompt,
+        spec_path="",
+        tasks_extract_path="",
+        pr_sections=pr_sections,
+        branch=branch,
+        depth="full",
+        mode="fix",
+        is_next=False
+    )
+
+    if coder_result.get("coder_failed"):
+        print(f"  ✗ Coder failed to fix issue #{issue_number}", flush=True)
+        return
+
+    # Step 5: Run vet + nm
+    vet_result = run_phase3_vet(
+        feature=feature, branch=branch,
+        pr_sections=pr_sections, impact="MEDIUM",
+        spec_path="", depth="full", confidence="Medium"
+    )
+
+    if not vet_result.get("coder_failed"):
+        pr_url = vet_result.get("pr_url", "")
+        nm_result = run_phase4_nm(feature, branch, "MEDIUM", pr_url)
+        if nm_result.get("nm_ok"):
+            print(f"  ✓ Fix pipeline complete for issue #{issue_number}", flush=True)
+            print(f"  PR: {nm_result.get('pr_url', pr_url)}", flush=True)
+            print(f"  nm risk: {nm_result.get('risk', 'UNKNOWN')}", flush=True)
 
 
 def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
