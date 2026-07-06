@@ -1,4 +1,12 @@
 # F040 Task 12 — Verification State
-# RED phase: verification pending
-status: pending
+# GREEN phase: verification complete
+status: verified-passed
 baseline_commit: 15daadb
+verification_commit: (green)
+tests: 1036 passed, 6 skipped
+build: OK
+lint: OK
+quick_suite: 1029 passed (2 flaky, pre-existing test pollution on main)
+baseline_globals: 22 global statements across dokima(2) utils.py(5) pipeline.py(12) roadmap.py(2) vcs.py(1)
+baseline_setattr: 6 occurrences in tests/conftest.py
+notes: Post-refactor acceptance criteria (0 globals, 0 setattr) apply after F040 merge.
