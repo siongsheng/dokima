@@ -1,0 +1,31 @@
+# Dokima Pipeline Configuration
+# Controls phase behaviour, vet checks, and agent settings.
+
+pipeline:
+  # Feature depth: "vet", "vet+nm", or "full"
+  depth: vet+nm
+
+phases:
+  vet:
+    # Post-pytest verification steps — run only after tests pass
+    post_test:
+      # F039: Real-code verification — after tests pass, verify that
+      # functions referenced in test files actually exist in source modules.
+      # Blocks pipeline on exit code 1 if mock.patch targets are unresolvable.
+      real_code_check:
+        enabled: true
+        script: vet/real_code_check.py
+        args:
+          - --src-dir
+          - src
+          - --test-dir
+          - tests
+        exit_codes:
+          success: 0      # all mock.patch targets verified importable
+          failure: 1      # at least one mock.patch target is missing
+
+      # F039 alternative: standalone verify_imports.py (project-level check)
+      verify_imports:
+        enabled: true
+        script: scripts/verify_imports.py
+        description: "Standalone import verification across entire project"
