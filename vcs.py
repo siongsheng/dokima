@@ -88,8 +88,12 @@ def detect_vcs_backend(project_dir, ctx=None):
     return None
 
 
-def parse_vcs_flag():
-    """Parse --vcs flag from sys.argv. Returns 'github', 'gitlab', or None."""
+def parse_vcs_flag(ctx=None):
+    """Parse --vcs flag from sys.argv. Returns 'github', 'gitlab', or None.
+    
+    ctx is accepted for PipelineContext consistency but not used directly
+    (parse_vcs_flag operates on sys.argv).
+    """
     args = sys.argv[1:]  # skip script name
     for i, arg in enumerate(args):
         if arg == "--vcs" and i + 1 < len(args):

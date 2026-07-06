@@ -40,7 +40,8 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    _extract_convention_rules, _append_convention_rules,
                    extract_should_fix_from_text, _extract_nm_summary,
                    halt_and_revert, archive_specs_for_feature,
-                   ensure_profiles, deploy_profile_skills)
+                   ensure_profiles, deploy_profile_skills,
+                   PipelineContext)
 from agent import (call_agent, spawn_agent, _run_agent,
                    _detect_provider_failure, _load_fallback_config)
 from tasks import (Task, TaskDAG, TaskLock, WorktreeManager, RoadmapFeature,
@@ -755,15 +756,22 @@ def main():
     _sync_modules()
     _cleanup_lock()
 
-def _sync_modules():
-    """Propagate mutable globals to all module files (F022)."""
+def _sync_modules(ctx=None):
+    """Propagate mutable globals to all module files (F022).
+
+    When ctx is provided, populates module globals from PipelineContext fields.
+    When ctx is None, falls back to the panel's own globals() (backward compat).
+    """
     try:
         for g in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
                   'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
                   'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
                   'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
                   'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-            val = globals().get(g)
+            if ctx is not None and hasattr(ctx, g):
+                val = getattr(ctx, g)
+            else:
+                val = globals().get(g)
             if val is not None:
                 for mod in (_utils, _agent, _tasks, _roadmap, _pipeline):
                     if hasattr(mod, g):

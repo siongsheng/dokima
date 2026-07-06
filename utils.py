@@ -4,6 +4,8 @@ All functions extracted from dokima monolith (F022: Modular Architecture).
 Module-level globals are set by main() in the dokima entry script before any function calls.
 """
 import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 
 # shutil imported dynamically where needed (deploy_profile_skills)
 
@@ -42,6 +44,56 @@ try:
     VERSION = open(_version_path).read().strip()
 except OSError:
     VERSION = "unknown"
+
+# ── PipelineContext dataclass (F040) ──────────
+
+@dataclass
+class PipelineContext:
+    """Single dataclass holding all pipeline configuration, replacing 20+ module-level globals.
+
+    Passed to each phase function instead of relying on module-level state.
+    Makes testing trivial — create a context, pass it in.
+    """
+    # Project paths
+    PROJECT_DIR: str = ''
+    REPO: str = ''
+    DEFAULT_BRANCH: str = 'master'
+
+    # API / auth
+    API_KEY: str = ''
+
+    # Logging
+    OUTPUT_LOG: str = '/tmp/dokima-output.txt'
+
+    # Hermes paths (computed defaults)
+    REAL_HOME: str = field(default_factory=lambda: pwd.getpwuid(os.getuid()).pw_dir)
+    HERMES: str = field(default_factory=lambda: os.path.join(pwd.getpwuid(os.getuid()).pw_dir, '.hermes'))
+    HERMES_BIN: str = field(default_factory=lambda: os.path.join(
+        pwd.getpwuid(os.getuid()).pw_dir, '.hermes', 'hermes-agent/venv/bin/hermes'
+    ))
+    PROFILES: str = field(default_factory=lambda: os.path.join(
+        pwd.getpwuid(os.getuid()).pw_dir, '.hermes', 'profiles'
+    ))
+
+    # Panel config
+    PANEL_PORT: Dict[str, int] = field(default_factory=lambda: {
+        'strategist': 8647, 'tech-lead': 8644, 'coder': 8645, 'nm': 8648
+    })
+    PANEL_FEATURE: str = ''
+    PANEL_DIR: str = ''
+    FALLBACK_MODELS: Dict[str, str] = field(default_factory=dict)
+
+    # Flags
+    SKIP_AUTOFIX: bool = False
+    FORCE_FULL: bool = False
+    SKIP_HUMAN_GATE: bool = False
+    max_parallel_override: Optional[int] = None
+    RESUME: Optional[str] = None
+
+    # Project commands
+    TEST_CMD: str = 'npm test'
+    BUILD_CMD: str = 'npm run build'
+    LINT_CMD: str = 'npm run lint'
 
 # ── Global state ─────────────────────────────────
 _LOG_FILE_HANDLE = None
