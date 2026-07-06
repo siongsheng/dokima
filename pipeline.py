@@ -4,19 +4,13 @@ All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
 import sys, os, json, re, subprocess, time
-import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 _IMPORTING_PANEL = None
 
 from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    update_status_md, _write_log_line, show_help, check_upgrade,
-                   _extract_tl_verdict, _extract_tl_blockers, extract_should_fix_from_text,
-                   _extract_nm_summary,
-                   format_blocker_cross_reference,
-                   extract_issue_sections,
-                   extract_pr_sections,
-                   _extract_convention_rules, _append_convention_rules,
+                   _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
                    extract_agent_messages, clean_spec_content, verify_spec_quality,
                    generate_codebase_map, extract_file_paths, load_github_token,
                    save_checkpoint, load_checkpoint, delete_checkpoint,
@@ -32,6 +26,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
+                   extract_map_enrichments, save_map_enrichments,
                    HERMES_BIN, DEFAULT_BRANCH, PROJECT_DIR, REPO, PANEL_FEATURE,
                    PANEL_DIR, PROFILES, OUTPUT_LOG, FALLBACK_MODELS, PANEL_PORT,
                    API_KEY, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE,
@@ -72,6 +67,20 @@ def _make_map_hint(project_dir):
         "Consult it only when you need to find a specific file or test — "
         "do NOT read it as exploration before starting."
     )
+
+
+# ── F028: Map enrichment hint ──
+_MAP_ENRICHMENT_HINT = (
+    "\n\n> MAP: HINT — If you discover architecture patterns, conventions, "
+    "or warnings that future agents should know about this codebase, prefix "
+    "them with `> MAP:` on their own line in your output. Example:\n"
+    "> MAP: ARCH: Pipeline phases are sequential within a feature but "
+    "features run independently.\n"
+    "> MAP: WARNING: Do not assume shared state between run_pipeline calls.\n"
+    "> MAP: convention: All specs go in specs/<slug>/ directory.\n"
+    "These will be accumulated in codebase-map.md as institutional knowledge "
+    "across features — no extra LLM calls needed.\n"
+)
 
 
 def _depth_section(confidence, impact, depth):
@@ -257,8 +266,8 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
         section_text = blockers_section.group(1)
         for line in section_text.split("\n"):
             line = line.strip()
-            if line.startswith("- ") or re.match(r"^\d+\.\s", line):
-                desc = re.sub(r"^\d+\.\s*", "", line).lstrip("- ").strip()
+            if line.startswith("- "):
+                desc = line[2:].strip()
                 if desc:
                     blockers.append(desc)
 
@@ -288,340 +297,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
-def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
-                           create_blocker_issues=False):
-    """Create GitHub issues for each blocker (mirrors SHOULD FIX pattern).
-
-    Best-effort: failures log warnings, never block the pipeline.
-    Guarded by create_blocker_issues flag (off by default).
-
-    Returns list of issue URLs created.
-    """
-    if not create_blocker_issues:
-        return []
-    if not blockers:
-        return []
-
-    urls = []
-    for desc in blockers:
-        desc = str(desc).strip()
-        if not desc:
-            continue
-
-        title = f"BLOCKER: {desc[:72]}"
-        body_lines = [
-            "## What",
-            f"Blocker identified during TL review of PR #{pr_num}",
-            "",
-            "## Fix",
-            desc,
-            "",
-            "## Verify",
-            "- [ ] Re-run TL review to confirm resolution",
-            "",
-            "## Source",
-            f"- PR: {pr_url}",
-            f"- Branch: {branch}",
-        ]
-        if spec_path:
-            body_lines.append(f"- Spec: {spec_path}")
-
-        body = "\n".join(body_lines)
-        stdout, stderr, rc = vcs.vcs_issue_create(title, body, labels="blocker")
-
-        if rc == 0:
-            # Extract URL from stdout (gh prints the issue URL)
-            url = stdout.strip() if stdout else ""
-            urls.append(url)
-            print(f"  Created blocker issue: {url}", flush=True)
-        else:
-            print(f"  ⚠ Could not create blocker issue for '{desc[:60]}': {stderr[:200]}",
-                  flush=True)
-
-    return urls
-
-
-def auto_close_referenced_issues(pr_body, pr_num, pr_url):
-    """Scan PR body for Closes/Fixes #N and comment on those issues.
-
-    Called from run_post_pipeline when verdict is APPROVED and PR is merged.
-    Best-effort: failures are logged, not raised.
-
-    Returns list of issue numbers that were commented on.
-    """
-    if not pr_body or not pr_body.strip():
-        return []
-
-    # Find all Closes #N and Fixes #N references
-    ref_pattern = re.compile(r'(?:Closes?|Fixes?|Resolves?)\s+#(\d+)', re.IGNORECASE)
-    issue_nums = set()
-    for match in ref_pattern.finditer(pr_body):
-        issue_nums.add(int(match.group(1)))
-
-    if not issue_nums:
-        return []
-
-    commented = []
-    for issue_num in sorted(issue_nums):
-        try:
-            # Verify issue exists
-            _, view_err, view_rc = vcs.vcs_issue_view(str(issue_num), fields="body,title")
-            if view_rc != 0:
-                print(f"  ⚠ Issue #{issue_num} not found — skipping close comment", flush=True)
-                continue
-
-            # Add closing comment
-            comment = f"Resolved by PR #{pr_num}: {pr_url}"
-            _, comment_err, comment_rc = gh("issue", "comment", str(issue_num),
-                                            "--body", comment)
-            if comment_rc == 0:
-                commented.append(issue_num)
-                print(f"  ✅ Commented on issue #{issue_num}: {comment}", flush=True)
-            else:
-                print(f"  ⚠ Could not comment on issue #{issue_num}: {comment_err[:200]}", flush=True)
-        except Exception as e:
-            print(f"  ⚠ Error processing issue #{issue_num}: {e}", flush=True)
-
-    return commented
-
-
-def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
-                                spec_path, feature, create_issues=False):
-    """Update the original PR body with blocker resolution status.
-
-    Best-effort: failures log warnings, never raise. Returns True on success.
-    Only acts on APPROVED verdict — BLOCKED/UNKNOWN are no-ops.
-    """
-    if fix_verdict != "APPROVED":
-        return False
-    if not blockers:
-        return False
-
-    try:
-        # 1. Fetch fresh PR body
-        body_out, body_err, body_rc = vcs.vcs_pr_view(str(pr_num), fields="body")
-        if body_rc != 0:
-            print(f"  ⚠ Could not fetch PR body for update: {body_err[:200]}", flush=True)
-            return False
-
-        try:
-            import json as _json
-            pr_data = _json.loads(body_out)
-            current_body = pr_data.get("body", "")
-        except Exception:
-            current_body = body_out
-
-        if not current_body or not current_body.strip():
-            return False
-
-        # 2. Locate ### Blockers section
-        blockers_match = re.search(
-            r'(### Blockers\s*\n)(.*?)(?=\n### |\n## |\Z)',
-            current_body, re.DOTALL
-        )
-        if not blockers_match:
-            print("  ⚠ No ### Blockers section found in PR body — skipping update", flush=True)
-            return False
-
-        # 3. Replace blocker descriptions with formatted output
-        header = blockers_match.group(1)
-        section_content = blockers_match.group(2)
-        formatted = format_blocker_cross_reference(
-            blockers, pr_url, fix_verdict
-        )
-        updated_section = header + formatted
-
-        new_body = current_body.replace(blockers_match.group(0), updated_section)
-
-        # 4. Append ### Resolution subsection
-        from datetime import datetime
-        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        resolution = (
-            f"\n\n### Resolution\n\n"
-            f"Fix PR: {pr_url}\n\n"
-            f"Verdict: {fix_verdict}\n\n"
-            f"Resolved at: {timestamp}\n"
-        )
-        new_body += resolution
-
-        # 5. If --create-blocker-issues, create issues and append Closes refs
-        if create_issues:
-            issue_urls = create_blocker_issues(
-                blockers=blockers,
-                pr_num=pr_num,
-                pr_url=pr_url,
-                feature=feature,
-                branch=pr_branch,
-                spec_path=spec_path,
-                create_blocker_issues=True
-            )
-            for url in issue_urls:
-                # Extract issue number from URL like https://github.com/owner/repo/issues/N
-                issue_num_match = re.search(r'/issues/(\d+)', url)
-                if issue_num_match:
-                    closes_ref = f"\nCloses #{issue_num_match.group(1)}"
-                    new_body += closes_ref
-
-        # 6. Persist the update
-        print(f"  ⏳ Updating PR #{pr_num} body with blocker resolution...", flush=True)
-        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
-        if edit_rc == 0:
-            print(f"  ✅ PR #{pr_num} body updated with blocker resolution", flush=True)
-            return True
-        else:
-            print(f"  ⚠ Could not update PR body: {edit_err[:200]}", flush=True)
-            return False
-
-    except Exception as e:
-        print(f"  ⚠ Could not update PR body (exception): {e}", flush=True)
-        return False
-
-
-def run_fix_mode_issue(project_dir, issue_number):
-    """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
-
-    Steps:
-    1. Fetch issue body via gh issue view
-    2. Extract ### What, ### Fix, ### Verify sections
-    3. Construct coder prompt, create fix/issue-{N} branch, spawn coder
-    4. Run vet + nm if coder succeeds
-    """
-    global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
-    PROJECT_DIR = project_dir
-
-    print(f"\n{'═'*60}", flush=True)
-    print(f"  FIX MODE (issue #{issue_number}) — {project_dir}", flush=True)
-    print(f"{'═'*60}\n", flush=True)
-
-    # Step 1: Fetch issue body
-    import json as _json
-    view_stdout, view_stderr, view_rc = gh(
-        "issue", "view", str(issue_number), "--repo", REPO,
-        "--json", "body,title", "--jq", "{body, title}"
-    )
-    if view_rc != 0:
-        print(f"  ✗ Could not fetch issue #{issue_number}: {view_stderr[:200]}", flush=True)
-        return
-
-    try:
-        issue_data = _json.loads(view_stdout)
-    except _json.JSONDecodeError:
-        print(f"  ✗ Failed to parse issue #{issue_number} response", flush=True)
-        return
-
-    issue_body = issue_data.get("body", "")
-    issue_title = issue_data.get("title", f"Issue #{issue_number}")
-
-    if not issue_body or not issue_body.strip():
-        print(f"  ✗ Issue #{issue_number} has no body", flush=True)
-        return
-
-    # Step 2: Extract sections
-    try:
-        sections = extract_issue_sections(issue_body)
-    except ValueError as e:
-        print(f"  ✗ Could not extract sections from issue #{issue_number}: {e}", flush=True)
-        print(f"  Issue must have ### What and ### Fix sections.", flush=True)
-        return
-
-    what = sections["what"]
-    fix = sections["fix"]
-    verify = sections["verify"]
-    file_path = sections.get("file_path")
-
-    print(f"  Issue: {issue_title}", flush=True)
-    print(f"  What: {what[:100]}{'...' if len(what) > 100 else ''}", flush=True)
-
-    # Step 3: Create fix/issue-N branch
-    branch = f"fix/issue-{issue_number}"
-    git("checkout", DEFAULT_BRANCH)
-    git("pull", "origin", DEFAULT_BRANCH)
-    checkout_out, checkout_err, checkout_rc = git("checkout", "-b", branch)
-    if checkout_rc != 0:
-        # Branch may already exist — try switching to it
-        print(f"  ⚠ Branch {branch} already exists — switching to it", flush=True)
-        git("checkout", branch)
-
-    # Step 4: Construct coder prompt
-    fix_prompt = (
-        f"FIX MODE: Fix issue #{issue_number}\\n\\n"
-        f"### What\\n{what}\\n\\n"
-        f"### Fix\\n{fix}\\n\\n"
-        f"### Verify\\n{verify}\\n\\n"
-    )
-    if file_path:
-        fix_prompt += f"### Target File\\n{file_path}\\n\\n"
-    fix_prompt += (
-        "### Constraints\\n"
-        "- FIX MODE: only fix the listed issue. Do NOT add features.\\n"
-        "- Do NOT refactor unrelated code. Do NOT change architecture.\\n"
-        f"- WORKING DIRECTORY: {project_dir}. Do NOT cd to other directories.\\n"
-        "- TDD: write failing test first, then fix, then confirm tests pass.\\n"
-        "- Single commit message: `fix: address issue #{issue_number}`\\n"
-        f"- Run {BUILD_CMD} + {TEST_CMD} before pushing.\\n"
-        "- If unable to fix, report: ⚠ CODER UNABLE TO FIX: <reason>\\n"
-    )
-
-    print(f"\\n{'─'*60}", flush=True)
-    print("  Phase: Coder (issue fix)", flush=True)
-    print(f"{'─'*60}", flush=True)
-
-    coder_result = run_phase2_coder(
-        feature=f"Issue #{issue_number}: {issue_title}",
-        spec=fix_prompt,
-        spec_path="",
-        tasks_extract_path="",
-        pr_sections=f"## Why\\n\\nFix issue #{issue_number}: {issue_title}",
-        branch=branch,
-        depth="full",
-        mode="fix",
-        is_next=False
-    )
-
-    coder_failed = coder_result.get("coder_failed", True)
-
-    # Step 5: vet phase
-    if not coder_failed:
-        print(f"\\n{'─'*60}", flush=True)
-        print("  Phase: vet (build + test)", flush=True)
-        print(f"{'─'*60}", flush=True)
-        vet_result = run_phase3_vet(
-            feature=f"Issue #{issue_number}",
-            branch=branch,
-            pr_sections=f"## What Changed\\n\\nFixed issue #{issue_number}",
-            impact="MEDIUM",
-            spec_path=""
-        )
-        if vet_result.get("coder_failed"):
-            coder_failed = True
-            print("  ⚠ vet phase failed. Fix incomplete.", flush=True)
-
-    # Step 6: nm phase
-    if not coder_failed:
-        print(f"\\n{'─'*60}", flush=True)
-        print("  Phase: nm (adversarial review)", flush=True)
-        print(f"{'─'*60}", flush=True)
-        nm_result = run_phase4_nm(
-            feature=f"Issue #{issue_number}",
-            branch=branch,
-            impact="MEDIUM",
-            pr_url_in=coder_result.get("pr_url", "")
-        )
-
-    # Step 7: Summary
-    if not coder_failed:
-        print(f"\\n{'═'*60}", flush=True)
-        print(f"  ✅ Fix for issue #{issue_number} complete", flush=True)
-        print(f"  Branch: {branch}", flush=True)
-        if verify:
-            print(f"  Verify:\\n    {verify}", flush=True)
-        generate_codebase_map(project_dir)
-    else:
-        print(f"\\n{'═'*60}", flush=True)
-        print(f"  ❌ Fix for issue #{issue_number} failed", flush=True)
-
-
-def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False, create_blocker_issues=False):
+def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
     PROJECT_DIR = project_dir
@@ -641,16 +317,14 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False, create_block
     pr_branch = pr["headRefName"]
     pr_body = pr["body"]
     pr_url = f"https://github.com/{REPO}/pull/{pr_num}"
-    # If GitLab backend, generate MR URL instead
-    if vcs.VCS_BACKEND == "gitlab":
-        pr_url = f"https://gitlab.com/{REPO}/-/merge_requests/{pr_num}"
     print(f"  Found PR #{pr_num}: {pr_title}", flush=True)
     print(f"  Branch: {pr_branch}", flush=True)
     print(f"  URL: {pr_url}\n", flush=True)
 
     # Step 2: Check PR state (EC8: merged, closed)
     import json as _json
-    view_stdout, _, view_rc = vcs.vcs_pr_view(str(pr_num), fields="state,merged")
+    view_stdout, _, view_rc = gh("pr", "view", str(pr_num), "--repo", REPO,
+                                 "--json", "state,merged", "--jq", "{state, merged}")
     if view_rc == 0:
         try:
             pr_state = _json.loads(view_stdout)
@@ -890,17 +564,6 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False, create_block
         print(f"\n  TL Verdict: {fix_verdict}", flush=True)
         if fix_verdict == "APPROVED":
             print(f"  ✅ All blockers resolved — PR #{pr_num} APPROVED", flush=True)
-            # F037: Update original PR body with blocker resolution
-            _update_pr_body_after_fix(
-                pr_num=pr_num,
-                pr_url=pr_url,
-                pr_branch=pr_branch,
-                blockers=blockers,
-                fix_verdict=fix_verdict,
-                spec_path=spec_path or "",
-                feature=pr_title,
-                create_issues=create_blocker_issues
-            )
         elif fix_verdict == "BLOCKED":
             print(f"  ❌ PR #{pr_num} still has unresolved blockers.", flush=True)
         else:
@@ -1003,11 +666,8 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
 
 {map_hint}{file_hints}{code_context}
-FIRST: Fetch and switch to branch '{branch}' (already created by the panel):
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
   git fetch origin {branch} && git checkout {branch} && git pull origin {branch}
-
-Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).
-If these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.
 
 Implement ALL tasks from the spec, ONE AT A TIME. Before each: check if another task remains. Do not stop until ALL tasks done — including trivial ones (docs, imports, config).
 
@@ -1022,22 +682,6 @@ CRITICAL RULES:
 - DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
 - DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.
 - If a pre-existing test fails, report it — do NOT fix it unless the task explicitly says to.
-SELF-ASSESSMENT (Agent-as-Judge) — Before pushing, answer these 3 questions in your output:
-
-Q1: SPEC COVERAGE — Does every requirement in the spec have corresponding code?
-    List any spec requirement that has NO implementation yet.
-    If every requirement is implemented, say "All requirements covered."
-
-Q2: CONFIDENCE — What implementation detail are you LEAST confident about?
-    Be specific: name the file and behavior you're unsure about.
-    If fully confident in everything, say "All confident — no weak spots."
-
-Q3: TL PREDICTION — If a Tech Lead reviewed this PR, what would they flag?
-    Think adversarially: missing tests, unclear error handling, scope creep,
-    spec non-compliance, architecture violations.
-    If nothing, say "Nothing — this is clean."
-
-Answer all 3 questions before running git push.
 Report: both commit hashes, files changed, test results, lint status, branch name.
 """
 
@@ -1184,7 +828,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     if not coder_failed:
         pr_url = None
         if depth == "vet":
-            pr_urls = re.findall(r'(?:https://github\.com/[\w.-]+/[\w.-]+/pull/\d+|https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+)', coder_output)
+            pr_urls = re.findall(r'https://github\.com/[\w.-]+/[\w.-]+/pull/\d+', coder_output)
             if pr_urls:
                 pr_url = pr_urls[-1]
                 print(f"\n  PR (coder): {pr_url}", flush=True)
@@ -1203,7 +847,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     }
 
 
-def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, confidence="High", depth="vet"):
+def run_phase3_vet(feature, branch, pr_sections, impact, spec_path):
     """Phase 3: vet — checkout branch, run tests, run build, create PR, merge worktrees.
     Returns dict with: nm_output, pr_url, coder_failed, verdict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -1354,12 +998,14 @@ Report: what was broken, what you fixed, commit hash."""
     passed_str = f"{tests_passed}/{total_tests}" if total_tests != "?" else f"{tests_passed} passed"
     pr_body = (
         f"{pr_sections_final}\n\n"
-        f"## Depth\nConfidence: {confidence} × Impact: {impact} → **{depth}**\n\n## Validation\n"
+        f"## Validation\n"
         f"- {passed_str} tests\n"
         f"- Build passes\n"
     )
-    pr_stdout, pr_stderr, pr_rc = vcs.vcs_pr_create(
-        DEFAULT_BRANCH, branch, f"feat: {feature}", pr_body)
+    pr_stdout, pr_stderr, pr_rc = gh("pr", "create", "--repo", REPO,
+        "--base", DEFAULT_BRANCH, "--head", branch,
+        "--title", f"feat: {feature}",
+        "--body", pr_body)
     if pr_rc == 0 and pr_stdout.strip():
         parts = pr_stdout.strip().split()
         if parts:
@@ -1408,7 +1054,7 @@ def run_phase4_nm(feature, branch, impact, pr_url_in):
 
     # Extract PR URL from nm output (only if we don't already have one)
     if not pr_url:
-        pr_match = re.search(r'(?:(?:https://github\.com/[^/]+/[^/]+/pull/\d+)|(?:https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+))', nm_stdout)
+        pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
         if pr_match:
             pr_url = pr_match.group(1)
             print(f"  PR: {pr_url}", flush=True)
@@ -1475,7 +1121,7 @@ Report: what you fixed, commit hash."""
             print("  ✓ Re-verify passed — re-running nm with fixes...", flush=True)
             nm_result = _safe_run(nm_cmd, cwd=PROJECT_DIR, timeout=600)
             nm_stdout = nm_result.stdout or ""
-            pr_match = re.search(r'(?:(?:https://github\.com/[^/]+/[^/]+/pull/\d+)|(?:https://gitlab\.[^/]+/[\w./-]+/-/merge_requests/\d+))', nm_stdout)
+            pr_match = re.search(r'(https://github\.com/[^/]+/[^/]+/pull/\d+)', nm_stdout)
             if pr_match:
                 pr_url = pr_match.group(1)
             print(f"  ✓ nm re-run finished ({len(nm_stdout)} chars)", flush=True)
@@ -1484,128 +1130,7 @@ Report: what you fixed, commit hash."""
     elif nm_auto_fixable:
         print("  ⚠ Auto-fix skipped (--skip-autofix)", flush=True)
 
-    # ── Inject nm review into PR body ──
-    if pr_url:
-        summary = _extract_nm_summary(nm_stdout)
-        _inject_nm_into_pr_body(pr_url, summary)
-
-        # ── Create GitHub Issues for SHOULD FIX from nm ──
-        findings = summary.get("should_fix_items", [])
-        if findings:
-            print(f"\n  ── Creating GitHub Issues for {len(findings)} nm SHOULD FIX items ──",
-                  flush=True)
-            for finding in findings[:5]:
-                detail = finding.get("detail", "").strip()
-                if not detail:
-                    continue
-                title = detail[:80]
-                body = f"### What\n\n{detail}\n\n### Fix\n\n(TBD)\n\n### Verify\n\nRun tests and nm review."
-                try:
-                    stdout, stderr, rc = gh("issue", "create",
-                                           "--repo", REPO,
-                                           "--title", f"nm SHOULD FIX: {title}",
-                                           "--body", body,
-                                           "--label", "nm-review,should-fix")
-                    if rc == 0:
-                        print(f"    ✓ Created: {title[:60]}", flush=True)
-                    else:
-                        brief = (stderr or stdout or "")[:120]
-                        print(f"    ⚠ Failed: {brief}", flush=True)
-                except Exception as e:
-                    print(f"    ⚠ Exception creating issue: {e}", flush=True)
-    else:
-        print("  ⚠ No PR URL — skipping nm review injection", flush=True)
-
     return {"nm_ok": True, "pr_url": pr_url, "risk": risk, "nm_stdout": nm_stdout}
-
-
-def _build_nm_review_section(summary):
-    """Build the ### nm Review markdown section from an _extract_nm_summary dict.
-
-    Returns a string suitable for appending to the PR body.
-    """
-    risk = summary.get("risk", "UNKNOWN")
-    auto_fix_count = summary.get("auto_fix_count", 0)
-    auto_fix_labels = summary.get("auto_fix_labels", [])
-    key_findings = summary.get("key_findings", "")
-    should_fix_items = summary.get("should_fix_items", [])
-
-    section = "\n\n### nm Review\n\n"
-    section += f"**Risk:** {risk}  \n"
-
-    if auto_fix_count > 0 and auto_fix_labels:
-        labels_text = ", ".join(auto_fix_labels)
-        section += f"**Auto-Fix Applied:** {auto_fix_count} issue(s) — {labels_text}  \n"
-
-    if key_findings.strip():
-        section += f"\n**Key Findings:**\n{key_findings.strip()}\n"
-    else:
-        section += "\n**Key Findings:** No findings.\n"
-
-    if should_fix_items:
-        section += f"\n### SHOULD FIX ({len(should_fix_items)})\n\n"
-        for item in should_fix_items:
-            detail = item.get("detail", "")
-            if detail:
-                section += f"- {detail}\n"
-
-    return section
-
-
-def _inject_nm_into_pr_body(pr_url, summary):
-    """Inject the ### nm Review section into the PR body via vcs.
-
-    Best-effort: prints warnings on failure, never raises.
-
-    Args:
-        pr_url: Full PR/merge request URL (e.g. https://github.com/owner/repo/pull/42)
-        summary: Dict from _extract_nm_summary
-
-    Returns:
-        True if injection succeeded, False otherwise.
-    """
-    if not pr_url:
-        print("  ⚠ No PR URL — skipping nm review injection", flush=True)
-        return False
-
-    pr_num = pr_url.rstrip("/").split("/")[-1]
-    if not pr_num.isdigit():
-        print(f"  ⚠ Cannot parse PR number from {pr_url}", flush=True)
-        return False
-
-    # Fetch existing PR body
-    try:
-        existing_body, view_err, view_rc = vcs.vcs_pr_view(pr_num)
-    except Exception as e:
-        print(f"  ⚠ Failed to fetch PR body: {e}", flush=True)
-        return False
-
-    if view_rc != 0 or not existing_body:
-        print(f"  ⚠ Could not fetch PR body (rc={view_rc}): {view_err[:120]}", flush=True)
-        return False
-
-    # Strip old ### nm Review section
-    nm_strip_re = re.compile(r'\n### nm Review\n.*?(?=\n### |\n## |\Z)', re.DOTALL)
-    cleaned_body = nm_strip_re.sub('', existing_body)
-
-    # Build and append new nm Review section
-    nm_section = _build_nm_review_section(summary)
-    new_body = cleaned_body + nm_section
-
-    # Update PR body
-    try:
-        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
-    except Exception as e:
-        print(f"  ⚠ Failed to update PR body: {e}", flush=True)
-        return False
-
-    if edit_rc == 0:
-        print("  ✅ nm Review injected into PR body", flush=True)
-        return True
-    else:
-        print(f"  ⚠ Could not update PR body with nm review (rc={edit_rc}): {edit_err[:120]}",
-              flush=True)
-        return False
 
 
 def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
@@ -1659,46 +1184,6 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
             "Regenerate PR body from spec or update Impact to match.")
 
 
-def _build_tl_review_body(existing_body, tl_section, nm_output=""):
-    """Build the combined PR body with TL Review and optional nm Review.
-
-    Strips old ### nm Review and ## Review sections, then appends fresh
-    TL Review and (if nm_output is non-empty) nm Review sections.
-
-    Args:
-        existing_body: Current PR body text
-        tl_section: Pre-built ## Review markdown section
-        nm_output: Raw nm stdout (empty string if no nm ran)
-
-    Returns:
-        (combined_body, has_nm) — the full PR body and whether nm was injected
-    """
-    # Strip both old nm Review and TL Review sections
-    combined_strip_re = re.compile(
-        r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|'
-        r'\n## Review\n\n.*?(?=\n## |\Z)',
-        re.DOTALL
-    )
-    cleaned = combined_strip_re.sub('', existing_body or '')
-
-    # Append TL Review
-    new_body = cleaned + tl_section
-
-    # Append nm Review if nm_output is available
-    has_nm = False
-    if nm_output and nm_output.strip():
-        try:
-            nm_summary = _extract_nm_summary(nm_output)
-            nm_section = _build_nm_review_section(nm_summary)
-            new_body += nm_section
-            has_nm = True
-        except Exception:
-            # Best-effort: nm section build failure must not block TL injection
-            pass
-
-    return new_body, has_nm
-
-
 def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
@@ -1748,7 +1233,6 @@ NM FINDINGS (supplementary): The nm pipeline stage already reviewed this diff wi
 SEVERITY: BLOCKER (spec violation, architecture violation, TDD violation, missing guards, uncaught exceptions, security, missing tests, missing README update when spec required it) | SHOULD FIX (conventions, naming, AGENTS.md, redundant code, stale docs referencing old behavior) | NIT (formatting, comments, style)
 
 FINAL: export $(grep -v '^#' .env | xargs) 2>/dev/null && gh pr review --repo {REPO} PR_NUMBER --comment --body "Tech Lead Review: <verdict>. <summary>"
-For GitLab projects, use: glab mr review PR_NUMBER --comment --message "Tech Lead Review: <verdict>. <summary>"
 Do NOT --approve (self-approval blocked). User merges manually.
 
 CRITICAL — your final output MUST end with this exact format (these lines are parsed):
@@ -1839,29 +1323,19 @@ Report: what you fixed, commit hash."""
         pr_num = pr_url.split("/")[-1]
         # Extract blocker lines using the smart extractor
         blocker_lines = _extract_tl_blockers(tl_output)
-
-        # ── Cross-run learning: extract convention rules from TL blockers ──
-        if blocker_lines and verdict in ("BLOCKED", "CHANGES REQUESTED"):
-            try:
-                convention_rules = _extract_convention_rules(blocker_lines)
-                if convention_rules:
-                    appended = _append_convention_rules(PROJECT_DIR, convention_rules)
-                    if appended > 0:
-                        print(f"  📋 Appended {appended} convention rule(s) to specs/conventions.md", flush=True)
-            except Exception as e:
-                # Best-effort: convention append failure must not block the pipeline
-                print(f"  ⚠ Convention rule append failed (non-blocking): {e}", flush=True)
-
         # Extract risk from TL output or use strategist's impact
         risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', tl_output, re.IGNORECASE)
         tl_risk = risk_match.group(1).upper() if risk_match else impact
         # Extract impact from TL output
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
-        # Fetch existing PR body, strip old Review + nm Review sections,
-        # and build fresh combined body
+        # Fetch existing PR body, strip old Review sections
         existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
                                  "--json", "body", "--jq", ".body")
+        existing_body = re.sub(
+            r'\n## Review\n\n.*?(?=\n## |\Z)',
+            '', existing_body or '', flags=re.DOTALL
+        )
         review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
             review_section += f"\n**Impact:** {tl_impact}\n"
@@ -1880,109 +1354,36 @@ Report: what you fixed, commit hash."""
                         review_section += f"{match2.group(1)}. **{match2.group(2).strip()}**\n"
                     else:
                         review_section += f"- {bl}\n"
-        new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
-        if has_nm:
-            print(f"  ✅ nm Review refreshed alongside TL Review", flush=True)
+        new_body = (existing_body or "") + review_section
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
-        _, edit_err, edit_rc = vcs.vcs_pr_update_body(pr_num, new_body)
+        _, edit_err, edit_rc = gh("api",
+            f"repos/{REPO}/pulls/{pr_num}",
+            "--method", "PATCH",
+            "-f", f"body={new_body}")
         if edit_rc == 0:
             print(f"  ✅ PR updated with Review section", flush=True)
         else:
             print(f"  ⚠ Could not update PR body (gh api rc={edit_rc}): {edit_err[:200]}", flush=True)
 
     # Create GitHub Issues for SHOULD FIX items
-    # ── Source selection: PR review comment (authoritative) → tl_output (fallback) ──
-    source_text = tl_output
-    if pr_url:
-        pr_num = pr_url.split("/")[-1]
-        review_stdout, review_stderr, review_rc = gh(
-            "pr", "view", str(pr_num), "--repo", REPO,
-            "--comments", "--json", "reviews", "--jq", ".[-1].body"
-        )
-        if review_rc == 0 and review_stdout and review_stdout.strip():
-            source_text = review_stdout
-        else:
-            print(f"  ⚠ Could not fetch PR review comment (rc={review_rc}), falling back to TL output", flush=True)
-
-    findings = extract_should_fix_from_text(source_text)
-    if findings:
-        print(f"\n── Creating GitHub Issues for {len(findings)} SHOULD FIX items ──", flush=True)
-        for finding in findings[:5]:
-            desc = finding['detail']
-            # Build enhanced title with dimension prefix when available
-            dim = finding.get('dimension', '')
-            dim_prefix = f" [{dim}]" if dim else ""
-            title = f"SHOULD FIX{dim_prefix}: {desc[:72]}"
-
-            # Build enhanced body with table data when available
-            body_lines = [
-                f"## Tech Lead Review Finding",
-                f"",
-                f"**Feature:** {feature}",
-                f"**Branch:** {branch}",
-                f"**PR:** {pr_url or 'N/A'}",
-                f"**Verdict:** {verdict}",
-                f"**Spec:** {spec_path}",
-            ]
-            if finding.get('id'):
-                body_lines.append(f"**ID:** {finding['id']}")
-            if finding.get('dimension'):
-                body_lines.append(f"**Dimension:** {finding['dimension']}")
-            if finding.get('location'):
-                body_lines.append(f"**Location:** {finding['location']}")
-            body_lines.extend([
-                "",
-                f"### What",
-            ])
-            # Build What section: dimension + location + detail
-            what_parts = []
-            if finding.get('dimension'):
-                what_parts.append(f"[{finding['dimension']}]")
-            if finding.get('location'):
-                what_parts.append(finding['location'])
-            if what_parts:
-                body_lines.append(": ".join(what_parts) + f": {desc}")
-            else:
-                body_lines.append(desc)
-
-            # Build Fix section: derived action from finding
-            dim = (finding.get('dimension') or '').upper()
-            loc = finding.get('location', '')
-            if 'CONVENTION' in dim or 'STYLE' in dim:
-                fix_action = f"Update code to follow {dim.lower()} conventions"
-            elif 'RELIABILITY' in dim:
-                fix_action = f"Fix the reliability issue: {desc}"
-            elif 'MAINTAINABILITY' in dim:
-                fix_action = f"Refactor to address: {desc}"
-            elif 'SECURITY' in dim:
-                fix_action = f"Address the security finding: {desc}"
-            elif loc:
-                fix_action = f"Fix the issue in {loc}: {desc}"
-            else:
-                fix_action = f"Address the finding: {desc}"
-
-            body_lines.extend([
-                "",
-                f"### Fix",
-                fix_action,
-                "",
-                f"### Verify",
-                f"- [ ] Run: {TEST_CMD}",
-            ])
-            if loc:
-                body_lines.append(f"- [ ] Confirm: Change in {loc} resolves the finding without regressions")
-            else:
-                body_lines.append(f"- [ ] Confirm: Change resolves the finding without regressions")
-
-            body_lines.extend([
-                "",
-                f"### Source",
-                f"- PR: {pr_url or 'N/A'}",
-                f"- Branch: {branch}",
-                f"- Spec: {spec_path}",
-            ])
-            body = "\n".join(body_lines)
-
+    should_fix_lines = [l for l in tl_output.split("\n") if "SHOULD FIX" in l.upper() and "—" in l]
+    if should_fix_lines:
+        print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items ──", flush=True)
+        for line in should_fix_lines[:5]:
+            parts = line.split("—", 1)
+            desc = parts[1].strip() if len(parts) > 1 else line.strip()
+            title = f"SHOULD FIX: {desc[:80]}"
+            body = (
+                f"## Tech Lead Review Finding\n\n"
+                f"**Feature:** {feature}\n"
+                f"**Branch:** {branch}\n"
+                f"**PR:** {pr_url or 'N/A'}\n"
+                f"**Verdict:** {verdict}\n"
+                f"**Spec:** {spec_path}\n\n"
+                f"### Finding\n{line.strip()}\n\n"
+                f"### Context\nFound during adversarial review of `{branch}` against the spec. "
+                f"See the PR for full review details and other findings."
+            )
             stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
                                     "--title", title, "--body", body)
             if rc == 0:
@@ -2107,44 +1508,37 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     ║ Before submitting, search your output for ### Task.        ║
     ╚═════════════════════════════════════════════════════════════╝
 
+    _MAP_ENRICHMENT_HINT + "
+" +
+    '''
     TASK GRANULARITY: Each task should be 50-150 LOC. If a logical change is smaller than 30 LOC, merge it with the next related change in the same file. Do NOT create tasks smaller than 30 LOC — the panel spawns one coder per task, and sub-30-LOC tasks waste CI overhead.
 
     PARALLELIZABLE RULE: If you mark a task **Parallelizable:** yes, it must touch completely different files from every other task in its wave. If two tasks share any file, one must be sequential (different wave) or both must be **Parallelizable:** no. The panel will reject specs where parallel tasks have file overlap.
 
     1. DECISION TABLE: For novel/complex features, compare ≥2 approaches. For features with an obvious pattern match (visual change, config, docs, standard CRUD), use "SINGLE APPROACH: <one sentence>" — skip the comparison table.
 
-    2. ## N. Impact — MANDATORY. One sentence answering "what does the user gain?" — product value, NOT implementation details. Max 120 characters. DO NOT mention test files, LOC counts, functions, or file paths here. Use the example format EXACTLY:
+    2. ## N. Impact — MANDATORY SECTION. You MUST start this line with "## " followed by a number, a dot, and the word "Impact". DO NOT write "3. Impact Assessment" without ##. DO NOT write "Impact: MEDIUM". Only "## N. Impact" is accepted. Example:
        ## 3. Impact
 
-       Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs.
+       Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs. No more manual tagging.
 
-       BAD (too long, describes implementation):
-       ## 3. Impact
-       New tests in tests/test_f038.py. _extract_nm_summary handles real nm output, empty output. Integration verifies PR body has ### nm Review. 5 test files, 501 LOC.
-
-    3. ## N. Why — one sentence on why this feature exists. Context the PR reviewer needs. Max 100 characters. Example:
-       ## 2. Why
-
-       Merged PRs aren't auto-deployed to staging, causing drift between what's merged and what's live.
-
-    4. ## N. What Changed — a section header with a bullet list of key files and what they do. Max 6 bullets. Example:
+    3. ## N. What Changed — a section header with a bullet list of key files and what they do. Max 6 bullets. Example:
        ## 4. What Changed
 
        - `dokima`: Add --release flag and dispatch
        - `utils.py`: Add bump_version(), generate_changelog(), do_release()
 
-    5. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
-
+    4. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
        **Confidence:** (High)/(Medium)/(Low)
        **Impact:** (LOW)/(MEDIUM)/(HIGH)
 
-    6. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
+    5. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
 
-    7. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
+    6. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
 
-    8. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
+    7. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
 
-    9. TASK BREAKDOWN — DAG FORMAT MANDATORY:
+    8. TASK BREAKDOWN — DAG FORMAT MANDATORY:
     ### Task N: Brief description
     **Files:** path/to/file1, path/to/file2
     **Dependencies:** [none] or [Task N]
@@ -2354,7 +1748,6 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             + "\n".join(f"  - {_f}" for _f in _qg_failures) +
             f"\n\n"
             f"Fix these issues while preserving ALL content and sections.\n"
-            f"For file overlaps: mark the conflicting tasks as **Parallelizable:** no and make them sequential (Task N+1 depends on Task N).\n"
             f"Output the COMPLETE corrected spec — every section, every line.\n"
             f"Do NOT use write_file. Do NOT summarize.\n\n"
             f"── YOUR EXISTING SPEC (preserve this, fix issues) ──\n\n"
@@ -2370,13 +1763,6 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         spec = clean_spec_content(spec)
         _qg_passed2, _qg_failures2 = verify_spec_quality(spec)
         if not _qg_passed2:
-            overlap_failures = [f for f in _qg_failures2 if "file overlap" in f.lower()]
-            if overlap_failures:
-                print(f"  🔴 BLOCKED — {len(overlap_failures)} file overlap(s) persist after re-prompt. Halting.", flush=True)
-                for _f in overlap_failures:
-                    print(f"     - {_f}", flush=True)
-                print("  The strategist marked parallel tasks that share files. Fix the spec manually or retry.", flush=True)
-                sys.exit(1)
             print(f"  ⚠ Quality gate still has {len(_qg_failures2)} issue(s) after re-prompt — proceeding with degraded quality", flush=True)
             for _f in _qg_failures2:
                 print(f"     - {_f}", flush=True)
@@ -2435,6 +1821,16 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     with open(spec_path, "w") as f:
         f.write(f"# {feature}\n\n{spec}")
     print(f"\n\u2713 Spec saved: {spec_path}", flush=True)
+
+    # ── F028: Extract map enrichments from strategist output ──
+    try:
+        map_entries = extract_map_enrichments(strat_output, feature)
+        if map_entries:
+            save_map_enrichments(PROJECT_DIR, feature, map_entries)
+            print(f"  \U0001f4dd Map enriched: {len(map_entries)} guidance entr"
+                  f"ies", flush=True)
+    except Exception as e:
+        print(f"  \u26a0 Map enrichment failed (non-blocking): {e}", flush=True)
 
     pr_sections = extract_pr_sections(spec, feature)
     print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
@@ -2813,21 +2209,13 @@ def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=N
                 verdict = "CODER_FAILED"
 
         if not coder_failed and depth == "vet":
-            # Minimal guard: verify coder produced actual code changes
-            diff_stat, _, _ = git("diff", "--stat=200", DEFAULT_BRANCH + "..." + branch)
-            source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
-            if not source_files:
-                print("  🔴 BLOCKED — No source code changes in coder output. Halting.", flush=True)
-                halt_and_revert("nm: coder produced no source code changes (spec-only at depth=vet)", "PHASE 2 (Coder)", branch)
-                coder_failed = True
-                verdict = "CODER_FAILED"
-                continue_loop = False
-            else:
-                print("\n── Creating PR (depth=coder) ──", flush=True)
-                pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
+            print("\n── Creating PR (depth=coder) ──", flush=True)
+            pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
             pr_body = f"{pr_sections_final}\n\n## Validation\n- Build passes\n"
-            stdout, _, rc = vcs.vcs_pr_create(
-                DEFAULT_BRANCH, branch, f"feat: {feature}", pr_body)
+            stdout, _, rc = gh("pr", "create", "--repo", REPO,
+                               "--base", DEFAULT_BRANCH, "--head", branch,
+                               "--title", f"feat: {feature}",
+                               "--body", pr_body)
             if rc == 0:
                 parts = stdout.strip().split()
                 pr_url = parts[-1] if parts else None

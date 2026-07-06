@@ -423,3 +423,151 @@ def test_incremental_regenerates_all_sections(tmp_project, panel):
     assert "## Domain Map" in content
     assert "## Impact Map" in content
     assert "## Test Map" in content
+
+
+# ── F028: Map Enrichments ─────────────────────────────────────
+
+class TestMapEnrichments:
+    """Tests for extract_map_enrichments(), save_map_enrichments(), load_map_enrichments()."""
+
+    def test_extract_single_map_line(self, panel):
+        strat_output = "some text\n> MAP: pipeline phases are sequential\nmore text"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["feature"] == "F028"
+        assert result[0]["guidance"] == "pipeline phases are sequential"
+        assert "timestamp" in result[0]
+        assert result[0]["category"] == "pattern"
+
+    def test_extract_multiple_map_lines(self, panel):
+        strat_output = "> MAP: first note\n> MAP: second note\n> MAP: third note"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 3
+        assert result[0]["guidance"] == "first note"
+        assert result[1]["guidance"] == "second note"
+        assert result[2]["guidance"] == "third note"
+
+    def test_extract_no_map_lines(self, panel):
+        strat_output = "some text\nno map markers here\njust regular output"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert result == []
+
+    def test_extract_category_warning(self, panel):
+        strat_output = "> MAP: WARNING: this is unsafe"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["category"] == "warning"
+        assert result[0]["guidance"] == "WARNING: this is unsafe"
+
+    def test_extract_category_arch(self, panel):
+        strat_output = "> MAP: ARCH: pipeline order matters"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert result[0]["category"] == "architecture"
+        assert result[0]["guidance"] == "ARCH: pipeline order matters"
+
+    def test_extract_truncation(self, panel):
+        long_text = "x" * 600
+        strat_output = f"> MAP: {long_text}"
+        result = panel.extract_map_enrichments(strat_output, "F028")
+        assert len(result) == 1
+        assert len(result[0]["guidance"]) == 500
+
+    def test_save_and_load_roundtrip(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            entries = [
+                {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+                 "guidance": "test guidance 1", "category": "pattern"},
+                {"feature": "F029", "timestamp": "2026-07-06T13:00:00",
+                 "guidance": "test guidance 2", "category": "architecture"},
+            ]
+            panel.save_map_enrichments(d, "F029", entries)
+            loaded = panel.load_map_enrichments(d)
+            assert len(loaded) == 2
+            assert loaded[0]["guidance"] == "test guidance 1"
+            assert loaded[1]["guidance"] == "test guidance 2"
+
+    def test_save_dedup_by_feature(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            entries_a = [
+                {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+                 "guidance": "entry A", "category": "pattern"},
+            ]
+            panel.save_map_enrichments(d, "F028", entries_a)
+            entries_b = [
+                {"feature": "F028", "timestamp": "2026-07-06T13:00:00",
+                 "guidance": "entry B", "category": "pattern"},
+            ]
+            panel.save_map_enrichments(d, "F028", entries_b)
+            loaded = panel.load_map_enrichments(d)
+            assert len(loaded) == 1
+            assert loaded[0]["guidance"] == "entry B"
+
+    def test_load_missing_file(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            result = panel.load_map_enrichments(d)
+            assert result == []
+
+    def test_load_malformed_json(self, panel):
+        with tempfile.TemporaryDirectory() as d:
+            enrich_path = os.path.join(d, "specs", ".map-enrichments.json")
+            os.makedirs(os.path.join(d, "specs"), exist_ok=True)
+            with open(enrich_path, "w") as f:
+                f.write("this is not json {{{")
+            result = panel.load_map_enrichments(d)
+            assert result == []
+
+    def test_generate_map_includes_guidance(self, panel, tmp_project):
+        """When enrichments exist, map includes ## Agent Guidance section."""
+        # Pre-populate enrichment file
+        entries = [
+            {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+             "guidance": "test guidance", "category": "pattern"},
+        ]
+        panel.save_map_enrichments(tmp_project, "F028", entries)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        assert "## Agent Guidance" in content
+        assert "- (F028) test guidance" in content
+        assert "> Accumulated across features" in content
+
+    def test_generate_map_empty_enrichments(self, panel, tmp_project):
+        """When no enrichments, map does NOT include ## Agent Guidance section."""
+        # Ensure enrichment file doesn't exist
+        enrich_path = os.path.join(tmp_project, "specs", ".map-enrichments.json")
+        if os.path.exists(enrich_path):
+            os.remove(enrich_path)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        assert "## Agent Guidance" not in content
+
+    def test_guidance_section_after_test_map(self, panel, tmp_project):
+        """Agent Guidance section appears after Test Map in output."""
+        entries = [
+            {"feature": "F028", "timestamp": "2026-07-06T12:00:00",
+             "guidance": "test guidance", "category": "pattern"},
+        ]
+        panel.save_map_enrichments(tmp_project, "F028", entries)
+        panel.generate_codebase_map(tmp_project, full=True)
+        map_path = os.path.join(tmp_project, "specs", "codebase-map.md")
+        with open(map_path) as f:
+            content = f.read()
+        test_map_idx = content.index("## Test Map")
+        guidance_idx = content.index("## Agent Guidance")
+        assert guidance_idx > test_map_idx, "Agent Guidance must appear after Test Map"
+
+    def test_map_hint_in_strategist_prompt(self, panel):
+        """F028: Strategist prompt includes > MAP: hint for enrichment."""
+        # The _make_map_hint pattern appends map metadata to prompts.
+        # Verify the > MAP: hint text that gets injected into strat_prompt.
+        # We test by checking that the prompt-building logic includes the guidance.
+        import re as _re
+        # The MAP hint paragraph should contain these key phrases
+        hint = panel._MAP_ENRICHMENT_HINT
+        assert "> MAP:" in hint
+        assert "architecture patterns" in hint.lower() or "conventions" in hint.lower()
+        assert "institutional knowledge" in hint.lower() or "future agents" in hint.lower()

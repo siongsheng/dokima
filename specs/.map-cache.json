@@ -8,7 +8,7 @@
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
-    "hash": "ae7c5f91a55d288df53a994672efc80e",
+    "hash": "27aaa940ff7e5396f9234954a50b697d",
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "ba42025e995e8fb11674f31a40d5ba98",
+    "hash": "bcb112af11eb4dee569202a023f4c16d",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "cafc5cc885f3a9da3dd8567f9f5c7260",
+    "hash": "45ccfc06943f84c3ab3e1d7bd524d408",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "vcs.py": {
@@ -104,7 +104,7 @@
     "desc": "Exports: TestCleanSpecContent"
   },
   "tests/test_codebase_map.py": {
-    "hash": "6dc4fcbf35f1a11ef8706e944bec5d3a",
+    "hash": "5a2cd5c7e85554b9d2646380284897de",
     "desc": "assert \"Fetch user data\" in desc"
   },
   "tests/test_conftest_fixtures.py": {

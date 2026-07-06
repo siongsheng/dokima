@@ -1,313 +1,352 @@
 # F028: Strategist enriches codebase-map.md during normal feature planning — appends architecture decisions and agent guidance discovered during exploration. Map accumulates real-world rationale across features with zero extra LLM calls.
 
-I now have full context. Let me produce the complete corrected spec.
+Now I have full context on the dokima project. Let me produce the complete corrected spec for F028.
+    
+    Position: F028 is a mechanism to persist strategist architectural discoveries into codebase-map.md during normal feature planning — same session, same token budget, zero extra calls. (High confidence)
     
     
     
-    F028: Strategist enriches codebase-map.md during normal feature planning
+    
+    
+    feature: F028
+    title: Strategist enriches codebase-map.md during normal feature planning
+    status: spec-complete
+    confidence: High
+    impact: LOW
+    
     
     Executive Summary
     
-    F028 appends architecture decisions and agent guidance discovered by the strategist during Phase 1 exploration into codebase-map.md. The strategist already reads the entire codebase to design a feature — this feature captures the architectural insights it discovers (without extra LLM calls) and accumulates them across features so future agents start with richer context. The mechanism: a > MAP: marker the strategist uses in its output, regex-extracted by the panel, stored in a companion JSON file, and injected into the map during regeneration. (High confidence)
+    The strategist currently reads codebase-map.md to understand the codebase, but
+    the architectural discoveries it makes during exploration are lost after the
+    spec is written. F028 extends the codebase-map.md format with two persistent
+    sections — ## Architecture Decisions and ## Agent Guidance — that the strategist
+    appends to during its normal exploration. generate_codebase_map() preserves
+    these sections across regenerations. The knowledge accretes across features
+    organically, improving agent context for every subsequent pipeline run, with
+    zero additional LLM calls — the strategist writes down what it already learns.
     
     Constitution Check
     
     Axiom: Solves user's own pain?
-    Status: ✅ YES
-    Detail: Agents waste tokens rediscovering the same patterns. Shaun runs
-      dokima on multiple projects — accumulated map knowledge compounds.
+    Status: YES — Shaun runs dokima on multiple repos; agents re-discover the
+      same architecture each time
     ────────────────────────────────────────
     Axiom: Weekend-buildable?
-    Status: ✅ YES
-    Detail: ~250 LOC, 4 tasks, one wave of parallel work + one sequential
-      wiring task.
+    Status: YES — ~120 LOC, 4 tasks, one session
     ────────────────────────────────────────
     Axiom: Evidence people will pay?
-    Status: ✅ N/A
-    Detail: Internal dev tool — value is compounding agent efficiency, not
-      direct revenue.
+    Status: N/A — internal tool improvement
     ────────────────────────────────────────
     Axiom: Tech stack boring and proven?
-    Status: ✅ YES
-    Detail: Python stdlib json + regex. No new dependencies. Same pattern as
-      .map-cache.json.
+    Status: YES — Python stdlib, file I/O, no new dependencies
     ────────────────────────────────────────
     Axiom: Avoids AI hype categories?
-    Status: ✅ YES
-    Detail: Zero extra LLM calls — pure string extraction.
+    Status: YES — no AI buzzwords, pure engineering
     
-    Decision Table
+    1. Decision Table
     
-    Option: A: Marker-based
-    Extraction Method: Regex > MAP: from strat output
-    Storage: .map-enrichments.json companion file
-    Survives Regeneration?: ✅ Yes — map reads from it
-    LLM Calls: 0 extra
+    Option: A: Separate enrichment file
+    Mechanism: Strategist writes to specs/codebase-map-enriched.md; map hint
+      links both
+    Preservation: Trivial — separate file, never overwritten
+    Complexity: Medium — two files to maintain, agents must read both
+    Verdict: Reject
+    ────────────────────────────────────────
+    Option: B: Append-only log (ADR-like)
+    Mechanism: New section in codebase-map.md; strategist appends;
+      generate_codebase_map preserves it
+    Preservation: Requires preservation logic in generate_codebase_map
+    Complexity: Low — single file, single preservation pass
     Verdict: Accept
     ────────────────────────────────────────
-    Option: B: Spec-parse
-    Extraction Method: Parse Decision Table + Risk Register from spec
-    Storage: Append to map directly
-    Survives Regeneration?: ❌ Overwritten by generate_codebase_map
-    LLM Calls: 0 extra
-    Verdict: Reject
-    ────────────────────────────────────────
-    Option: C: Separate agent
-    Extraction Method: Spawn new agent to analyze spec + append
-    Storage: .map-enrichments.json
-    Survives Regeneration?: ✅ Yes
-    LLM Calls: +1 call per feature
+    Option: C: Inline annotations in Domain Map
+    Mechanism: Strategist adds comments after file descriptions in Domain Map
+    Preservation: Nearly impossible — generate_codebase_map rewrites every
+      line
+    Complexity: High — fragile, parsing nightmare
     Verdict: Reject
     
-    Confidence: High
-    Impact: MEDIUM
+    Decision: Option B — append-only sections preserved across map regeneration.
+    Single file, minimal code change, zero ambiguity about what's machine-generated vs
+    agent-discovered.
     
-    Ponytail Guard — Pre-Spec Review
+    2. Impact
     
-    Feature: F028: Strategist enriches codebase-map.md with architecture decisions during planning
-    Rung: 7 — Build the minimum that works
-    Existing solution: None — codebase-map is generated fresh each time with no learning accumulation
-    Spec needed: Yes
-    Spec scope: Extract > MAP: markers from strategist output, persist in JSON companion file, inject into codebase-map regeneration, wire into pipeline, test extraction and integration
+    LOW — no change to pipeline execution, no new subprocess calls, no API surface
+    changes. The strategist already reads codebase-map.md (lines 1433-1435 of
+    pipeline.py). F028 only adds write-back instructions and a preservation pass in
+    generate_codebase_map. Existing tests continue to pass. The map file grows by
+    ~200-500 bytes per feature with architectural notes — negligible.
     
-    Data Model
+    Affected files (from git diff analysis):
+    - utils.py (+25/-3): generate_codebase_map preserves enrichment sections
+    - pipeline.py (+8/-2): strategist prompt gains enrichment instructions
+    - tests/test_codebase_map.py (+60/-0): preservation + enrichment tests
     
-    .map-enrichments.json (new, at specs/.map-enrichments.json)
+    3. What Changed
     
-    json
-    {
-      "version": 1,
-      "entries": [
-        {
-          "feature": "F028",
-          "timestamp": "2026-07-06T12:00:00",
-          "guidance": "Pipeline phases are sequential within a feature but features run independently. Do not assume shared state between run_pipeline calls.",
-          "category": "architecture"
-        }
-      ]
-    }
+    - utils.py — generate_codebase_map() reads existing ## Architecture Decisions
+      and ## Agent Guidance sections before regeneration, appends them after the ##
+      Test Map section in the new output. New helper _extract_enrichments().
+    - pipeline.py — _make_map_hint() mentions enrichment sections when they
+      exist. Strategist prompt (lines 1431-1527) gains EXISTING KNOWLEDGE
+      ENRICHMENT block instructing the strategist to append discoveries.
+    - tests/test_codebase_map.py — new tests: enrichment preservation across
+      full/incremental regeneration, empty enrichment sections, malformed
+      enrichment passthrough, strategist append format validation.
     
+    4. Confidence
     
-    - version: schema version (int, for future migration)
-    - entries: ordered list (newest last)
-      - feature: feature ID (string, e.g. "F028")
-      - timestamp: ISO 8601 when discovered (string)
-      - guidance: the actual guidance text (string, extracted from > MAP: line)
-      - category: classification tag (string, one of: architecture, convention, warning, pattern)
+    (High) — the mechanism is purely additive: preserve two sections during
+    file regeneration. The existing codebase-map.md format (4 sections) is stable
+    (F027, PR #60). The strategist already has read access to codebase-map.md —
+    adding write-back is a prompt change plus a preservation pass.
     
-    codebase-map.md (modified)
+    5. API/Interface
     
-    New section appended at end, after Test Map:
+    N/A — no API, no CLI flags, no data structure changes. This is internal behavior:
+    the codebase-map.md file gains two optional sections that persist across
+    regenerations.
     
+    6. Security
     
-    Agent Guidance
-    > Accumulated across features. Agents read this section as institutional knowledge.
+    N/A — no attack surface change. The strategist writes to a file it already has
+    access to (project directory). No new credentials, network calls, or user input
+    surfaces. The preservation logic reads and writes the same file it always has.
     
-    - (F028) Pipeline phases are sequential within a feature but features run independently...
-    - (F027) codebase-map.md is regenerated by generate_codebase_map() on --release and post-pipeline
+    7. Documentation
     
+    AGENTS.md: add one sentence about codebase-map.md enrichment sections ("The
+    Architecture Decisions and ## Agent Guidance sections persist across map
+    regeneration — agents append discoveries during exploration").
     
-    API Routes
+    8. Feature Breakdown — Task Breakdown
     
-    N/A — local file I/O only, no network endpoints.
-    
-    Component Tree
-    
-    N/A — no frontend.
-    
-    Impact
-    
-    Agents start features knowing what past explorations discovered. Map grows smarter with every feature.
-    
-    Why
-    
-    Strategists rediscover the same architecture patterns every session. Capturing them once saves tokens and speeds up planning.
-    
-    What Changed
-    
-    - utils.py: Add extract_map_enrichments(), save_map_enrichments(), load_map_enrichments(); modify generate_codebase_map() to inject guidance section
-    - pipeline.py: Add > MAP: hint to strategist prompt; call extraction in run_phase1_strategist
-    - tests/test_codebase_map.py: Add enrichment extraction, storage, and integration tests
-    
-    COTS Build-vs-Buy
-    
-    Component: JSON persistence
-    Build/Buy: Build
-    Justification: Python stdlib json — 3 lines. No need for a database.
-    ────────────────────────────────────────
-    Component: Regex extraction
-    Build/Buy: Build
-    Justification: re.findall(r'^> MAP:\s*(.+)$', text, re.MULTILINE) — 1
-      line.
-    ────────────────────────────────────────
-    Component: Markdown injection
-    Build/Buy: Build
-    Justification: String interpolation in existing generate_codebase_map() —
-      10 lines.
-    
-    All built. Zero new dependencies. Zero LLM calls. Everything uses existing Python stdlib + project patterns.
-    
-    Security Considerations
-    
-    N/A — no attack surface change. Reads/writes local files within specs/ directory only.
-    
-    Documentation Impact
-    
-    README: No change needed. MAINTAINERS.md: Add .map-enrichments.json to the file inventory table.
-    
-    
-    
-    Test Plan
-    
-    Happy Path
-    - Strategist output contains > MAP: <guidance text> lines. After run_phase1_strategist returns, specs/.map-enrichments.json contains an entry with feature=F028, guidance=<text>, timestamp=<ISO>.
-    - generate_codebase_map() called with full=True: output codebase-map.md includes ## Agent Guidance section listing all accumulated entries.
-    - Second feature run: enrichment file has entries from both F028 and second feature. Map section shows both.
-    
-    Edge Cases
-    - Empty strat output: No > MAP: lines → no new entries added. Enrichment file unchanged (or created empty if first run).
-    - Malformed enrichment file: JSON decode fails → load_map_enrichments() returns empty list. Map section omitted. No crash.
-    - Duplicate feature ID: Second run of same feature → existing entry for that feature is replaced (dedup by feature ID). Last run wins.
-    - Very long guidance text: Truncate at 500 chars. Warn in log.
-    - Enrichment file missing: First run → load_map_enrichments() returns empty list. Map section omitted.
-    - Concurrent writes: Two pipelines running different features → both append to enrichment file. Since writes are sequential per-pipeline and feature IDs differ, no data loss. Use atomic write (write to temp + rename).
-    
-    Failure Modes
-    - Disk full: save_map_enrichments() fails → log warning, do not block pipeline. Map regenerates without new entry.
-    - Permission denied on specs/: Cannot write enrichment file → log warning, continue pipeline. Best-effort.
-    - Strat output has no agent messages: extract_agent_messages() returns empty → extract_map_enrichments() returns empty list. No crash.
-    - Map regeneration fails: Existing behavior — generate_codebase_map is already best-effort. Enrichment injection failure does not add new failure mode.
-    
-    Contract Invariants
-    - After extraction: specs/.map-enrichments.json exists and is valid JSON, or does not exist (first run).
-    - After map regeneration: codebase-map.md has ## Agent Guidance section IFF enrichment file has ≥1 entry.
-    - Feature IDs are unique within the enrichment file (dedup on save).
-    - Timestamps are always ISO 8601 UTC. Use datetime.datetime.utcnow().isoformat().
-    
-    
-    
-    Feature Breakdown
-    
-    Task 1: Add enrichment data functions to utils.py
+    Task 1: Implement enrichment preservation in generate_codebase_map
     Files: utils.py
     Dependencies: [none]
     Parallelizable: yes
-    Estimated LOC: ~45
-    Description: Add three functions: load_map_enrichments(project_dir) returns parsed list (empty on missing/malformed), save_map_enrichments(project_dir, feature_id, entries) dedup+appends entries using atomic write (tempfile + os.rename), extract_map_enrichments(strat_output, feature_id) uses re.findall(r'^> MAP:\s*(.+)$', text, re.MULTILINE) to extract guidance lines, builds entry dicts with feature/timestamp/guidance/category fields. Truncate guidance >500 chars. Category defaults to "pattern" unless the line contains WARNING: or ARCH: prefix which maps to "warning" or "architecture".
+    Description: Add _extract_enrichments() helper that reads existing codebase-map.md and extracts ## Architecture Decisions and ## Agent Guidance sections. Modify generate_codebase_map() to call it before writing and append preserved sections after ## Test Map. Handle: no existing map, sections missing, sections empty, malformed markdown.
     
-    Task 2: Modify generate_codebase_map() to inject Agent Guidance section
-    Files: utils.py
-    Dependencies: [Task 1]
-    Parallelizable: no
-    Estimated LOC: ~20
-    Description: In generate_codebase_map(), after writing the 4 existing sections, call load_map_enrichments(project_dir). If entries list is non-empty, append ## Agent Guidance section to map_content with one bullet per entry: - ({feature}) {guidance}. Add header comment: > Accumulated across features. Agents read this section as institutional knowledge. Must work for both full and incremental modes. Does not affect cache — enrichments are separate from file hashes.
-    
-    Task 3: Inject > MAP: hint into strategist prompt and wire extraction
+    Task 2: Update strategist prompt with enrichment instructions
     Files: pipeline.py
     Dependencies: [Task 1]
-    Parallelizable: yes (touches pipeline.py only, not utils.py)
-    Estimated LOC: ~25
-    Description: In run_phase1_strategist(), add a paragraph to strat_prompt after the TASK FORMAT box: explain that if the strategist discovers architecture patterns, conventions, or warnings that future agents should know, prefix them with > MAP: on their own line. After strat_output is received and quality gates pass (around line 2219, after DAG check), call extract_map_enrichments(strat_output, feature) from utils. If entries are non-empty, call save_map_enrichments(PROJECT_DIR, feature, entries). Print   📝 Map enriched: N guidance entries on success. On failure, log warning — never block pipeline.
+    Parallelizable: yes
+    Description: Add EXISTING KNOWLEDGE ENRICHMENT block to run_phase1_strategist() prompt (after line 1435, before FIRST step). Block instructs: as you explore, if you discover non-obvious architecture (e.g., "pipeline.py _IMPORTING_PANEL is set by conftest, not main()"), append it under ## Agent Guidance. Format: ### <discovery title>, then one sentence. Do not duplicate existing entries. Keep under 80 chars per line.
     
-    Task 4: Add tests for enrichment extraction, storage, and map injection
+    Task 3: Update _make_map_hint to mention enrichments
+    Files: pipeline.py
+    Dependencies: [Task 1]
+    Parallelizable: yes
+    Description: Extend _make_map_hint() to check for ## Agent Guidance and ## Architecture Decisions sections. When present, extend the hint string to mention "and agent-discovered architecture notes" so strategists know to read those sections. Keep hint compact — under 400 chars total.
+    
+    Task 4: Write enrichment preservation tests
     Files: tests/test_codebase_map.py
-    Dependencies: [Task 1, Task 2, Task 3]
-    Parallelizable: no (depends on all implementation tasks)
-    Estimated LOC: ~120
-    Description: Add test class TestMapEnrichments:
-    - test_extract_single_map_line: strat output with one > MAP: some guidance → returns 1 entry
-    - test_extract_multiple_map_lines: 3 > MAP: lines → returns 3 entries
-    - test_extract_no_map_lines: no markers → returns empty list
-    - test_extract_category_warning: > MAP: WARNING: unsafe → category="warning"
-    - test_extract_category_arch: > MAP: ARCH: pipeline order → category="architecture"
-    - test_extract_truncation: guidance >500 chars → truncated to 500
-    - test_save_and_load_roundtrip: save 2 entries, load → same data
-    - test_save_dedup_by_feature: save F028 entry A, save F028 entry B → load returns only B
-    - test_load_missing_file: no enrichments file → returns []
-    - test_load_malformed_json: corrupt file → returns []
-    - test_generate_map_includes_guidance: mock load_map_enrichments to return 1 entry → generated map contains ## Agent Guidance section with - (F028) test guidance
-    - test_generate_map_empty_enrichments: mock returns [] → no ## Agent Guidance section
-    - test_guidance_section_after_test_map: assert ## Agent Guidance appears after ## Test Map in output
+    Dependencies: [Task 1]
+    Parallelizable: no
+    Description: Add tests: (1) enrichment sections survive full regeneration, (2) enrichment sections survive incremental regeneration, (3) empty enrichment sections don't crash, (4) missing enrichment sections produce valid map, (5) strategist can append new entries without duplicating existing ones, (6) malformed markdown in enrichment sections is preserved verbatim.
+    
+    9. Data Model
+    
+    codebase-map.md format (extended)
     
     
+    Project: dokima
+    Tech: Python 3.6+
+    Generated: 2026-07-04 14:35:53 (incremental | 86 files)
     
-    Panel Split
+    Start Here
+    ...existing...
     
-    Wave 1 (parallel): Task 1 + Task 3 — different files (utils.py vs pipeline.py), no shared code paths.
-    Wave 2 (sequential): Task 2 — depends on Task 1 (needs load_map_enrichments).
-    Wave 3 (sequential): Task 4 — depends on all implementation tasks being complete.
+    Domain Map
+    ...existing...
     
-    Coders: 1 per task. Wave 1 runs 2 coders in parallel.
+    Impact Map
+    ...existing...
     
-    Build & Deploy
+    Test Map
+    ...existing...
     
-    - No new environment variables needed. No new dependencies.
-    - Pytest: python3 -m pytest tests/test_codebase_map.py -v
-    - Build: python3 -c "compile(open('dokima').read(), 'dokima', 'exec')" (unchanged)
-    - No deployment — this is a code change to the panel itself, shipped via normal PR merge.
+    Architecture Decisions
+    > Machine-generated. Strategists: append new decisions below. Do NOT edit
+    > existing entries — future strategists need to see the full history.
     
-    Risk Register
+    AD-001: Pipeline module uses conftest._load_panel() for test injection
+    pipeline.py sets _IMPORTING_PANEL = None at module level. Tests call
+    conftest._load_panel() which sets it to the imported dokima module. Never
+    import pipeline._IMPORTING_PANEL directly — always go through conftest.
     
-    #: 1
-    Risk: Enrichment file grows unbounded over many features
-    Severity: LOW
-    Mitigation: Each feature has exactly 1 entry (dedup). Max file size
-      bounded by feature count × 500 chars. 100 features = ~50KB. Acceptable.
-    Trigger: File exceeds 1MB
+    AD-002: _safe_run uses shlex.split(), not shell=True
+    All subprocess calls MUST use list-based argument syntax. shell=True and
+    os.system() are banned. See conventions.md.
+    
+    Agent Guidance
+    > Machine-generated. Strategists: append guidance below. One sentence per entry.
+    > Format: ### <topic> — <guidance>
+    
+    HERMES_BIN — always use --yolo flag
+    Spawn commands need --yolo to skip interactive confirmation on the agent side.
+    
+    GitHub token — never passed as CLI flag
+    GH_TOKEN is set via environment variable. Never use gh auth login or pass
+    tokens as command-line arguments.
+    
+    
+    .map-cache.json (unchanged)
+    
+    No changes. The cache only tracks file hashes and descriptions for the
+    auto-generated sections. Enrichment sections are text-based and preserved
+    by reading the old map before writing the new one.
+    
+    10. COTS Build-vs-Buy
+    
+    Component: Markdown parsing
+    Decision: Build
+    Justification: Trivial regex — re.search(r'^## Architecture
+      Decisions\n(.*?)(?=\n##
+    Column 4: \Z)', content, re.DOTALL)
     ────────────────────────────────────────
-    #: 2
-    Risk: Strategist ignores > MAP: hint, never emits markers
+    Component: File I/O
+    Decision: Stdlib
+    Justification: open(), os.path.exists() — already used throughout
+    Column 4:
+    ────────────────────────────────────────
+    Component: Hash comparison
+    Decision: Stdlib
+    Justification: hashlib.md5 — already used in generate_codebase_map
+    Column 4:
+    
+    Everything is build. Zero new dependencies. All Python stdlib.
+    
+    11. Test Plan
+    
+    Happy Path
+    - Enrichment preservation across full regeneration: Write a codebase-map.md
+      with ## Architecture Decisions and ## Agent Guidance sections. Run
+      generate_codebase_map(full=True). Assert both sections appear verbatim in
+      the output, after ## Test Map.
+    - Enrichment preservation across incremental regeneration: Same as above but
+      full=False with no file changes. Assert map is NOT regenerated (returns False),
+      so enrichments are untouched.
+    - Strategist appends new entry: Write a codebase-map.md with one entry in
+    Agent Guidance. Simulate strategist appending a second entry. Run
+      generate_codebase_map(full=True). Assert BOTH entries appear.
+    
+    Edge Cases
+    - No enrichment sections exist: Current behavior — map works fine without them.
+    - Empty enrichment sections: ## Architecture Decisions followed by
+      ## Test Map with nothing in between. Preservation picks up empty string,
+      still writes it.
+    - Enrichment section is first/last section: Parsing should handle sections
+      at any position in the file.
+    - Very large enrichment sections: A single entry can be up to 500 chars.
+      Multiple entries across many features could be 5KB+. Regex + string concatenation
+      handles this fine.
+    
+    Failure Modes
+    - Corrupted map file (not valid markdown): _extract_enrichments() returns
+      empty string. Map regenerates without enrichments. Non-fatal — enrichments
+      are lost but pipeline continues.
+    - File read permission error: _extract_enrichments() catches OSError,
+      returns empty string. Map regenerates without enrichments.
+    - Unicode in enrichment sections: Python 3 handles UTF-8 natively. No
+      special handling needed — read and write as-is.
+    
+    Contract Invariants
+    - generate_codebase_map() MUST produce valid markdown with exactly these
+      sections in order: Start Here, Domain Map, Impact Map, Test Map, [Architecture
+      Decisions], [Agent Guidance]. Last two are optional.
+    - Enrichment sections are preserved VERBATIM — no parsing, no reformatting, no
+      truncation. The strategist owns the content.
+    - If _extract_enrichments() fails, the map regenerates WITHOUT enrichment
+      sections — it never crashes or produces partial content.
+    - The map hint in _make_map_hint() is best-effort — if the map is corrupted,
+      it returns empty string (existing behavior).
+    
+    12. Panel Split
+    
+    All 4 tasks share no files in their primary modifications:
+    - Task 1: utils.py (new helper + preservation logic)
+    - Task 2: pipeline.py (strategist prompt)
+    - Task 3: pipeline.py (map hint) — shares pipeline.py with Task 2 but touches
+      different function (_make_map_hint vs run_phase1_strategist prompt string)
+    - Task 4: tests/test_codebase_map.py (tests)
+    
+    Wave 1 (parallel): Tasks 1, 2, 3 can run simultaneously. Tasks 2 and 3
+    touch different functions in pipeline.py with minimal overlap risk.
+    Wave 2 (sequential): Task 4 after Task 1 — needs the implementation to
+    test against.
+    
+    Coder count: 2 — Wave 1 with 2 coders (one on utils.py, one on pipeline.py),
+    Wave 2 with 1 coder (tests).
+    
+    13. Build & Deploy
+    
+    No new deployment steps. Existing pipeline:
+    bash
+    python3 -m py_compile dokima        # Lint
+    python3 -m pytest tests/ -q         # Test (679 tests, 6 skipped)
+    
+    
+    The codebase-map.md is a project artifact, not a deployed file. No CI changes.
+    
+    14. Risk Register
+    
+    Risk: Strategist writes malformed markdown that breaks map parsing
+    Severity: LOW
+    Mitigation: _extract_enrichments() preserves verbatim — no parsing.
+      generate_codebase_map() writes enrichments AFTER all auto-generated
+      sections, so broken enrichments don't break the structured sections.
+    Trigger: Human review of map shows garbled sections
+    ────────────────────────────────────────
+    Risk: Enrichment sections grow unboundedly
+    Severity: LOW
+    Mitigation: No enforcement in F028. Future feature could add "keep last N
+      entries" or timestamp-based pruning.
+    Trigger: Map exceeds 50KB
+    ────────────────────────────────────────
+    Risk: Strategy prompt change causes DAG format regression
     Severity: MEDIUM
-    Mitigation: Hint is in prompt, not a gate. Feature degrades gracefully to
-      no enrichment. Panel still works. Monitor: if 10 consecutive features
-      produce zero enrichments, re-evaluate prompt wording.
-    Trigger: 0 enrichments over 10 features
+    Mitigation: The prompt change is additive — it appends an instruction
+      block, doesn't modify existing format instructions. Tests for DAG format
+      already exist (test_dag_format.py).
+    Trigger: DAG re-prompt fires on next pipeline run
     ────────────────────────────────────────
-    #: 3
-    Risk: Malformed enrichment JSON crashes pipeline
+    Risk: generate_codebase_map() preservation conflicts with incremental
+      no-change detection
     Severity: LOW
-    Mitigation: load_map_enrichments catches JSONDecodeError, returns [].
-      Pipeline continues.
-    Trigger: Any JSON decode failure
-    ────────────────────────────────────────
-    #: 4
-    Risk: Atomic write race condition on concurrent pipelines
-    Severity: LOW
-    Mitigation: Feature IDs are unique per pipeline run. Atomic rename
-      prevents partial writes. Two concurrent writes to same file: last rename
-      wins (both pipelines' data is merged by the next load_map_enrichments on
-      next regeneration). Acceptable for dev tool.
-    Trigger: File corruption detected
-    ────────────────────────────────────────
-    #: 5
-    Risk: Enrichment entries duplicate existing map content
-    Severity: LOW
-    Mitigation: Value-add: agents see institutional knowledge from past
-      agents, even if some overlaps with map metadata. No harm in redundancy —
-      agents can skip.
-    Trigger: N/A
+    Mitigation: The changed flag is set by file hash comparison. Enrichment
+      preservation is a post-processing step on the output string — it doesn't
+      affect the change detection logic.
+    Trigger: Map regenerates when it shouldn't
     
-    Anti-Creep
+    15. Anti-Creep
     
     Features explicitly NOT in scope:
-    - ❌ AI-powered analysis of enrichment quality — zero LLM calls, full stop
-    - ❌ Enrichment dedup by semantic similarity (e.g., cosine similarity) — simple feature-ID dedup only
-    - ❌ Enrichment across multiple projects (cross-repo knowledge sharing)
-    - ❌ Enrichment from coder or tech-lead phases — strategist only (Phase 1)
-    - ❌ UI/dashboard for enrichment entries — file-based only
-    - ❌ Categorization of guidance beyond the 4 tags (architecture, convention, warning, pattern)
-    - ❌ Automatic pruning of stale entries — manual deletion from JSON file if needed
-    - ❌ Markdown formatting within guidance text — plain text only; if the strategist writes markdown, it's stored as-is
+    - ❌ No enrichment entry deduplication — the strategist is told "do not duplicate"
+      but the code doesn't enforce it
+    - ❌ No pruning/expiry of old enrichment entries
+    - ❌ No enrichment entries in .map-cache.json (cache tracks source files only)
+    - ❌ No enrichment during coder or tech-lead phases — strategist only
+    - ❌ No enrichment for non-dokima projects — generate_codebase_map() is
+      project-agnostic, enrichment preservation works everywhere, but the prompt
+      instruction only ships for dokima's strategist
+    - ❌ No ADR integration — enrichment sections are markdown text in codebase-map.md,
+      not linked to the ADR directory or tool
+    - ❌ No metrics/dashboard showing enrichment count or growth rate
     
-    Sign-Off Checklist
+    16. Sign-Off Checklist
     
-    - [ ] > MAP: hint wording approved for strategist prompt
-    - [ ] .map-enrichments.json file path (specs/.map-enrichments.json) confirmed — same dir as .map-cache.json
-    - [ ] 500-char truncation limit acceptable
-    - [ ] Atomic write strategy (tempfile + os.rename) confirmed
-    - [ ] ## Agent Guidance section name and format approved
-    - [ ] Dedup-by-feature-ID behavior confirmed (last run wins for same feature)
-    - [ ] Best-effort failure mode confirmed — enrichment failures never block pipeline
-    - [ ] Test plan covers: extraction, storage, map injection, edge cases, failure modes
-    - [ ] No new dependencies, no new env vars, no new config files
-    - [ ] MAINTAINERS.md update for .map-enrichments.json acknowledged
+    - [ ] Constitution check passes all 5 axioms
+    - [ ] Impact section specifies affected files with line counts
+    - [ ] What Changed lists every modified file with what changes
+    - [ ] Task breakdown uses ### Task N: format with all 5 required fields
+    - [ ] Test plan covers happy path, edge cases, failure modes, and invariants
+    - [ ] No new dependencies — all Python stdlib
+    - [ ] No API surface changes
+    - [ ] Security section confirms no attack surface change
+    - [ ] Anti-creep lists what NOT to build
+    - [ ] Build & Deploy section confirms existing pipeline unchanged
+    - [ ] Risk register covers top 4 risks with triggers
+    - [ ] Ponytail guard: rung 7 — all built, no overengineering
