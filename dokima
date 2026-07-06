@@ -105,6 +105,7 @@ def main():
     fix_all = False
     max_parallel_override = None
     base_branch_override = None
+    args = None
     user_answers_prefill = None
     answers_path = None
     filtered_argv = []
@@ -195,6 +196,7 @@ def main():
         fix_p = subparsers.add_parser("fix", add_help=False)
         fix_p.add_argument("dir", nargs="?", default=None)
         fix_p.add_argument("--fix-all", action="store_true")
+        fix_p.add_argument("--create-blocker-issues", action="store_true")
         fix_p.add_argument("--skip-human-gate", action="store_true")
         fix_p.add_argument("--skip-autofix", action="store_true")
         fix_p.add_argument("--force-full", action="store_true")
@@ -335,6 +337,7 @@ def main():
             PROJECT_DIR = os.path.abspath(args.dir) if args.dir else os.getcwd()
             PANEL_FEATURE = f"fix: {PROJECT_DIR}"
             fix_all = getattr(args, "fix_all", False) or False
+            create_blocker_issues = getattr(args, "create_blocker_issues", False) or False
             skip_autofix = getattr(args, "skip_autofix", False) or False
             force_full = getattr(args, "force_full", False) or False
             skip_auto_archive = False
@@ -449,6 +452,7 @@ def main():
                 skip_next = True
                 continue
             if arg == "--vcs":
+                is_next = True
                 skip_next = True
                 continue
             if arg == "--fix":
@@ -527,10 +531,10 @@ def main():
         # ── Determine PROJECT_DIR and feature ──
         if is_next or is_map or is_fix:
             if is_fix:
-                PROJECT_DIR = os.path.abspath(filtered_argv[0]) if filtered_argv else os.getcwd()
+                PROJECT_DIR = os.path.abspath(filtered_argv[-1]) if filtered_argv else os.getcwd()
                 PANEL_FEATURE = f"fix: {PROJECT_DIR}"
             else:
-                PROJECT_DIR = os.path.abspath(filtered_argv[0]) if filtered_argv else os.getcwd()
+                PROJECT_DIR = os.path.abspath(filtered_argv[-1]) if filtered_argv else os.getcwd()
                 PANEL_FEATURE = ""
         else:
             if len(filtered_argv) < 1:
@@ -650,7 +654,7 @@ def main():
         if issue_number is not None:
             _pipeline.run_fix_mode_issue(project_dir=PROJECT_DIR, issue_number=issue_number)
         else:
-            _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate)
+            _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate, create_blocker_issues=create_blocker_issues)
         _cleanup_lock()
         return
 

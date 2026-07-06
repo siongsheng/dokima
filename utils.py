@@ -84,6 +84,7 @@ MODIFIER FLAGS (apply across subcommands):
   --interactive        Show human gate (with next)
   --answers <file>     Resume from saved interview state
   --fix-all            Include SHOULD FIX items (with fix)
+  --create-blocker-issues  Create GitHub issues from detected blockers (with fix)
   --resume             Resume from last checkpoint (re-runs incomplete phases only)
   --no-resume          Ignore any existing checkpoint and start fresh
 
@@ -123,6 +124,7 @@ CLI_METADATA = {
         {"flag": "--interactive", "args": None, "env_var": None, "description": "Show human gate (with next/continuous)"},
         {"flag": "--answers", "args": "<file>", "env_var": None, "description": "Resume from saved interview state"},
         {"flag": "--fix-all", "args": None, "env_var": "PANEL_FIX_ALL", "description": "Include SHOULD FIX items (with --fix)"},
+        {"flag": "--create-blocker-issues", "args": None, "env_var": None, "description": "Create GitHub issues from detected blockers (with fix)"},
         {"flag": "--issue", "args": "N", "env_var": None, "description": "Fix specific GitHub issue N instead of discovering BLOCKED PR (with fix)"},
         {"flag": "--skip-autofix", "args": None, "env_var": "PANEL_SKIP_AUTOFIX", "description": "Disable auto-fix loopback (nm + TL phases)"},
         {"flag": "--force-full", "args": None, "env_var": "PANEL_FORCE_FULL", "description": "Run all 5 phases regardless of depth gating"},
@@ -2072,6 +2074,47 @@ def _extract_tl_blockers(tl_output: str) -> list[str]:
     merged = [m.replace("**", "") for m in merged]
 
     return merged[:10]
+
+
+def format_blocker_cross_reference(blockers, fix_pr_url, fix_verdict):
+    """Format blocker list with cross-reference to the resolution PR.
+
+    Args:
+        blockers: List of blocker description strings.
+        fix_pr_url: URL of the fix PR.
+        fix_verdict: TL verdict — APPROVED, BLOCKED, or UNKNOWN.
+
+    Returns:
+        Markdown string with blockers formatted per verdict.
+        - APPROVED: ~~blocker~~ → resolved by <fix_pr_url>
+        - BLOCKED:  blocker → unresolved
+        - UNKNOWN:  blockers unchanged
+        Already-resolved blockers (containing ~~) are left unchanged.
+    """
+    if not blockers:
+        return ""
+
+    if isinstance(blockers, str):
+        blockers = [blockers]
+
+    results = []
+    for b in blockers:
+        b = str(b).strip()
+        if not b:
+            continue
+        # Skip already-resolved blockers
+        if "~~" in b:
+            results.append(b)
+            continue
+
+        if fix_verdict == "APPROVED":
+            results.append(f"~~{b}~~ → resolved by {fix_pr_url}")
+        elif fix_verdict == "BLOCKED":
+            results.append(f"{b} → unresolved")
+        else:  # UNKNOWN or any other
+            results.append(b)
+
+    return "\n".join(results)
 
 
 def extract_should_fix_from_text(text):
