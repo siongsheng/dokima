@@ -25,7 +25,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    handle_status, handle_stop, handle_kill, handle_list_crons,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    _extract_nm_summary,
-                   _extract_convention_rules,
+                   _extract_convention_rules, _append_convention_rules,
                    extract_issue_sections,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
@@ -1515,6 +1515,16 @@ Report: what you fixed, commit hash."""
         pr_num = pr_url.split("/")[-1]
         # Extract blocker lines using the smart extractor
         blocker_lines = _extract_tl_blockers(tl_output)
+        # ── Extract convention rules for cross-run learning (best-effort) ──
+        try:
+            if blocker_lines and verdict in ("BLOCKED", "CHANGES REQUESTED"):
+                convention_rules = _extract_convention_rules(blocker_lines)
+                if convention_rules:
+                    appended = _append_convention_rules(PROJECT_DIR, convention_rules)
+                    if appended > 0:
+                        print(f"  📋 Appended {appended} convention rule(s) to specs/conventions.md", flush=True)
+        except Exception:
+            pass
         # Extract risk from TL output or use strategist's impact
         risk_match = re.search(r'RISK:\s*(LOW|MEDIUM|HIGH)', tl_output, re.IGNORECASE)
         tl_risk = risk_match.group(1).upper() if risk_match else impact
