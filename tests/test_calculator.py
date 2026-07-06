@@ -4,7 +4,12 @@ These tests demonstrate that mock.patch with create=True can pass
 even when the real implementation function exists — the vet phase
 should verify that all referenced functions are actually importable.
 """
+import sys
+import os
 from unittest.mock import patch
+
+# Ensure src/ is importable
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 @patch('calculator.add', create=True)

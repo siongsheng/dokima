@@ -4,7 +4,12 @@ These tests demonstrate that mock.patch with create=True can pass
 even when the real implementation function is MISSING (delete_user).
 The vet phase real_code_check should catch this regression.
 """
+import sys
+import os
 from unittest.mock import patch
+
+# Ensure src/ is importable
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 @patch('user_service.get_user', create=True)
