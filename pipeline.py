@@ -205,6 +205,7 @@ def discover_blocked_pr(ctx):
         override = getattr(dokima_mod, 'discover_blocked_pr', None)
         if override is not None and override is not discover_blocked_pr:
             return override()
+
     stdout, _, rc = gh("pr", "list", "--state", "open",
                        "--repo", ctx.repo,
                        "--json", "number,title,body,headRefName,updatedAt",

@@ -38,6 +38,7 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    load_map_enrichments, save_map_enrichments, extract_map_enrichments,
                    _extract_tl_verdict, _extract_tl_blockers,
                    _extract_convention_rules, _append_convention_rules,
+                   PipelineContext,
                    extract_should_fix_from_text, _extract_nm_summary,
                    halt_and_revert, archive_specs_for_feature,
                    ensure_profiles, deploy_profile_skills)
@@ -273,7 +274,7 @@ def main():
             desc = getattr(args, "description", "") or ""
             init_dir = os.path.abspath(args.dir) if getattr(args, "dir", None) else os.getcwd()
             answers = getattr(args, "answers", None)
-            run_init(desc, init_dir, answers_path=answers)
+            run_init(PipelineContext(), desc, init_dir, answers_path=answers)
             return
 
         if cmd == "add":
@@ -575,7 +576,7 @@ def main():
         # init <description> [project_dir] [--answers <path>]
         init_desc = filtered_argv[1] if len(filtered_argv) >= 2 else ""
         init_project_dir = os.path.abspath(filtered_argv[2]) if len(filtered_argv) >= 3 else PROJECT_DIR
-        run_init(init_desc, init_project_dir)
+        run_init(PipelineContext(), init_desc, init_project_dir)
         return
 
     # ── LOCK ACQUISITION ──
@@ -693,7 +694,7 @@ def main():
         git("checkout", DEFAULT_BRANCH)
         git("pull", "origin", DEFAULT_BRANCH)
         feature_hint = getattr(args, "feature", None) or (filtered_argv[0] if len(filtered_argv) >= 2 else None)
-        feature = run_next_setup(interactive=is_interactive, feature_hint=feature_hint)
+        feature = run_next_setup(PipelineContext(), interactive=is_interactive, feature_hint=feature_hint)
         if feature is None:
             print("Nothing to do.")
             _cleanup_lock()

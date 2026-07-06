@@ -18,6 +18,7 @@ from utils import (load_key, slugify, git, gh, detect_repo, acquire_lock, _clean
                    SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override,
                    RESUME, MAX_CONTINUOUS, _LOG_FILE_HANDLE, _LOCK_FD,
                    VERSION, HELP_TEXT, TEST_CMD, BUILD_CMD, LINT_CMD,
+                   PipelineContext,
                    extract_agent_messages,
                    INTERVIEW_SAVE_PATH,
                    load_init_interview_state,
@@ -475,14 +476,13 @@ def run_add_to_roadmap(feature_desc, project_dir, priority_hint=None):
 
 
 
-def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -> str | None:
+def run_next_setup(ctx, interactive: bool = False, feature_hint: str | None = None) -> str | None:
     """Parse roadmap, pick next feature, mark in-progress, return feature string.
        If feature_hint is provided (user-specified feature name), search for it
        in the roadmap instead of using pick_next_feature.
        Returns None if nothing to do. Caller falls through to pipeline after this."""
-    global REPO, DEFAULT_BRANCH
 
-    roadmap_path = os.path.join(PROJECT_DIR, "specs", "roadmap.md")
+    roadmap_path = os.path.join(ctx.project_dir, "specs", "roadmap.md")
 
     # 1. Parse
     features = parse_roadmap(roadmap_path)
@@ -532,7 +532,7 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
     update_roadmap_status(roadmap_path, next_feat.id, "in_progress")
 
     # Update STATUS.md BEFORE commit so it's included
-    status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+    status_path = os.path.join(ctx.project_dir, "specs", "STATUS.md")
     branch = f"feat/{slugify(f'{next_feat.id}-{next_feat.title}')[:50]}"
     update_status_md(status_path, next_feat.id, next_feat.title, "in_progress",
                      branch=branch, source="panel")
@@ -544,7 +544,7 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
 
     # 6. Check for existing spec → set env for strategist
     spec_slug = slugify(feature)
-    spec_path = os.path.join(PROJECT_DIR, "specs", f"{spec_slug}-spec.md")
+    spec_path = os.path.join(ctx.project_dir, "specs", f"{spec_slug}-spec.md")
     if os.path.exists(spec_path):
         os.environ["PANEL_EXISTING_SPEC"] = spec_path
         print(f"  Existing spec found: {spec_slug}-spec.md (strategist will refine)")
@@ -563,7 +563,7 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 
 
-def run_init(description, project_dir, answers_path=None):
+def run_init(ctx, description, project_dir, answers_path=None):
     """Discovery & constitution phase. Strategist produces spec-kit docs.
 
     F031: Implements a back-and-forth interview loop. The strategist identifies
@@ -572,13 +572,13 @@ def run_init(description, project_dir, answers_path=None):
     Only then are constitution docs produced.
 
     Args:
+        ctx: PipelineContext for this pipeline run.
         description: User's project description.
         project_dir: Absolute path to the project.
         answers_path: Optional path to saved interview state JSON for resume.
     """
-    global API_KEY, PROJECT_DIR, REPO
 
-    PROJECT_DIR = project_dir
+    ctx.project_dir = project_dir
 
     if not description:
         print("ERROR: init requires a project description.")
@@ -586,8 +586,8 @@ def run_init(description, project_dir, answers_path=None):
         sys.exit(1)
 
     # Load API key (needed for strategist)
-    API_KEY = load_key()
-    if not API_KEY:
+    ctx.api_key = load_key()
+    if not ctx.api_key:
         print("ERROR: Could not read API_SERVER_KEY from .env")
         sys.exit(1)
 
@@ -596,14 +596,14 @@ def run_init(description, project_dir, answers_path=None):
         os.environ["GH_TOKEN"] = gh_token
 
     # ── Detect project state ──
-    agents_path = os.path.join(PROJECT_DIR, "AGENTS.md")
+    agents_path = os.path.join(ctx.project_dir, "AGENTS.md")
     is_greenfield = not os.path.exists(agents_path)
 
     # Check git
-    has_git = os.path.isdir(os.path.join(PROJECT_DIR, ".git"))
+    has_git = os.path.isdir(os.path.join(ctx.project_dir, ".git"))
     if not has_git:
         try:
-            subprocess.run(["git", "-C", PROJECT_DIR, "init"],
+            subprocess.run(["git", "-C", ctx.project_dir, "init"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
             has_git = True
             print("  git init", flush=True)
@@ -617,13 +617,13 @@ def run_init(description, project_dir, answers_path=None):
         repo = ""
     has_remote = bool(repo)
     if has_remote:
-        REPO = repo
+        ctx.repo = repo
 
     print("═" * 55)
     print("  DOKIMA — init (Discovery & Constitution)")
     print("═" * 55)
     print(f"\nDescription: {description}")
-    print(f"Project:    {PROJECT_DIR}")
+    print(f"Project:    {ctx.project_dir}")
     print(f"Mode:       {'greenfield' if is_greenfield else 'existing codebase'}")
     print(f"Git:        {'initialized' if has_git else 'not found'}")
     print(f"GitHub:     {repo if has_remote else 'not configured'}")
@@ -661,13 +661,13 @@ def run_init(description, project_dir, answers_path=None):
     audit_section = ""
     if not is_greenfield:
         audit_section = f"""\nCODEBASE AUDIT (do this FIRST):
-1. Run `find {PROJECT_DIR} -type f -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.rs' -o -name '*.go' -o -name '*.java' | head -100` to discover the project structure.
+1. Run `find {ctx.project_dir} -type f -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.rs' -o -name '*.go' -o -name '*.java' | head -100` to discover the project structure.
 2. Read the key source files — understand the architecture before designing.
-3. Run `git -C {PROJECT_DIR} log --oneline -30` to understand recent work.
+3. Run `git -C {ctx.project_dir} log --oneline -30` to understand recent work.
 4. Catalog: tech debt, duplicated logic, undocumented behavior, test coverage gaps.
 5. Your constitution must reflect these findings — add "fix" features to the roadmap for critical debt."""
 
-    interview_preamble = f"""You are the Strategist doing PROJECT DISCOVERY for a {'new' if is_greenfield else 'existing'} project at {PROJECT_DIR}.
+    interview_preamble = f"""You are the Strategist doing PROJECT DISCOVERY for a {'new' if is_greenfield else 'existing'} project at {ctx.project_dir}.
 
 YOUR JOB: Produce the four spec-kit constitution documents. But FIRST, assess whether you have enough information.
 
@@ -700,16 +700,16 @@ PHASE 1 — DOMAIN RESEARCH:
 {audit_section}
 PHASE 2 — PRODUCE THE CONSTITUTION:
 
-Create {PROJECT_DIR}/specs/mission.md:
+Create {ctx.project_dir}/specs/mission.md:
 - Problem statement, target users, success criteria, anti-goals
 - JOBS TO BE DONE, not feature requests
 
-Create {PROJECT_DIR}/specs/tech-stack.md:
+Create {ctx.project_dir}/specs/tech-stack.md:
 - Language, framework, database, infrastructure choices
 - EVERY choice must have a WHY. No cargo-culting.
 - For existing projects: document current stack + what should change
 
-Create {PROJECT_DIR}/specs/roadmap.md using EXACTLY this format for every feature:
+Create {ctx.project_dir}/specs/roadmap.md using EXACTLY this format for every feature:
 
 ### F001: Short Feature Title
 **Priority:** P0
@@ -731,12 +731,12 @@ RULES:
 - Each feature must trace to a user need in mission.md.
 - EXECUTION ORDER (CRITICAL): Within each Phase, order features by what must be built FIRST — not by F-number. The execution order is: infrastructure/tests -> critical bugs -> resilience -> security -> features -> docs -> distribution -> icebox. A P0 integration test framework (F002) comes before a P0 security hardening (F001) because you cannot verify security without tests. The panel's `dokima --next` picks the first pending feature in order — make that order correct.
 
-Create {PROJECT_DIR}/specs/conventions.md:
+Create {ctx.project_dir}/specs/conventions.md:
 - Code style, patterns, anti-patterns, boundaries
 - Derived from codebase audit (not templated)
 - "Never do X" rules
 
-Create {PROJECT_DIR}/AGENTS.md:
+Create {ctx.project_dir}/AGENTS.md:
 - Project title and one-line description
 - Exact test, build, and lint commands matching the tech stack you chose
 - Non-obvious conventions agents need to know
@@ -755,7 +755,7 @@ CRITICAL RULES:
 - Exit message: summary of what was created + recommended next steps."""
 
     # ── F031: Interview loop ──
-    os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
+    os.makedirs(os.path.join(ctx.project_dir, "specs"), exist_ok=True)
 
     init_skills = ["spec-strategist-lite", "saas-ideation"]
     missing_skills = []
@@ -781,7 +781,7 @@ CRITICAL RULES:
     accumulated_answers = []
     interview_state = {
         "feature": description,
-        "project_dir": PROJECT_DIR,
+        "project_dir": ctx.project_dir,
         "round": current_round,
         "max_rounds": MAX_INTERVIEW_ROUNDS,
         "confidence": "Low",
@@ -824,7 +824,7 @@ CRITICAL RULES:
             init_skills,
             prompt,
             timeout=600,  # 10 min per interview round
-            cwd=PROJECT_DIR,
+            cwd=ctx.project_dir,
             fallback_model=FALLBACK_MODELS.get("strategist")
         )
 
@@ -946,7 +946,7 @@ CRITICAL RULES:
             init_skills,
             final_prompt,
             timeout=1200,  # 20 min for doc writing
-            cwd=PROJECT_DIR,
+            cwd=ctx.project_dir,
             fallback_model=FALLBACK_MODELS.get("strategist")
         )
     else:
@@ -988,17 +988,17 @@ CRITICAL RULES:
                 if remote_url:
                     try:
                         subprocess.run(
-                            ["git", "-C", PROJECT_DIR, "remote", "add", "origin", remote_url],
+                            ["git", "-C", ctx.project_dir, "remote", "add", "origin", remote_url],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
                         print(f"  Remote added: {remote_url}", flush=True)
-                        REPO = detect_repo()
+                        ctx.repo = detect_repo()
                     except Exception as e:
                         print(f"  Could not add remote: {e}", flush=True)
             else:
                 print("  Non-interactive — add manually: git remote add origin <url>", flush=True)
 
     # ── Initialize STATUS.md ──
-    status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
+    status_path = os.path.join(ctx.project_dir, "specs", "STATUS.md")
     if not os.path.exists(status_path):
         with open(status_path, "w") as sf:
             sf.write(f"# Specs Status — initialized {time.strftime('%Y-%m-%d %H:%M')}\n\n")
@@ -1008,16 +1008,16 @@ CRITICAL RULES:
 
     # ── Done ──
     print("\n--- init complete ---")
-    print(f"\n  Created in {PROJECT_DIR}/specs/:")
+    print(f"\n  Created in {ctx.project_dir}/specs/:")
     for fname in ["mission.md", "tech-stack.md", "roadmap.md", "conventions.md"]:
-        fp = os.path.join(PROJECT_DIR, "specs", fname)
+        fp = os.path.join(ctx.project_dir, "specs", fname)
         if os.path.exists(fp):
             print(f"    \u2713 {fname}")
         else:
             print(f"    \u2717 {fname} (missing — strategist may have skipped)")
     print()
     print("  Next: review the constitution, then:")
-    print(f"    dokima 'F001: first feature' {PROJECT_DIR}")
+    print(f"    dokima 'F001: first feature' {ctx.project_dir}")
     print(f"    or develop manually using the roadmap as your guide.")
 
 
