@@ -1719,14 +1719,10 @@ Report: what you fixed, commit hash."""
         # Extract impact from TL output
         impact_match = re.search(r'IMPACT:\s*(.+?)(?=\n(?:VERDICT|RISK|RELEASE|$))', tl_output, re.DOTALL | re.IGNORECASE)
         tl_impact = impact_match.group(1).strip() if impact_match else ""
-        # Fetch existing PR body, strip old Review sections
+        # Fetch existing PR body, strip old Review sections via _build_tl_review_body
         existing_body, _, _ = gh("pr", "view", pr_num, "--repo", REPO,
                                  "--json", "body", "--jq", ".body")
-        existing_body = re.sub(
-            r'\n## Review\n\n.*?(?=\n## |\Z)',
-            '', existing_body or '', flags=re.DOTALL
-        )
-        review_section = f"\n\n## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
+        review_section = f"## Review\n\n**Verdict:** {verdict}  \n**Risk:** {tl_risk}\n"
         if tl_impact:
             review_section += f"\n**Impact:** {tl_impact}\n"
         if blocker_lines:
@@ -1744,7 +1740,7 @@ Report: what you fixed, commit hash."""
                         review_section += f"{match2.group(1)}. **{match2.group(2).strip()}**\n"
                     else:
                         review_section += f"- {bl}\n"
-        new_body = (existing_body or "") + review_section
+        new_body, has_nm = _build_tl_review_body(existing_body or "", review_section, nm_output)
         print(f"  ⏳ Updating PR body with verdict ({verdict}, {len(blocker_lines)} blockers)...", flush=True)
         _, edit_err, edit_rc = gh("api",
             f"repos/{REPO}/pulls/{pr_num}",
