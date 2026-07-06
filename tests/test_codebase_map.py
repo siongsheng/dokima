@@ -357,7 +357,7 @@ def test_test_map_pairs_modules(panel):
         tests_dir = os.path.join(d, "tests")
         os.makedirs(tests_dir, exist_ok=True)
         with open(os.path.join(tests_dir, "test_utils.py"), "w") as f:
-            f.write("from utils import slugify\n")
+            f.write("from spec_extract import slugify\n")
         with open(os.path.join(tests_dir, "test_pipeline.py"), "w") as f:
             f.write("from pipeline import run\n")
         # Test with no matching source

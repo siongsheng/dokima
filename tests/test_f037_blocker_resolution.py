@@ -53,7 +53,7 @@ class TestFormatBlockerCrossReference:
 
     def test_format_blocker_cross_reference_approved(self):
         """APPROVED → each blocker gets strikethrough + resolved link."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         blockers = ["Login test fails", "Missing error handling"]
         result = format_blocker_cross_reference(
             blockers,
@@ -66,7 +66,7 @@ class TestFormatBlockerCrossReference:
 
     def test_format_blocker_cross_reference_blocked(self):
         """BLOCKED → each blocker gets → unresolved annotation."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         blockers = ["Login test fails", "Missing error handling"]
         result = format_blocker_cross_reference(
             blockers,
@@ -79,7 +79,7 @@ class TestFormatBlockerCrossReference:
 
     def test_format_blocker_cross_reference_unknown(self):
         """UNKNOWN verdict → returns blockers unchanged."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         blockers = ["Login test fails", "Missing error handling"]
         result = format_blocker_cross_reference(
             blockers,
@@ -93,7 +93,7 @@ class TestFormatBlockerCrossReference:
 
     def test_format_blocker_cross_reference_empty(self):
         """Empty blocker list → returns empty string."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         result = format_blocker_cross_reference(
             [],
             fix_pr_url="https://github.com/t/t/pull/42",
@@ -103,7 +103,7 @@ class TestFormatBlockerCrossReference:
 
     def test_format_blocker_cross_reference_preserves_non_list(self):
         """Non-list lines in blockers section are preserved unchanged."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         # Simulate mixed content: list items + prose
         blockers_section = (
             "- Login test fails\n"
@@ -121,7 +121,7 @@ class TestFormatBlockerCrossReference:
 
     def test_already_resolved_skipped(self):
         """Already-resolved blockers (with ~~) are not double-strikethroughed."""
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
         blockers = [
             "~~Already fixed~~ → resolved by https://github.com/t/t/pull/41",
             "New issue to fix"
@@ -216,7 +216,7 @@ class TestPostFixUpdateBody:
         """APPROVED verdict → PR body gets strikethrough + resolution section."""
         import vcs
         import pipeline as pl
-        from utils import format_blocker_cross_reference
+        from spec_extract import format_blocker_cross_reference
 
         pr_body = "## Description\n\nSome text\n\n### Blockers\n- Login test fails\n- Missing error handling\n\n## Footer\n"
         blockers = ["Login test fails", "Missing error handling"]

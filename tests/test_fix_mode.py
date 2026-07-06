@@ -410,7 +410,7 @@ Rename internal functions to use _ prefix per conventions.md
 
 def test_extract_issue_sections_all_fields(panel):
     """Parses full structured body, returns dict with all four keys populated."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     result = extract_issue_sections(STRUCTURED_ISSUE_BODY)
     assert result["what"] == "[RELIABILITY] utils.py:42: Naming conventions for internal functions"
     assert result["fix"] == "Rename internal functions to use _ prefix per conventions.md"
@@ -420,7 +420,7 @@ def test_extract_issue_sections_all_fields(panel):
 
 def test_extract_issue_sections_missing_verify(panel):
     """Verify section is optional, returns empty string."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     body = "### What\nSome finding\n\n### Fix\nDo something\n"
     result = extract_issue_sections(body)
     assert result["what"] == "Some finding"
@@ -430,7 +430,7 @@ def test_extract_issue_sections_missing_verify(panel):
 
 def test_extract_issue_sections_missing_fix(panel):
     """Fix section is required, raises ValueError."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     import pytest as _pytest
     with _pytest.raises(ValueError):
         extract_issue_sections("### What\nSome finding\n\n### Verify\nCheck it\n")
@@ -438,7 +438,7 @@ def test_extract_issue_sections_missing_fix(panel):
 
 def test_extract_issue_sections_file_path_backtick(panel):
     """Extracts path.py:42 from What section."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     body = "### What\n`src/core/auth.py:L128`\n\n### Fix\nUpdate auth\n"
     result = extract_issue_sections(body)
     assert result["file_path"] == "src/core/auth.py"
@@ -446,7 +446,7 @@ def test_extract_issue_sections_file_path_backtick(panel):
 
 def test_extract_issue_sections_no_backtick_path(panel):
     """No backtick path → file_path is None."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     body = "### What\nSome plain text finding\n\n### Fix\nDo it\n"
     result = extract_issue_sections(body)
     assert result["file_path"] is None
@@ -454,7 +454,7 @@ def test_extract_issue_sections_no_backtick_path(panel):
 
 def test_extract_issue_sections_empty_body(panel):
     """Empty issue body → ValueError."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     import pytest as _pytest
     with _pytest.raises(ValueError):
         extract_issue_sections("")
@@ -462,7 +462,7 @@ def test_extract_issue_sections_empty_body(panel):
 
 def test_extract_issue_sections_no_sections(panel):
     """Issue body has no ### headings → ValueError."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     import pytest as _pytest
     with _pytest.raises(ValueError):
         extract_issue_sections("Just some free text without headings.")
@@ -470,7 +470,7 @@ def test_extract_issue_sections_no_sections(panel):
 
 def test_extract_issue_sections_none_input(panel):
     """None input → ValueError (spec Section 10: Failure modes)."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     import pytest as _pytest
     with _pytest.raises(ValueError):
         extract_issue_sections(None)
@@ -610,7 +610,7 @@ def test_run_fix_mode_issue_branch_created(panel):
 
 def test_extract_issue_sections_multiple_file_paths(panel):
     """Multiple backtick paths → first one returned."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     body = "### What\n`src/a.py` and also `src/b.py`\n\n### Fix\nFix both\n"
     result = extract_issue_sections(body)
     assert result["file_path"] == "src/a.py"
@@ -618,7 +618,7 @@ def test_extract_issue_sections_multiple_file_paths(panel):
 
 def test_extract_issue_sections_code_block_not_extracted(panel):
     """Backtick in triple-backtick code block → NOT extracted as file path."""
-    from utils import extract_issue_sections
+    from spec_extract import extract_issue_sections
     body = "### What\n```\nnot_a_real_file.py\n```\nReal finding\n\n### Fix\nDo it\n"
     result = extract_issue_sections(body)
     # The code block should be stripped from content
