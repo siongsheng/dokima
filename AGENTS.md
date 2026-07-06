@@ -15,6 +15,8 @@ This repo IS the panel — you don't run the panel on itself.
 - Lint: `python3 -m py_compile dokima`
 - Verify nm script: `bash -n scripts/nm`
 - Verify vet script: `bash -n scripts/vet`
+- Vet with real-code verification: `scripts/vet --verify-code .` (or `REAL_CODE_VERIFY=1 scripts/vet .`)
+- Standalone real-code check: `python3 scripts/verify_imports.py <project-dir>`
 
 ## Testing
 1029 tests pass, 4 skipped, 1033 total (pytest). Coverage: core functions + control panel + edge cases.
