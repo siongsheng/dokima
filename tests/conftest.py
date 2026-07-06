@@ -19,7 +19,9 @@ def _load_panel():
     if module_name in sys.modules:
         del sys.modules[module_name]
     # F022: Also remove stale sub-modules so fresh imports pick up changes
-    for sub in ('tasks', 'utils', 'agent', 'pipeline', 'roadmap'):
+    # F041: Include new domain modules
+    for sub in ('tasks', 'utils', 'agent', 'pipeline', 'roadmap',
+                'git_ops', 'spec_extract', 'codebase_map', 'control_panel'):
         if sub in sys.modules:
             del sys.modules[sub]
 
@@ -77,6 +79,25 @@ def _load_panel():
                 if target is not None and hasattr(target, g_name):
                     object.__setattr__(target, g_name, val)
 
+    # F041: Sync globals and _IMPORTING_PANEL to new domain modules.
+    # These are loaded by pipeline.py and sit in sys.modules,
+    # not as attributes of the panel module (Task 10 adds _git_ops etc later).
+    # Unlike utils/agent/pipeline, these modules do NOT pre-declare globals,
+    # so we must set them unconditionally (no hasattr guard).
+    _DOMAIN_MODULES = ('git_ops', 'spec_extract', 'codebase_map', 'control_panel')
+    for dm_name in _DOMAIN_MODULES:
+        dm = sys.modules.get(dm_name)
+        if dm is not None:
+            dm._IMPORTING_PANEL = module
+            for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
+                           'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
+                           'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
+                           'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
+                           'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
+                val = getattr(module, g_name, None)
+                if val is not None:
+                    object.__setattr__(dm, g_name, val)
+
     return module
 
 
@@ -98,7 +119,8 @@ def _isolate_panel_modules():
     Tests that call _load() directly (not through the panel fixture)
     leave sys.modules pointing to their panel, breaking override
     detection in other tests that use module-level panel references."""
-    _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima')
+    _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima',
+                         'git_ops', 'spec_extract', 'codebase_map', 'control_panel')
     _saved = {k: sys.modules.get(k) for k in _sub_module_names}
     _had = {k: k in sys.modules for k in _sub_module_names}
 
@@ -117,7 +139,8 @@ def panel():
     Saves/restores sys.modules so stale references from module-level
     imports in other test files don't leak into override detection
     (F022b: Modular Architecture — fix stale sys.modules references)."""
-    _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima')
+    _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima',
+                         'git_ops', 'spec_extract', 'codebase_map', 'control_panel')
     _saved = {k: sys.modules.get(k) for k in _sub_module_names}
     _had = {k: k in sys.modules for k in _sub_module_names}
 

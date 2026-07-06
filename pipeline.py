@@ -9,36 +9,43 @@ import vcs
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 _IMPORTING_PANEL = None
 
-from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
-                   update_status_md, _write_log_line, show_help, check_upgrade,
-                   _extract_tl_verdict, _extract_tl_blockers, extract_pr_sections,
-                   extract_agent_messages, clean_spec_content, verify_spec_quality,
-                   generate_codebase_map, extract_file_paths, load_github_token,
+# ── F041: Domain module imports (git_ops, spec_extract, codebase_map, control_panel) ──
+from git_ops import (git, gh, _safe_run, detect_repo, detect_commands,
+                     _detect_referenced_repo, _supplement_pr_sections,
+                     _detect_default_branch, _set_gh_token,
+                     load_github_token, try_auto_merge, halt_and_revert,
+                     _GH_TOKEN_CACHE)
+from spec_extract import (extract_pr_sections, extract_agent_messages,
+                          clean_spec_content, verify_spec_quality,
+                          _check_pr_body_quality, extract_issue_sections,
+                          extract_should_fix_from_text, _extract_tl_verdict,
+                          _extract_tl_blockers, format_blocker_cross_reference,
+                          _extract_nm_summary, extract_file_paths,
+                          _hash_output, _detect_truncation,
+                          _extract_code_context,
+                          _extract_convention_rules, _append_convention_rules)
+from codebase_map import (generate_codebase_map, _describe_file,
+                          extract_map_enrichments, save_map_enrichments)
+from control_panel import (show_help, show_help_json, check_upgrade,
+                           _parse_status_md, _make_status_entry,
+                           update_status_md, _get_lock_state,
+                           handle_status, handle_stop, handle_kill,
+                           handle_list_crons)
+from utils import (slugify, acquire_lock, _cleanup_lock,
+                   _write_log_line,
                    save_checkpoint, load_checkpoint, delete_checkpoint,
                    validate_checkpoint, _phase_should_skip, _signal_handler,
-                   _safe_run, _redact_secrets, halt_and_revert,
-                   archive_specs_for_feature, try_auto_merge, _supplement_pr_sections,
-                   _detect_default_branch, _set_gh_token, show_help_json,
-                   _check_pr_body_quality, _detect_referenced_repo,
-                   detect_commands, _hash_output, _detect_truncation,
-                   _extract_code_context, _describe_file,
-                   handle_status, handle_stop, handle_kill, handle_list_crons,
-                   _check_pid, _verify_pid_owner, _get_lock_state,
-                   _extract_nm_summary,
-                   _extract_convention_rules, _append_convention_rules,
-                   extract_issue_sections, extract_should_fix_from_text,
-                   format_blocker_cross_reference,
+                   _redact_secrets, archive_specs_for_feature,
+                   _check_pid, _verify_pid_owner,
                    _sanitize_prompt, _validate_project_dir,
-                   _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
-                   extract_map_enrichments, save_map_enrichments,
                    HERMES_BIN, DEFAULT_BRANCH, PROJECT_DIR, REPO, PANEL_FEATURE,
                    PANEL_DIR, PROFILES, OUTPUT_LOG, FALLBACK_MODELS, PANEL_PORT,
                    API_KEY, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE,
                    max_parallel_override, RESUME, MAX_CONTINUOUS,
                    _LOG_FILE_HANDLE, _LOCK_FD, _LOG_FILE, _STDOUT_ORIG,
                    VERSION, HELP_TEXT, TEST_CMD, BUILD_CMD, LINT_CMD,
-                   REAL_HOME, _GH_TOKEN_CACHE)
+                   REAL_HOME)
 from agent import (call_agent, spawn_agent, _run_agent,
                    _detect_provider_failure, _load_fallback_config)
 from tasks import (Task, TaskDAG, TaskLock, WorktreeManager, RoadmapFeature,
