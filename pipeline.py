@@ -1425,6 +1425,7 @@ def _verify_test_imports_exist(project_dir):
             # Syntax error or unreadable file — skip gracefully
             continue
 
+        # F039: Detect from X import Y patterns
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
                 continue
@@ -1441,7 +1442,63 @@ def _verify_test_imports_exist(project_dir):
                 if name not in mod_names:
                     missing.append(f"{node.module}.{name}: {fname}:{node.lineno}")
 
+        # F039 Task 6: Detect mock.patch / @patch string references
+        for node in ast.walk(tree):
+            # Check decorators on function definitions
+            if isinstance(node, ast.FunctionDef):
+                for decorator in node.decorator_list:
+                    missing.extend(
+                        _check_patch_call(decorator, source_names, fname))
+
+            # Check direct Call nodes (patch(...) or mock.patch(...))
+            if isinstance(node, ast.Call):
+                missing.extend(
+                    _check_patch_call(node, source_names, fname))
+
     return missing
+
+
+def _check_patch_call(node, source_names, fname):
+    """Check if an AST node is a patch() or mock.patch() call referencing a missing function.
+
+    Returns list of violation strings (empty if no violation).
+    """
+    if not isinstance(node, ast.Call):
+        return []
+
+    # Determine if the call function is 'patch' or '*.patch'
+    func_name = None
+    if isinstance(node.func, ast.Name):
+        func_name = node.func.id
+    elif isinstance(node.func, ast.Attribute):
+        func_name = node.func.attr
+
+    if func_name != "patch":
+        return []
+
+    # Extract the string argument: patch('module.function', ...)
+    if not node.args:
+        return []
+    first_arg = node.args[0]
+    if not isinstance(first_arg, ast.Constant) or not isinstance(first_arg.value, str):
+        return []
+
+    target = first_arg.value  # e.g. "utils.nonexistent_func"
+    if "." not in target:
+        return []
+
+    module_name, func_name = target.split(".", 1)
+    if module_name not in source_names:
+        return []
+
+    if func_name.startswith("_"):
+        return []  # skip private names
+
+    if func_name not in source_names[module_name]:
+        lineno = getattr(node, "lineno", 0)
+        return [f"{module_name}.{func_name}: {fname}:{lineno}"]
+
+    return []
 
 
 def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
