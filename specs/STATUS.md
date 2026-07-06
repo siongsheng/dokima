@@ -17,11 +17,12 @@
 - **F031: dokima init back-and-forth interview mode — strategist asks clarifying questions about users, goals, anti-goals, and constraints before producing constitution docs. Loops until confidence is High, then writes specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md.** — in progress since 2026-07-04 20:17, branch `feat/f031-dokima-init-back-and-forth-intervie-0b3eecfe` [panel]
 - **F034: dokima fix --issue N: pull GitHub issue body, extract file/line/fix/verify from structured format, spawn coder to implement. Also upgrade SHOULD FIX issue creation to include What/Fix/Verify sections for coder-readability.** — in progress since 2026-07-05 10:13, branch `feat/f034-dokima-fix---issue-n-pull-github-is-acc18fcb` [panel]
 - **F035: GitLab support: swap gh CLI for glab or abstract VCS layer** — in progress since 2026-07-05 15:04, branch `feat/f035-gitlab-support-swap-gh-cli-for-glab-b1d7132e` [panel]
-- **F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.** — in progress since 2026-07-06 09:20, branch `feat/f032-agent-as-judge-self-assessment-code-99fe357b` [panel]
+
 
 ## Archived
 | Feature | Status | PR | Completed |
 |---------|--------|----|-----------|
+| F032 | [x] Done | — | 2026-07-06 |
 | F004 | [x] Done | #12 | 2026-06-28 |
 | F003 | [x] Done | #13 | 2026-06-28 |
 - **F001: Security Hardening** — done 2026-06-28 20:08, PR [#14](https://github.com/siongsheng/dokima/pull/14) [panel]

@@ -156,7 +156,7 @@
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [~] In Progress Progress
+**Status:** [x] Done
 **User Story:** As a user, I can agent-as-judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am i least confident about, what would tl flag. catches empty prs at source.
 
 
