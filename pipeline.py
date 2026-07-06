@@ -1114,6 +1114,18 @@ Report: what was broken, what you fixed, commit hash."""
         return {"nm_output": f"VET_FAILED: no source code changes\n{diff_stat[:500]}", "pr_url": None,
                 "coder_failed": True, "verdict": "VET_FAILED", "test_pass": test_pass, "build_pass": build_pass}
 
+    # F039: Real-code verification — ensure functions tested exist in source
+    if test_pass:
+        missing = _verify_test_imports_exist(PROJECT_DIR)
+        if missing:
+            print(f"  🔴 BLOCKED — {len(missing)} tested function(s) not found in source:", flush=True)
+            for m in missing[:5]:
+                print(f"    {m}", flush=True)
+            halt_and_revert("nm: tests pass but implementation is missing (F039)", "PHASE 3 (Verification)", branch)
+            return {"nm_output": f"VET_FAILED: missing implementation\n" + "\n".join(missing),
+                    "pr_url": None, "coder_failed": True, "verdict": "VET_FAILED",
+                    "test_pass": test_pass, "build_pass": build_pass}
+
     # 4. Create PR (verification passed)
     print("  ⏳ Creating PR...", flush=True)
 
@@ -1346,6 +1358,61 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
         return rc == 0
     except Exception:
         return False
+
+
+def _verify_test_imports_exist(project_dir):
+    """F039: Scan test files for import claims and verify functions exist in source.
+
+    Returns list of "module.function: test_file:line" strings for missing functions.
+    Returns empty list if all tested functions exist.
+    """
+    import ast as _ast
+    import importlib.util as _importlib_util
+    tests_dir = os.path.join(project_dir, "tests")
+    if not os.path.isdir(tests_dir):
+        return []
+    missing = []
+
+    # Build a set of all importable names from source modules
+    source_names = {}
+    for mod_name in ["pipeline", "utils", "agent", "tasks", "roadmap", "vcs", "status"]:
+        try:
+            spec = _importlib_util.spec_from_file_location(
+                mod_name, os.path.join(project_dir, f"{mod_name}.py"))
+            if spec and spec.loader:
+                mod = _importlib_util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                source_names[mod_name] = set(dir(mod))
+        except Exception:
+            continue
+
+    # Scan test files for from X import Y patterns
+    for test_file in os.listdir(tests_dir):
+        if not test_file.endswith(".py") or test_file.startswith("__"):
+            continue
+        fpath = os.path.join(tests_dir, test_file)
+        try:
+            with open(fpath) as f:
+                tree = _ast.parse(f.read(), filename=fpath)
+            for node in _ast.walk(tree):
+                if isinstance(node, _ast.ImportFrom) and node.module in source_names:
+                    for alias in node.names:
+                        name = alias.name
+                        if name.startswith("_"):
+                            continue
+                        if name not in source_names[node.module]:
+                            # Check if it's a function definition in this test file (not an import claim)
+                            if not any(
+                                isinstance(n, _ast.FunctionDef) and n.name == name
+                                for n in _ast.walk(tree)
+                            ):
+                                missing.append(
+                                    f"{node.module}.{name}: {test_file}:{node.lineno}"
+                                )
+        except Exception:
+            continue
+
+    return missing
 
 
 def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
