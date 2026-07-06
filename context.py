@@ -19,7 +19,6 @@ class PipelineContext:
     detect_vcs_backend sets ctx.repo, ctx.vcs_backend).
     Phase functions read-only. Tests mutate freely for setup.
     """
-
     # ── Paths ──
     project_dir: str = ""
     panel_dir: str = ""
