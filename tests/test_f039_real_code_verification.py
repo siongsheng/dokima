@@ -151,3 +151,47 @@ class TestVerifyTestImportsExist:
         assert len(result) >= 1, f"Expected missing func flagged, got: {result}"
         assert any("pipeline.missing_func" in r for r in result), \
             f"missing_func should be flagged in: {result}"
+
+    # ── Task 7: Extended mock pattern coverage ──
+
+    def test_mixed_real_and_mock_only_missing_flagged(self, panel, temp_project):
+        """Real import + mock to missing func -> only missing flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_mixed.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest.mock import patch\n")
+            f.write("from utils import slugify\n")
+            f.write("\n")
+            f.write("@patch('utils.nonexistent_func')\n")
+            f.write("def test_mixed(mock_func):\n")
+            f.write("    assert slugify('hello') is not None\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        assert len(result) == 1, f"Expected only 1 missing, got: {result}"
+        assert "utils.nonexistent_func" in result[0]
+        # slugify is a real function, should NOT be flagged
+        assert not any("slugify" in r for r in result), \
+            f"slugify should NOT be flagged: {result}"
+
+    def test_multiple_test_files_only_missing_flagged(self, panel, temp_project):
+        """Two test files: real imports in one, missing in another — only missing flagged."""
+        # File 1: all real imports
+        test_file1 = os.path.join(temp_project, "tests", "test_clean.py")
+        with open(test_file1, "w") as f:
+            f.write("from utils import slugify\n")
+            f.write("\n")
+            f.write("def test_one():\n")
+            f.write("    assert slugify('x') is not None\n")
+
+        # File 2: imports a nonexistent function
+        test_file2 = os.path.join(temp_project, "tests", "test_has_missing.py")
+        with open(test_file2, "w") as f:
+            f.write("from pipeline import nonexistent_pipeline_func\n")
+            f.write("\n")
+            f.write("def test_two():\n")
+            f.write("    pass\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # Only the missing function from file 2 should be flagged
+        assert len(result) == 1, f"Expected 1 missing, got: {result}"
+        assert "pipeline.nonexistent_pipeline_func" in result[0]
+        assert "test_has_missing.py" in result[0]
