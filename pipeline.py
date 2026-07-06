@@ -1412,7 +1412,7 @@ def _verify_test_imports_exist(project_dir):
         return []
 
     # Scan each test file via AST for from X import Y patterns
-    missing = []
+    missing = set()
     for fname in sorted(os.listdir(tests_dir)):
         if not fname.endswith(".py"):
             continue
@@ -1440,22 +1440,22 @@ def _verify_test_imports_exist(project_dir):
                 if name.startswith("_"):
                     continue  # skip private names
                 if name not in mod_names:
-                    missing.append(f"{node.module}.{name}: {fname}:{node.lineno}")
+                    missing.add(f"{node.module}.{name}: {fname}:{node.lineno}")
 
         # F039 Task 6: Detect mock.patch / @patch string references
         for node in ast.walk(tree):
             # Check decorators on function definitions
             if isinstance(node, ast.FunctionDef):
                 for decorator in node.decorator_list:
-                    missing.extend(
+                    missing.update(
                         _check_patch_call(decorator, source_names, fname))
 
             # Check direct Call nodes (patch(...) or mock.patch(...))
             if isinstance(node, ast.Call):
-                missing.extend(
+                missing.update(
                     _check_patch_call(node, source_names, fname))
 
-    return missing
+    return sorted(missing)
 
 
 def _check_patch_call(node, source_names, fname):
