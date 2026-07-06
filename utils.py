@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Module-level globals are set by main() in the dokima entry script before any function calls.
 """
-import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime, importlib
 
 # shutil imported dynamically where needed (deploy_profile_skills)
 
@@ -3348,4 +3348,30 @@ def collect_init_interview_answers(questions, interview_state, path=None):
         print("\n  ✓ No answers provided — proceeding with assumptions as-is.", flush=True)
 
     return (user_answers, 0)
+
+
+def verify_source_function_exists(module_name, attr_name):
+    """Check if a dotted attribute path exists via importlib + hasattr.
+
+    Uses importlib.import_module() + getattr() to verify that
+    a symbol (function, class, attribute) exists in a module.
+    Handles ImportError (module missing) and AttributeError
+    (attr missing) gracefully.
+
+    Args:
+        module_name: str — dotted module name (e.g. "json", "os.path")
+        attr_name: str — attribute name to check (e.g. "loads", "join")
+
+    Returns:
+        (bool, str | None): (exists, error_detail).
+        - (True, None) if the attribute exists.
+        - (False, error_msg) if module or attribute is missing.
+    """
+    try:
+        mod = importlib.import_module(module_name)
+    except ImportError as e:
+        return (False, f"ModuleNotFoundError: {e}")
+    if not hasattr(mod, attr_name):
+        return (False, f"AttributeError: module '{module_name}' has no attribute '{attr_name}'")
+    return (True, None)
 
