@@ -5,7 +5,10 @@ All functions extracted from dokima monolith utils.py (F041: Split utils.py into
 
 import sys, json, subprocess, os, pwd, time, shlex, re, datetime, tempfile
 
-# Module-level state (moved from utils.py)
+# ── Module-level globals (moved from utils.py) ──────
+# Set by main() in the dokima entry script and synced via conftest.
+_IMPORTING_PANEL = None
+PROFILES = ""
 _GH_TOKEN_CACHE = None
 
 

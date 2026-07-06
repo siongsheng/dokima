@@ -1,11 +1,12 @@
 """Dokima agent module — agent spawning, API calls, provider fallback, session extraction.
 
 All functions extracted from dokima monolith (F022: Modular Architecture).
-Imports load_key, load_github_token, _redact_secrets, _write_log_line from utils.
+Imports load_key, load_github_token from git_ops; _redact_secrets, _write_log_line from utils.
 """
 import sys, os, json, re, subprocess, threading
 
-from utils import load_key, load_github_token, _redact_secrets, _write_log_line, HERMES_BIN, OUTPUT_LOG
+from git_ops import load_key, load_github_token
+from utils import _redact_secrets, _write_log_line, HERMES_BIN, OUTPUT_LOG
 
 # ── Module-level globals (set by main()) ──────────
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
