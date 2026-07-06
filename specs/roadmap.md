@@ -130,7 +130,7 @@
 ### F030: CLI redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). Flags (--force-full, --max-parallel) keep -- prefix. Update all tests, scripts, AGENTS.md, roadmap, and docs.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [ ] Pending Progress Progress
+**Status:** [x] Done
 **User Story:** As a user, I can cli redesign: replace --add/--next/--fix/--status/--stop/--kill/--list-crons/--version/--upgrade/--release with proper subcommands (dokima add, dokima next, etc). flags (--force-full, --max-parallel) keep -- prefix. update all tests, scripts, agents.md, roadmap, and docs.
 
 
