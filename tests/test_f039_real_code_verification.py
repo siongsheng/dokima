@@ -236,3 +236,168 @@ class TestVerifySourceFunctionExists:
         exists, error = verify_source_function_exists("_this_module_definitely_does_not_exist_", "fake_func")
         assert exists is False, f"Expected False, got {exists}"
         assert error is not None
+
+
+# ── Task 2: _parse_test_references tests ──
+
+class TestParseTestReferences:
+    """Test cases for _parse_test_references()."""
+
+    def test_patch_decorator_with_string_target(self, panel, temp_project):
+        """@patch('module.func') → one reference extracted."""
+        from utils import _parse_test_references
+        test_file = os.path.join(temp_project, "tests", "test_patch_deco.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest.mock import patch\n")
+            f.write("@patch('utils.slugify')\n")
+            f.write("def test_foo(mock_slugify):\n")
+            f.write("    pass\n")
+        refs = _parse_test_references(test_file)
+        assert len(refs) == 1, f"Expected 1 ref, got {refs}"
+        assert refs[0]["attr_name"] == "slugify"
+        assert refs[0]["module_target"] == "utils"
+
+    def test_patch_object_with_create_flag(self, panel, temp_project):
+        """patch.object(target, 'attr', create=True) → create_flag=True."""
+        from utils import _parse_test_references
+        test_file = os.path.join(temp_project, "tests", "test_patch_obj.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest.mock import patch\n")
+            f.write("def test_foo():\n")
+            f.write("    with patch.object(utils, 'slugify', create=True):\n")
+            f.write("        pass\n")
+        refs = _parse_test_references(test_file)
+        assert len(refs) >= 1, f"Expected >=1 ref, got {refs}"
+        create_refs = [r for r in refs if r["create_flag"]]
+        assert len(create_refs) >= 1, f"Expected >=1 create_flag=True ref, got {create_refs}"
+
+    def test_direct_import_pattern(self, panel, temp_project):
+        """from module import func → one reference extracted."""
+        from utils import _parse_test_references
+        test_file = os.path.join(temp_project, "tests", "test_import.py")
+        with open(test_file, "w") as f:
+            f.write("from utils import slugify\n")
+            f.write("def test_foo():\n")
+            f.write("    assert slugify('x')\n")
+        refs = _parse_test_references(test_file)
+        assert len(refs) >= 1, f"Expected >=1 ref, got {refs}"
+        import_refs = [r for r in refs if r["attr_name"] == "slugify"]
+        assert len(import_refs) >= 1, f"Expected slugify ref, got {refs}"
+
+    def test_file_with_no_references_returns_empty(self, panel, temp_project):
+        """Test file with no mocks or imports → returns empty list."""
+        from utils import _parse_test_references
+        test_file = os.path.join(temp_project, "tests", "test_empty.py")
+        with open(test_file, "w") as f:
+            f.write("def test_nothing():\n")
+            f.write("    pass\n")
+        refs = _parse_test_references(test_file)
+        assert refs == [], f"Expected [], got {refs}"
+
+    def test_file_with_syntax_error_returns_empty(self, panel, temp_project):
+        """Syntax error in test file → returns empty list, no crash."""
+        from utils import _parse_test_references
+        test_file = os.path.join(temp_project, "tests", "test_broken.py")
+        with open(test_file, "w") as f:
+            f.write("this is not valid python @@@@\n")
+        refs = _parse_test_references(test_file)
+        assert isinstance(refs, list)
+        assert refs == []
+
+
+# ── Task 2: vet --verify-code integration tests ──
+
+
+class TestVetVerifyCode:
+    """Integration tests for scripts/vet --verify-code flag (Task 2)."""
+
+    def _make_verify_imports(self, tmpdir, exit_code=0, output=""):
+        """Create a mock verify_imports.py that exits with given code and output."""
+        scripts_dir = os.path.join(tmpdir, "scripts")
+        os.makedirs(scripts_dir, exist_ok=True)
+        script = os.path.join(scripts_dir, "verify_imports.py")
+        content = (
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "print(" + repr(output) + ")\n"
+            "sys.exit(" + str(exit_code) + ")\n"
+        )
+        with open(script, "w") as f:
+            f.write(content)
+        os.chmod(script, 0o755)
+        return script
+
+    def test_vet_verify_code_all_clear_exits_zero(self):
+        """vet --verify-code with all real functions → exit 0."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            # AGENTS.md with passing test/build
+            with open(os.path.join(tmp, "AGENTS.md"), "w") as f:
+                f.write("- Test: `true`\n")
+                f.write("- Build: `true`\n")
+            # mock verify_imports.py that reports all clear
+            self._make_verify_imports(tmp, exit_code=0, output="All imports verified.")
+            result = subprocess.run(
+                ["bash", os.path.join(os.path.dirname(__file__), "..", "scripts", "vet"),
+                 "--verify-code", tmp],
+                capture_output=True, text=True, timeout=30
+            )
+            assert result.returncode == 0, (
+                f"Expected exit 0, got {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+
+    def test_vet_verify_code_missing_exits_two(self):
+        """vet --verify-code with missing function → exit 2."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "AGENTS.md"), "w") as f:
+                f.write("- Test: `true`\n")
+                f.write("- Build: `true`\n")
+            self._make_verify_imports(tmp, exit_code=2,
+                                      output="utils.missing_func: test_bad.py:3")
+            result = subprocess.run(
+                ["bash", os.path.join(os.path.dirname(__file__), "..", "scripts", "vet"),
+                 "--verify-code", tmp],
+                capture_output=True, text=True, timeout=30
+            )
+            assert result.returncode == 2, (
+                f"Expected exit 2 for missing func, got {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+
+    def test_vet_no_flag_unchanged_behavior(self):
+        """vet without --verify-code → existing behavior (exit 0 on pass)."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "AGENTS.md"), "w") as f:
+                f.write("- Test: `true`\n")
+                f.write("- Build: `true`\n")
+            result = subprocess.run(
+                ["bash", os.path.join(os.path.dirname(__file__), "..", "scripts", "vet"),
+                 tmp],
+                capture_output=True, text=True, timeout=30
+            )
+            assert result.returncode == 0, (
+                f"Expected exit 0, got {result.returncode}"
+            )
+
+    def test_vet_verify_code_env_var(self):
+        """REAL_CODE_VERIFY=1 vet → equivalent to --verify-code."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "AGENTS.md"), "w") as f:
+                f.write("- Test: `true`\n")
+                f.write("- Build: `true`\n")
+            self._make_verify_imports(tmp, exit_code=0, output="All clear.")
+            env = os.environ.copy()
+            env["REAL_CODE_VERIFY"] = "1"
+            result = subprocess.run(
+                ["bash", os.path.join(os.path.dirname(__file__), "..", "scripts", "vet"),
+                 tmp],
+                capture_output=True, text=True, timeout=30, env=env
+            )
+            assert result.returncode == 0, (
+                f"Expected exit 0, got {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
