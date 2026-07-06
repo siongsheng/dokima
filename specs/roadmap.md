@@ -257,3 +257,9 @@
 **Status:** [ ] Pending
 **User Story:** As a developer, I trust that when tests pass and vet approves, the implementation actually exists. Mock-based passing tests that hide missing functions are caught and blocked before merge.
 
+
+### F040: PipelineContext dataclass — replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, etc.) with a single PipelineContext dataclass passed to each phase function. Eliminates conftest __setattr__ override hack. Makes testing trivial — create a context, pass it in. All 1,029 tests protect this refactor.
+**Priority:** P1
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a contributor, I can write a test by creating a PipelineContext instead of monkey-patching 20+ module globals through conftest.
