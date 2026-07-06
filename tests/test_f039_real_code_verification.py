@@ -119,3 +119,35 @@ class TestVerifyTestImportsExist:
         # custom_mod must be discovered and checked — nonexistent_in_custom flagged
         assert len(result) == 1, f"Expected 1 missing from custom_mod, got: {result}"
         assert "custom_mod.nonexistent_in_custom" in result[0]
+
+    # ── Task 6: Mock pattern detection ──
+
+    def test_patch_decorator_missing_function_flagged(self, panel, temp_project):
+        """@patch('module.nonexistent_func') decorator -> flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_patch_decorator.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest.mock import patch\n")
+            f.write("\n")
+            f.write("@patch('utils.nonexistent_func')\n")
+            f.write("def test_something(mock_func):\n")
+            f.write("    pass\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        assert len(result) >= 1, f"Expected missing func flagged, got: {result}"
+        assert any("utils.nonexistent_func" in r for r in result), \
+            f"nonexistent_func should be flagged in: {result}"
+
+    def test_mock_patch_call_missing_function_flagged(self, panel, temp_project):
+        """mock.patch('pipeline.missing_func') call -> flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_patch_call.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest import mock\n")
+            f.write("\n")
+            f.write("def test_something():\n")
+            f.write("    with mock.patch('pipeline.missing_func'):\n")
+            f.write("        pass\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        assert len(result) >= 1, f"Expected missing func flagged, got: {result}"
+        assert any("pipeline.missing_func" in r for r in result), \
+            f"missing_func should be flagged in: {result}"
