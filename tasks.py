@@ -329,6 +329,7 @@ def spawn_coder_in_worktree(task: Task, worktree_path: str, spec_path: str,
     spec_ref = tasks_extract_path if tasks_extract_path else spec_path
     spec_ctx = f"{spec_path} for context" if spec_path else "the task description"
     coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT Task {task.id}. Do NOT explore. Do NOT ask questions. Start NOW.
+⚠️ Do NOT write spec files or planning documents. The spec already exists. Output working code only.
 
 Read the task breakdown at {spec_ref} (full spec: {spec_ctx}).
 
