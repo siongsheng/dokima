@@ -267,17 +267,17 @@
 ### F041: Split utils.py into domain modules — git_ops.py (git, gh wrappers), spec_extract.py (extract_pr_sections, extract_issue_sections, clean_spec_content), codebase_map.py (generate_codebase_map, _build_domain_map, _build_impact_map), control_panel.py (handle_status, handle_stop, handle_kill). 3,351 lines → ~4 × 800-line modules.
 **Priority:** P1
 **Dependencies:** F040
-**Status:** [ ] Pending
+**Status:** [x] Done
 **User Story:** As a contributor, I open the right module for the task instead of scrolling past 83 functions in one file.
 
 ### F042: CI pipeline — add .github/workflows/test.yml running pytest on push/PR. Add complexity gates (max CC=30), lint (pyflakes), and type checking (mypy --strict for new modules).
 **Priority:** P1
 **Dependencies:** None
-**Status:** [ ] Pending
+**Status:** [x] Done
 **User Story:** As a contributor, tests run automatically on every push and PR — no manual python3 -m pytest needed.
 
 ### F043: Phase function decomposition — split run_phase1_strategist (656 lines, CC=125), run_phase2_coder (277, CC=77), run_pipeline (280, CC=79), run_fix_mode (281, CC=67), run_init (455, CC=60) into sub-operations. Target: max 150 lines, CC < 30 per function.
 **Priority:** P2
 **Dependencies:** F040
-**Status:** [ ] Pending
+**Status:** [x] Done
 **User Story:** As a contributor, I can understand and modify a phase function without tracing 125 branching paths.
