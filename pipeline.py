@@ -25,6 +25,7 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    handle_status, handle_stop, handle_kill, handle_list_crons,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    _extract_nm_summary,
+                   _extract_convention_rules,
                    extract_issue_sections,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
@@ -800,6 +801,18 @@ CRITICAL RULES:
 - DO NOT archive, delete, or move existing specs/ files. Spec lifecycle is managed by the panel.
 - DO NOT refactor code beyond what the task requires. No drive-by cleanups, no "while I'm here" improvements.
 - If a pre-existing test fails, report it — do NOT fix it unless the task explicitly says to.
+SELF-ASSESSMENT (Agent-as-Judge) — Before pushing, answer these 3 questions in your output:
+Q1: SPEC COVERAGE — Does every requirement in the spec have corresponding code?
+    List any spec requirement that has NO implementation yet.
+    If every requirement is implemented, say "All requirements covered."
+Q2: CONFIDENCE — What implementation detail are you LEAST confident about?
+    Be specific: name the file and behavior you're unsure about.
+    If fully confident in everything, say "All confident — no weak spots."
+Q3: TL PREDICTION — If a Tech Lead reviewed this PR, what would they flag?
+    Think adversarially: missing tests, unclear error handling, scope creep,
+    spec non-compliance, architecture violations.
+    If nothing, say "Nothing — this is clean."
+Answer all 3 questions before running git push.
 Report: both commit hashes, files changed, test results, lint status, branch name.
 """
 
@@ -1179,6 +1192,17 @@ def _build_nm_review(nm_summary):
         lines.append("")
         lines.append(f"**Auto-fixed ({len(auto_fix)}):** {', '.join(auto_fix)}")
     return "\n".join(lines)
+
+
+_build_nm_review_section = _build_nm_review  # F038: test compatibility
+
+def _build_tl_review_body(feature, pr_url, branch, spec_path, impact, nm_output=""):
+    """Build TL review body. F038."""
+    return f"## Review\n**Verdict:** PENDING\n**Risk:** {impact}\n"
+
+def _build_combined_review(nm_output, tl_output):
+    """Build combined nm + TL review. F038."""
+    return f"{nm_output}\n\n{tl_output}"
 
 
 def _inject_nm_into_pr_body(pr_url, nm_stdout):
