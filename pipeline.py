@@ -1180,17 +1180,22 @@ def _build_nm_review(nm_summary):
     if findings:
         lines.append("")
         lines.append(findings[:2000])
-    sf_items = nm_summary.get("should_fix_items", [])
-    if sf_items:
+    else:
         lines.append("")
-        lines.append(f"**SHOULD FIX ({len(sf_items)}):**")
-        for item in sf_items[:5]:
-            desc = item.get("description", str(item))[:120]
-            lines.append(f"- {desc}")
+        lines.append("No findings")
     auto_fix = nm_summary.get("auto_fix_labels", [])
     if auto_fix:
         lines.append("")
-        lines.append(f"**Auto-fixed ({len(auto_fix)}):** {', '.join(auto_fix)}")
+        lines.append(f"**Auto-Fix Applied:** {len(auto_fix)} issue(s)")
+        for label in auto_fix:
+            lines.append(f"- {label}")
+    sf_items = nm_summary.get("should_fix_items", [])
+    if sf_items:
+        lines.append("")
+        lines.append(f"### SHOULD FIX ({len(sf_items)})")
+        for item in sf_items[:5]:
+            desc = item.get("detail", str(item))[:120]
+            lines.append(f"- {desc}")
     return "\n".join(lines)
 
 
