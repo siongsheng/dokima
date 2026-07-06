@@ -108,8 +108,50 @@ def test_extract_blockers_no_blockers_section(panel):
     assert result == []
 
 
+def test_extract_blockers_returns_all_including_architectural(panel):
+    """H1: extract_blockers_from_pr returns ALL blockers including architectural.
+
+    The ARCHITECTURAL filter should NOT be in extract_blockers_from_pr —
+    it should be in run_fix_mode as the single filtering point.
+    This prevents the triple-pass filtering that silently drops real blockers.
+    """
+    pr_body = """## Review
+**Verdict:** BLOCKED
+
+### Blockers
+- Login test fails
+- ARCHITECTURAL: Need to restructure DB schema
+- Function missing error handling
+"""
+    result = panel.extract_blockers_from_pr(pr_body)
+    assert len(result) == 3, (
+        f"H1 regression: expected 3 blockers (including ARCHITECTURAL), got {len(result)}: {result}"
+    )
+    assert "Login test fails" in result[0]
+    assert "ARCHITECTURAL" in result[1]
+
+
+def test_extract_blockers_returns_architectural_even_when_only(panel):
+    """H1: extract_blockers_from_pr returns architectural blockers even when alone."""
+    pr_body = """## Review
+**Verdict:** BLOCKED
+
+### Blockers
+- ARCHITECTURAL: Redesign the whole system
+"""
+    result = panel.extract_blockers_from_pr(pr_body)
+    assert len(result) == 1, (
+        f"H1 regression: expected 1 architectural blocker, got {len(result)}: {result}"
+    )
+    assert "ARCHITECTURAL" in result[0]
+
+
 def test_extract_blockers_architectural_filtered(panel):
-    """ARCHITECTURAL blockers are excluded from result."""
+    """ARCHITECTURAL blockers are now INCLUDED in extract_blockers_from_pr result.
+
+    H1 fix: extract_blockers_from_pr returns ALL blockers. The architectural
+    filter is consolidated in run_fix_mode as the single filtering point.
+    """
     pr_body = """## Review
 **Verdict:** BLOCKED
 
@@ -118,12 +160,16 @@ def test_extract_blockers_architectural_filtered(panel):
 - ARCHITECTURAL: Need to restructure DB schema
 """
     result = panel.extract_blockers_from_pr(pr_body)
-    assert len(result) == 1
+    assert len(result) == 2  # Both blockers returned — includes ARCHITECTURAL
     assert "Login test fails" in result
 
 
 def test_extract_blockers_all_architectural(panel):
-    """All architectural → returns empty list (caller checks separately)."""
+    """All architectural → returns all items (caller filters separately).
+
+    H1 fix: extract_blockers_from_pr no longer removes ARCHITECTURAL.
+    The caller (run_fix_mode) is now the single filtering point.
+    """
     pr_body = """## Review
 **Verdict:** BLOCKED
 
@@ -131,7 +177,8 @@ def test_extract_blockers_all_architectural(panel):
 - ARCHITECTURAL: Redesign the whole system
 """
     result = panel.extract_blockers_from_pr(pr_body)
-    assert result == []
+    assert len(result) == 1
+    assert "ARCHITECTURAL" in result[0]
 
 
 # ═══════════════════════════════════════════════════════════════════

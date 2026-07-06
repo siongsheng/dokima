@@ -81,6 +81,49 @@ def test_lock_file_with_garbage(panel, tmpdir_path):
     except OSError:
         pass
 
+def test_cleanup_lock_does_not_remove_lock_file(panel, tmpdir_path):
+    """H2: _cleanup_lock() closes fd but does NOT remove the lock file.
+    
+    The lock file removal after fd-close is a TOCTOU race: another process
+    could create a new lock file between close() and os.remove(), and
+    our os.remove() would delete the OTHER process's lock.
+    
+    Fix: don't remove the lock file in _cleanup_lock — the next acquire_lock
+    will either overwrite it or clean it up as stale.
+    """
+    import utils as _utils
+    import fcntl
+
+    lp = panel._lock_path(str(tmpdir_path))
+    _utils.PROJECT_DIR = str(tmpdir_path)
+
+    # Create a lock file and acquire it like acquire_lock would
+    fd = open(lp, "w")
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    fd.write(f"{os.getpid()}\n")
+    fd.flush()
+
+    # Set up _cleanup_lock's globals so it can find the fd
+    old_lock_fd = _utils._LOCK_FD
+    _utils._LOCK_FD = fd
+
+    try:
+        _utils._cleanup_lock()
+        # The lock file must STILL exist — only the fd should be closed
+        assert os.path.exists(lp), (
+            "H2 regression: _cleanup_lock removed the lock file! "
+            "Removing the file after close is a TOCTOU race — "
+            "another process may have created a new lock."
+        )
+    finally:
+        _utils._LOCK_FD = old_lock_fd
+        # Clean up
+        try:
+            os.remove(lp)
+        except OSError:
+            pass
+
+
 def test_max_attempts_exhausted(panel, tmpdir_path):
     """When another panel process holds the lock, acquire_lock should exit."""
     import fcntl
