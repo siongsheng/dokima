@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "9814b2404f41a7028c743f96ee1a6cf7",
+    "hash": "f4546509541a1b91d65219a3f8774dcc",
     "desc": ""
   },
   "AGENTS.md": {
@@ -24,7 +24,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "fba7402f86e94b6611637a4d724815e4",
+    "hash": "ba42025e995e8fb11674f31a40d5ba98",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -40,7 +40,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "c08bcc8e0445e6e9c2fdc431c5d5dcbc",
+    "hash": "cafc5cc885f3a9da3dd8567f9f5c7260",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "vcs.py": {
@@ -262,6 +262,10 @@
   "tests/test_f037_blocker_resolution.py": {
     "hash": "11ad1d601248fcceb708148256c79c89",
     "desc": "\u2500\u2500 Task 1: vcs_pr_update_body() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+  },
+  "tests/test_f038_nm_injection.py": {
+    "hash": "614f2d4d5719ef6bd35f475edf357215",
+    "desc": "Exports: panel"
   },
   "tests/test_final_coverage.py": {
     "hash": "63bd93c57437b723a16f02ca7faee1ed",
