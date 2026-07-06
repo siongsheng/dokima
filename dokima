@@ -19,6 +19,15 @@ import tasks as _tasks
 import roadmap as _roadmap
 import pipeline as _pipeline
 
+# ── F041 Domain Modules ─────────────────────────
+# Domain-specific modules extracted from utils.py.
+# These modules export functions that were previously in utils.py.
+# State propagation (mutable globals) also flows to these modules.
+import git_ops as _git_ops
+import spec_extract as _spec_extract
+import codebase_map as _codebase_map
+import control_panel as _control_panel
+
 # Import functions and classes only (NOT mutable globals — those stay in dokima).
 from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_project_dir,
                    _redact_secrets, _write_log_line, load_key, load_github_token,
@@ -765,7 +774,8 @@ def _sync_modules():
                   'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
             val = globals().get(g)
             if val is not None:
-                for mod in (_utils, _agent, _tasks, _roadmap, _pipeline):
+                for mod in (_utils, _agent, _tasks, _roadmap, _pipeline,
+                            _git_ops, _spec_extract, _codebase_map, _control_panel):
                     if hasattr(mod, g):
                         setattr(mod, g, val)
     except Exception:
