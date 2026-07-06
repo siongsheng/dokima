@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "fb44de6527b6dd69475f82dd9793a29f",
+    "hash": "f9fd04d3d1752a7876c0942c44c3a3a5",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -8,7 +8,7 @@
     "desc": "Adversarial Review Report \u2014 Dokima Codebase"
   },
   "AGENTS.md": {
-    "hash": "0108d3c2248e7f0650924ca28b1c12b2",
+    "hash": "b823924809ab5e230116bd1510baea50",
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
@@ -20,7 +20,7 @@
     "desc": "Dokima"
   },
   "agent.py": {
-    "hash": "151ce18f87211bfdfac9cddf93e14371",
+    "hash": "63c6d1a078b5ecf07bcc11fcd0f362d7",
     "desc": "\u2500\u2500 Module-level globals (set by main()) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
   "install.sh": {
@@ -28,7 +28,7 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "2f57f65017f44fa31d6aa2a12e22f276",
+    "hash": "f8579e0fa2e4014dd54d29ac35b852bb",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
@@ -268,7 +268,7 @@
     "desc": "\u2500\u2500 Task 1: vcs_pr_update_body() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
   "tests/test_f038_nm_injection.py": {
-    "hash": "eb941ece771df3d7b31a0cb20661d665",
+    "hash": "e05abaac82fad5969f1247cea18a8a23",
     "desc": "Exports: panel"
   },
   "tests/test_final_coverage.py": {

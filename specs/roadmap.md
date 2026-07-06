@@ -254,7 +254,7 @@
 ### F039: Real-code verification in vet phase — after tests pass, verify that functions referenced in tests actually exist in source modules. Mock-based tests (autospec=True, create=True) can pass even when the real implementation is missing (F032, F033, F034, F038 all shipped with this bug). The vet phase should grep test files for function names and verify they're importable from the source modules. Blocks pipeline if tests pass but implementation is missing.
 **Priority:** P0
 **Dependencies:** None
-**Status:** [ ] Pending
+**Status:** [~] In Progress
 **User Story:** As a developer, I trust that when tests pass and vet approves, the implementation actually exists. Mock-based passing tests that hide missing functions are caught and blocked before merge.
 
 
