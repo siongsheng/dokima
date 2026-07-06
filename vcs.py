@@ -5,27 +5,37 @@ Auto-detects GitHub vs GitLab from git remote URL and provides
 semantic functions for PR/MR operations that dispatch to the
 correct CLI (gh or glab).
 
-Module-level state is set once at startup by detect_vcs_backend().
+Accepts an optional ctx object (PipelineContext) for configuration.
+When ctx is None, falls back to module-level globals for backward
+compatibility during the transition to PipelineContext.
 """
 import os
 import sys
 import re
 import subprocess
 
-# ── Module-level state ──────────────────────────────────────────────
+# ── Module-level state (fallback when ctx is None) ──────────────────
 
 VCS_BACKEND = "github"   # "github" | "gitlab"
 VCS_TOKEN_ENV = "GH_TOKEN"  # "GH_TOKEN" | "GLAB_TOKEN" | "GITLAB_TOKEN"
 REPO = ""
 
 
+def _resolve(ctx, attr, fallback):
+    """Resolve a value from ctx if available, else fall back to module global."""
+    if ctx is not None and hasattr(ctx, attr):
+        return getattr(ctx, attr)
+    return fallback
+
+
 # ── Detection ───────────────────────────────────────────────────────
 
-def detect_vcs_backend(project_dir):
+def detect_vcs_backend(project_dir, ctx=None):
     """Detect VCS backend and repo slug from git remote origin.
 
     Returns "github" or "gitlab", or None for unknown/error.
-    Sets module-level VCS_BACKEND, VCS_TOKEN_ENV, and REPO.
+    Sets ctx fields (vcs_backend, vcs_token_env, repo) when ctx is provided,
+    otherwise sets module-level VCS_BACKEND, VCS_TOKEN_ENV, and REPO.
     """
     global VCS_BACKEND, VCS_TOKEN_ENV, REPO
 
@@ -48,22 +58,29 @@ def detect_vcs_backend(project_dir):
     # GitHub: github.com[:/]owner/repo(.git)?
     m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
     if m:
-        VCS_BACKEND = "github"
-        VCS_TOKEN_ENV = "GH_TOKEN"
-        REPO = m.group(1)
+        if ctx is not None:
+            ctx.vcs_backend = "github"
+            ctx.vcs_token_env = "GH_TOKEN"
+            ctx.repo = m.group(1)
+        else:
+            VCS_BACKEND = "github"
+            VCS_TOKEN_ENV = "GH_TOKEN"
+            REPO = m.group(1)
         return "github"
 
     # GitLab: gitlab.*[:/]namespace/project(.git)?
     # Supports subgroups: group/subgroup/project
     m = re.search(r'gitlab\.[^:/]+[:/](.+?)(?:\.git)?$', url)
     if m:
-        VCS_BACKEND = "gitlab"
-        # Use GITLAB_TOKEN first, fall back to GLAB_TOKEN
-        if os.environ.get("GITLAB_TOKEN"):
-            VCS_TOKEN_ENV = "GITLAB_TOKEN"
+        token_env = "GITLAB_TOKEN" if os.environ.get("GITLAB_TOKEN") else "GLAB_TOKEN"
+        if ctx is not None:
+            ctx.vcs_backend = "gitlab"
+            ctx.vcs_token_env = token_env
+            ctx.repo = m.group(1)
         else:
-            VCS_TOKEN_ENV = "GLAB_TOKEN"
-        REPO = m.group(1)
+            VCS_BACKEND = "gitlab"
+            VCS_TOKEN_ENV = token_env
+            REPO = m.group(1)
         return "gitlab"
 
     print("WARNING: Unsupported VCS — only GitHub and GitLab are supported. "
@@ -84,16 +101,17 @@ def parse_vcs_flag():
 
 # ── Internal helper ─────────────────────────────────────────────────
 
-def _run_vcs(cli, *args):
+def _run_vcs(cli, *args, ctx=None):
     """Run a VCS CLI command with the right token env.
 
     Returns (stdout, stderr, returncode).
     """
+    token_env = _resolve(ctx, 'vcs_token_env', VCS_TOKEN_ENV)
     cmd = [cli] + list(args)
     env = os.environ.copy()
-    token = env.get(VCS_TOKEN_ENV, "")
+    token = env.get(token_env, "")
     if token:
-        env[VCS_TOKEN_ENV] = token
+        env[token_env] = token
     try:
         result = subprocess.run(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -108,12 +126,13 @@ def _run_vcs(cli, *args):
 
 # ── PR/MR Operations ────────────────────────────────────────────────
 
-def vcs_pr_create(base, head, title, body):
+def vcs_pr_create(base, head, title, body, ctx=None):
     """Create a PR (GitHub) or MR (GitLab).
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         return _run_vcs("glab", "mr", "create",
                         "--target-branch", base,
                         "--source-branch", head,
@@ -127,13 +146,14 @@ def vcs_pr_create(base, head, title, body):
                         "--body", body)
 
 
-def vcs_pr_merge(pr_num, auto=False):
+def vcs_pr_merge(pr_num, auto=False, ctx=None):
     """Merge a PR (GitHub) or MR (GitLab).
 
     If auto=True, uses --auto (gh) or --when-pipeline-succeeds (glab).
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         args = ["glab", "mr", "merge", str(pr_num)]
         if auto:
             args.append("--when-pipeline-succeeds")
@@ -145,23 +165,25 @@ def vcs_pr_merge(pr_num, auto=False):
         return _run_vcs(*args)
 
 
-def vcs_pr_view(pr_num, fields="state,merged"):
+def vcs_pr_view(pr_num, fields="state,merged", ctx=None):
     """View PR/MR details as JSON.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         return _run_vcs("glab", "mr", "view", str(pr_num))
     else:
         return _run_vcs("gh", "pr", "view", str(pr_num), "--json", fields)
 
 
-def vcs_pr_list(state="open", head=None, json_fields="url,number"):
+def vcs_pr_list(state="open", head=None, json_fields="url,number", ctx=None):
     """List PRs/MRs.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         args = ["glab", "mr", "list", "--state", state, "--output", "json"]
         if head:
             args.extend(["--source-branch", head])
@@ -173,12 +195,13 @@ def vcs_pr_list(state="open", head=None, json_fields="url,number"):
         return _run_vcs(*args)
 
 
-def vcs_pr_diff(pr_num, stat_only=False):
+def vcs_pr_diff(pr_num, stat_only=False, ctx=None):
     """Get PR/MR diff.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         # glab does not have --stat; for stat_only we can post-process
         # or use mr diff and count lines
         return _run_vcs("glab", "mr", "diff", str(pr_num))
@@ -191,12 +214,13 @@ def vcs_pr_diff(pr_num, stat_only=False):
 
 # ── Issue Operations ────────────────────────────────────────────────
 
-def vcs_issue_create(title, body, labels=None):
+def vcs_issue_create(title, body, labels=None, ctx=None):
     """Create an issue.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         args = ["glab", "issue", "create", "--title", title, "--description", body]
         if labels:
             args.extend(["--label", labels])
@@ -208,12 +232,13 @@ def vcs_issue_create(title, body, labels=None):
         return _run_vcs(*args)
 
 
-def vcs_issue_view(issue_num, fields="body,title"):
+def vcs_issue_view(issue_num, fields="body,title", ctx=None):
     """View issue details as JSON.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         return _run_vcs("glab", "issue", "view", str(issue_num))
     else:
         return _run_vcs("gh", "issue", "view", str(issue_num), "--json", fields)
@@ -221,13 +246,14 @@ def vcs_issue_view(issue_num, fields="body,title"):
 
 # ── Release Operations ──────────────────────────────────────────────
 
-def vcs_release_create(tag, title, target, generate_notes=True):
+def vcs_release_create(tag, title, target, generate_notes=True, ctx=None):
     """Create a release — GitHub only.
 
     On GitLab, returns error since release workflow is GitHub-only.
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         return "", "Error: Release workflow is GitHub-only. GitLab releases are not yet supported.", 1
     else:
         args = ["gh", "release", "create", tag, "--title", title, "--target", target]
@@ -236,7 +262,7 @@ def vcs_release_create(tag, title, target, generate_notes=True):
         return _run_vcs(*args)
 
 
-def vcs_pr_update_body(pr_num, new_body):
+def vcs_pr_update_body(pr_num, new_body, ctx=None):
     """Update the body/description of a PR (GitHub) or MR (GitLab).
 
     Args:
@@ -245,24 +271,27 @@ def vcs_pr_update_body(pr_num, new_body):
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    repo = _resolve(ctx, 'repo', REPO)
+    if backend == "gitlab":
         return _run_vcs("glab", "mr", "update", str(pr_num),
                         "--description", new_body)
     else:
         return _run_vcs("gh", "api",
-                        f"repos/{REPO}/pulls/{pr_num}",
+                        f"repos/{repo}/pulls/{pr_num}",
                         "--method", "PATCH",
                         "-f", f"body={new_body}")
 
 
 # ── Repo Operations ─────────────────────────────────────────────────
 
-def vcs_repo_clone(repo_slug, target_dir):
+def vcs_repo_clone(repo_slug, target_dir, ctx=None):
     """Clone a repository using the VCS CLI.
 
     Returns (stdout, stderr, returncode).
     """
-    if VCS_BACKEND == "gitlab":
+    backend = _resolve(ctx, 'vcs_backend', VCS_BACKEND)
+    if backend == "gitlab":
         return _run_vcs("glab", "repo", "clone", repo_slug, target_dir)
     else:
         return _run_vcs("gh", "repo", "clone", repo_slug, target_dir)
