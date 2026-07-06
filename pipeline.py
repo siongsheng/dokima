@@ -1231,10 +1231,6 @@ def _build_tl_review_body(existing_body, tl_section, nm_output=""):
 
     return combined, has_nm
 
-def _build_combined_review(nm_output, tl_output):
-    """Build combined nm + TL review. F038."""
-    return f"{nm_output}\n\n{tl_output}"
-
 
 def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
                            create_blocker_issues=True):
@@ -1408,12 +1404,11 @@ def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
             f"See {pr_url} for full review details and other findings."
         )
         try:
-            stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
-                                    "--title", title, "--body", body)
+            stdout, _, rc = vcs.vcs_issue_create(title, body)
             if rc == 0:
                 print(f"  Created: {stdout}", flush=True)
             else:
-                print(f"  Failed: {stderr}", flush=True)
+                print(f"  Failed", flush=True)
         except Exception:
             pass  # Best-effort: don't crash on individual issue failures
 

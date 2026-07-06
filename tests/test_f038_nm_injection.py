@@ -717,7 +717,7 @@ class TestNmShouldFixIssueCreation:
         nm_stdout = NM_OUTPUT_WITH_SHOULD_FIX_TABLE
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
             mock_extract.return_value = [
                 {"detail": "Naming conventions", "dimension": "RELIABILITY", "location": "utils.py:42"},
                 {"detail": "Extract long method", "dimension": "MAINTAINABILITY", "location": "pipeline.py:100"},
@@ -732,16 +732,13 @@ class TestNmShouldFixIssueCreation:
             assert result is True
             mock_extract.assert_called_once_with(nm_stdout)
             assert mock_gh.call_count == 2
-            # Verify title format
+            # Verify title and body format (vcs.vcs_issue_create takes positional title, body)
             for call_args in mock_gh.call_args_list:
-                args = call_args[0]
-                assert "--title" in args
-                title_idx = args.index("--title") + 1
-                assert args[title_idx].startswith("SHOULD FIX [nm]"), \
-                    f"Title should start with 'SHOULD FIX [nm]', got: {args[title_idx]}"
-                assert "--body" in args
-                body_idx = args.index("--body") + 1
-                assert "## nm Review Finding" in args[body_idx], \
+                title = call_args[0][0]
+                body = call_args[0][1]
+                assert title.startswith("SHOULD FIX [nm]"), \
+                    f"Title should start with 'SHOULD FIX [nm]', got: {title}"
+                assert "## nm Review Finding" in body, \
                     "Issue body should contain '## nm Review Finding' header"
 
     def test_create_nm_should_fix_issues_empty_nm_stdout(self):
@@ -767,7 +764,7 @@ class TestNmShouldFixIssueCreation:
         from unittest.mock import patch
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
 
             result = pl._create_nm_should_fix_issues(
                 NM_OUTPUT_WITH_SHOULD_FIX_TABLE, "feat", "br", None, "spec.md"
@@ -783,7 +780,7 @@ class TestNmShouldFixIssueCreation:
         from unittest.mock import patch
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
             mock_extract.return_value = [
                 {"detail": "Item 1", "dimension": "RELIABILITY", "location": "utils.py:1"},
                 {"detail": "Item 2", "dimension": "MAINTAINABILITY", "location": "pipeline.py:2"},
@@ -1576,7 +1573,7 @@ class TestNmShouldFixIssueCreation:
         nm_stdout = NM_OUTPUT_WITH_SHOULD_FIX_TABLE
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
             mock_extract.return_value = [
                 {"detail": "Naming conventions", "dimension": "RELIABILITY", "location": "utils.py:42"},
                 {"detail": "Extract long method", "dimension": "MAINTAINABILITY", "location": "pipeline.py:100"},
@@ -1591,16 +1588,13 @@ class TestNmShouldFixIssueCreation:
             assert result is True
             mock_extract.assert_called_once_with(nm_stdout)
             assert mock_gh.call_count == 2
-            # Verify title format
+            # Verify title and body format (vcs.vcs_issue_create takes positional title, body)
             for call_args in mock_gh.call_args_list:
-                args = call_args[0]
-                assert "--title" in args
-                title_idx = args.index("--title") + 1
-                assert args[title_idx].startswith("SHOULD FIX [nm]"), \
-                    f"Title should start with 'SHOULD FIX [nm]', got: {args[title_idx]}"
-                assert "--body" in args
-                body_idx = args.index("--body") + 1
-                assert "## nm Review Finding" in args[body_idx], \
+                title = call_args[0][0]
+                body = call_args[0][1]
+                assert title.startswith("SHOULD FIX [nm]"), \
+                    f"Title should start with 'SHOULD FIX [nm]', got: {title}"
+                assert "## nm Review Finding" in body, \
                     "Issue body should contain '## nm Review Finding' header"
 
     def test_create_nm_should_fix_issues_empty_nm_stdout(self):
@@ -1626,7 +1620,7 @@ class TestNmShouldFixIssueCreation:
         from unittest.mock import patch
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
 
             result = pl._create_nm_should_fix_issues(
                 NM_OUTPUT_WITH_SHOULD_FIX_TABLE, "feat", "br", None, "spec.md"
@@ -1642,7 +1636,7 @@ class TestNmShouldFixIssueCreation:
         from unittest.mock import patch
 
         with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
-             patch.object(pl, 'gh') as mock_gh:
+             patch('pipeline.vcs.vcs_issue_create') as mock_gh:
             mock_extract.return_value = [
                 {"detail": "Item 1", "dimension": "RELIABILITY", "location": "utils.py:1"},
                 {"detail": "Item 2", "dimension": "MAINTAINABILITY", "location": "pipeline.py:2"},

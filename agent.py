@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports load_key, load_github_token, _redact_secrets, _write_log_line from utils.
 """
-import sys, os, json, re, subprocess
+import sys, os, json, re, subprocess, threading
 
 from utils import load_key, load_github_token, _redact_secrets, _write_log_line, HERMES_BIN, OUTPUT_LOG
 
@@ -162,6 +162,16 @@ def _run_agent(profile, skills, prompt, timeout, cwd, model):
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             universal_newlines=True, cwd=cwd, env=env)
+    stderr_lines = []
+    def _drain():
+        try:
+            if proc.stderr is not None:
+                for line in proc.stderr:
+                    stderr_lines.append(line)
+        except Exception:
+            pass
+    t = threading.Thread(target=_drain, daemon=True)
+    t.start()
     output = []
     timed_out = False
     try:
@@ -196,14 +206,12 @@ def _run_agent(profile, skills, prompt, timeout, cwd, model):
         except Exception:
             pass
 
-    # Collect stderr
-    try:
-        stderr_output = proc.stderr.read()
-        if stderr_output and stderr_output.strip():
-            print(f"{tag} [stderr] {stderr_output.strip()[:500]}", flush=True)
-            output.append(f"\n[stderr]\n{stderr_output}")
-    except Exception:
-        pass
+    # Collect stderr from drain thread
+    t.join(timeout=5)
+    stderr_output = "".join(stderr_lines)
+    if stderr_output and stderr_output.strip():
+        print(f"{tag} [stderr] {stderr_output.strip()[:500]}", flush=True)
+        output.append(f"\n[stderr]\n{stderr_output}")
 
     result = "".join(output)
     if timed_out:
