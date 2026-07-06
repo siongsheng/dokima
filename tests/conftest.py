@@ -19,7 +19,7 @@ def _load_panel():
     if module_name in sys.modules:
         del sys.modules[module_name]
     # F022: Also remove stale sub-modules so fresh imports pick up changes
-    for sub in ('tasks', 'utils', 'agent', 'pipeline', 'roadmap'):
+    for sub in ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'codebase_map'):
         if sub in sys.modules:
             del sys.modules[sub]
 
