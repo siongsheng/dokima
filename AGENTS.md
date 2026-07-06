@@ -17,7 +17,7 @@ This repo IS the panel — you don't run the panel on itself.
 - Verify vet script: `bash -n scripts/vet`
 
 ## Testing
-673 tests pass, 6 skipped, 679 total (pytest). Coverage: core functions + control panel + edge cases.
+1029 tests pass, 4 skipped, 1033 total (pytest). Coverage: core functions + control panel + edge cases.
 ```bash
 # Quick suite (excludes slow integration tests)
 python3 -m pytest tests/ -q --ignore=tests/test_main_integration.py
