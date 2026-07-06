@@ -26,6 +26,8 @@ from utils import (slugify, git, gh, detect_repo, acquire_lock, _cleanup_lock,
                    _check_pid, _verify_pid_owner, _get_lock_state,
                    _extract_nm_summary,
                    extract_issue_sections,
+                   extract_should_fix_from_text,
+                   format_blocker_cross_reference,
                    _sanitize_prompt, _validate_project_dir,
                    _parse_status_md, _make_status_entry,
                    _lock_path, _stop_path, _checkpoint_path,
@@ -1207,6 +1209,193 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
         return False
 
 
+# ── F037: Blocker Resolution Tracking ──
+
+def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path, create_blocker_issues):
+    """Create GitHub issues for each blocker with title/body/label.
+
+    Args:
+        blockers: List of blocker description strings.
+        pr_num: PR number.
+        pr_url: PR URL.
+        feature: Feature name.
+        branch: Branch name.
+        spec_path: Path to spec file.
+        create_blocker_issues: Flag — if False, returns empty list immediately.
+
+    Returns:
+        List of created issue URLs.
+    """
+    if not create_blocker_issues or not blockers:
+        return []
+
+    urls = []
+    for blocker in blockers:
+        title = f"BLOCKER: {blocker}"
+        body = (
+            f"Blocker identified during TL review of PR #{pr_num}\n\n"
+            f"**PR:** {pr_url}\n"
+            f"**Feature:** {feature}\n"
+            f"**Branch:** {branch}\n"
+            f"**Spec:** {spec_path}\n\n"
+            f"### Description\n{blocker}\n"
+        )
+        stdout, _, rc = vcs.vcs_issue_create(title, body, labels=["blocker"])
+        if rc == 0:
+            urls.append(stdout.strip())
+        else:
+            print(f"  ⚠ Failed to create blocker issue: {stdout}", flush=True)
+    return urls
+
+
+def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict, spec_path, feature, create_issues):
+    """Update PR body after fix with strikethrough + resolution section.
+
+    Args:
+        pr_num: PR number.
+        pr_url: Fix PR URL.
+        pr_branch: Fix PR branch.
+        blockers: List of blocker description strings.
+        fix_verdict: TL verdict — APPROVED, BLOCKED, UNKNOWN.
+        spec_path: Path to spec file.
+        feature: Feature name.
+        create_issues: Whether to create blocker issues.
+
+    Returns:
+        True if PR body was updated, False otherwise.
+    """
+    current_body, _, rc = vcs.vcs_pr_view(pr_num, fields="body")
+    if rc != 0 or not current_body:
+        return False
+
+    if "### Blockers" not in current_body:
+        return False
+
+    ref_section = format_blocker_cross_reference(blockers, pr_url, fix_verdict)
+
+    resolution = ""
+    if fix_verdict in ("APPROVED", "BLOCKED"):
+        resolution = f"\n\n### Resolution\n**Verdict:** {fix_verdict}\n**Fix PR:** {pr_url}\n"
+
+    updated_body = re.sub(
+        r'(### Blockers\s*\n)(.*?)(?=\n### |\n## |\Z)',
+        r'\1' + ref_section + resolution,
+        current_body,
+        flags=re.DOTALL
+    )
+
+    _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body)
+    return rc == 0
+
+
+def auto_close_referenced_issues(pr_body, pr_num, pr_url):
+    """Scan PR body for Closes/Fixes references and comment on those issues.
+
+    Args:
+        pr_body: PR body text.
+        pr_num: PR number.
+        pr_url: PR URL.
+
+    Returns:
+        List of issue numbers that were closed.
+    """
+    if not pr_body or not pr_body.strip():
+        return []
+
+    refs = set()
+    for pattern in [r'[Cc]los(?:es?|ing)\s+#(\d+)', r'[Ff]ix(?:es?|ing)\s+#(\d+)']:
+        for match in re.finditer(pattern, pr_body):
+            refs.add(int(match.group(1)))
+
+    if not refs:
+        return []
+
+    closed = []
+    for issue_num in sorted(refs):
+        comment = f"Closed by PR #{pr_num}: {pr_url}"
+        _, _, rc = gh("issue", "comment", str(issue_num), "--repo", REPO,
+                       "--body", comment)
+        if rc == 0:
+            closed.append(issue_num)
+
+    return closed
+
+
+# ── F038: nm Review Section Builder ──
+
+def _build_nm_review_section(summary):
+    """Build ### nm Review markdown section from nm summary dict.
+
+    Richer version of _build_nm_review with Auto-Fix Applied section,
+    No findings fallback, and ### SHOULD FIX sub-heading.
+
+    Args:
+        summary: dict with keys risk, auto_fix_count, auto_fix_labels,
+                 key_findings, should_fix_items.
+
+    Returns:
+        Markdown string for ### nm Review section.
+    """
+    risk = summary.get("risk", "UNKNOWN")
+    auto_fix_count = summary.get("auto_fix_count", 0)
+    auto_fix_labels = summary.get("auto_fix_labels", [])
+    key_findings = summary.get("key_findings", "")
+    should_fix_items = summary.get("should_fix_items", [])
+
+    lines = [f"### nm Review", f"**Risk:** {risk}"]
+
+    if auto_fix_count > 0:
+        labels_str = "; ".join(auto_fix_labels)
+        lines.append("")
+        lines.append(f"**Auto-Fix Applied:** {auto_fix_count} issue(s) — {labels_str}")
+
+    if key_findings:
+        lines.append("")
+        lines.append(key_findings[:2000])
+    elif not should_fix_items:
+        lines.append("")
+        lines.append("No findings")
+
+    if should_fix_items:
+        lines.append("")
+        lines.append(f"### SHOULD FIX ({len(should_fix_items)})")
+        for item in should_fix_items[:5]:
+            detail = item.get("detail", str(item))[:120]
+            lines.append(f"- {detail}")
+
+    return "\n".join(lines)
+
+
+def _build_tl_review_body(existing_body, tl_section, nm_output):
+    """Build combined PR body with TL Review and optional nm Review sections.
+
+    Strips old TL Review and nm Review sections, then appends fresh ones.
+
+    Args:
+        existing_body: Current PR body text.
+        tl_section: New TL Review markdown section (e.g. "## Review\n\n...").
+        nm_output: Raw nm stdout for building nm Review section, or empty string.
+
+    Returns:
+        Tuple of (combined_body, has_nm) where has_nm is True if nm section was added.
+    """
+    stripped = re.sub(
+        r'\n### nm Review\n.*?(?=\n### |\n## |\Z)|\n## Review\n\n.*?(?=\n## |\Z)',
+        '',
+        existing_body,
+        flags=re.DOTALL
+    )
+
+    if nm_output and nm_output.strip():
+        nm_summary = _extract_nm_summary(nm_output)
+        nm_section = _build_nm_review_section(nm_summary)
+        combined = stripped + tl_section.rstrip() + "\n\n" + nm_section
+        return (combined, True)
+    else:
+        combined = stripped + tl_section
+        return (combined, False)
+
+
 def run_phase4_nm(feature, branch, impact, pr_url_in):
     """Phase 4: nm — adversarial review, parse PR. Returns dict with nm_ok, pr_url, risk."""
     global PROJECT_DIR, REPO
@@ -1533,22 +1722,31 @@ Report: what you fixed, commit hash."""
             print(f"  ⚠ Could not update PR body (gh api rc={edit_rc}): {edit_err[:200]}", flush=True)
 
     # Create GitHub Issues for SHOULD FIX items
-    should_fix_lines = [l for l in tl_output.split("\n") if "SHOULD FIX" in l.upper() and "—" in l]
-    if should_fix_lines:
-        print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items ──", flush=True)
-        for line in should_fix_lines[:5]:
-            parts = line.split("—", 1)
-            desc = parts[1].strip() if len(parts) > 1 else line.strip()
-            title = f"SHOULD FIX: {desc[:80]}"
+    should_fix_items = extract_should_fix_from_text(tl_output)
+    if should_fix_items:
+        print(f"\n── Creating GitHub Issues for {len(should_fix_items)} SHOULD FIX items ──", flush=True)
+        for item in should_fix_items[:5]:
+            detail = item.get("detail", "")
+            dimension = item.get("dimension", "")
+            location = item.get("location", "")
+            # Build title with dimension prefix
+            prefix = f"[{dimension}] " if dimension else ""
+            title = f"{prefix}SHOULD FIX: {detail[:80]}"
+            # Build body with ### What section
+            what_section = f"### What\n{detail}"
+            if location:
+                what_section += f"\n\n**Location:** `{location}`"
             body = (
-                f"## Tech Lead Review Finding\n\n"
-                f"**Feature:** {feature}\n"
-                f"**Branch:** {branch}\n"
-                f"**PR:** {pr_url or 'N/A'}\n"
-                f"**Verdict:** {verdict}\n"
-                f"**Spec:** {spec_path}\n\n"
-                f"### Finding\n{line.strip()}\n\n"
-                f"### Context\nFound during adversarial review of `{branch}` against the spec. "
+                f"{what_section}\n\n"
+                f"### Fix\nTBD — review the finding above and implement the fix.\n\n"
+                f"### Verify\nTBD — confirm the fix resolves the issue.\n\n"
+                f"### Context\n"
+                f"- **Feature:** {feature}\n"
+                f"- **Branch:** {branch}\n"
+                f"- **PR:** {pr_url or 'N/A'}\n"
+                f"- **Verdict:** {verdict}\n"
+                f"- **Spec:** {spec_path}\n\n"
+                f"### Source\nFound during adversarial review of `{branch}` against the spec. "
                 f"See the PR for full review details and other findings."
             )
             stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
