@@ -717,9 +717,6 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 
         spec_ref = f"{spec_path} for context" if spec_path else "the PR blocker descriptions above"
 
-        # Codebase map hint — coder reads this INSTEAD of exploring the full codebase
-        map_hint = _make_map_hint(PROJECT_DIR)
-
         if mode == "fix" and spec:
             # Fix mode: spec IS the fix prompt (blockers + constraints inline)
             coder_prompt = (
@@ -728,7 +725,6 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
                 f"FIRST: Switch to the existing branch — do NOT create a new one:\n"
                 f"  git checkout {branch} && git pull origin {branch}\n"
                 f"All fixes go on this branch. Do NOT create a new branch.\n"
-                + map_hint
             )
         else:
             # Extract target file hints from task extract for faster codebase navigation
@@ -786,7 +782,7 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
 ⚠️ Do NOT write spec files or planning documents. The spec already exists. Your output must be working Python code — .py source files and test files only.
 
-{map_hint}{file_hints}{code_context}
+{file_hints}{code_context}
 Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
   git fetch origin {branch} && git checkout {branch} && git pull origin {branch}
 
