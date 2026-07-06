@@ -123,3 +123,31 @@ def test_agent_module_compiles():
     with open(agent_path) as f:
         code = f.read()
     compile(code, agent_path, 'exec')
+
+
+# ── F040: No duplicate globals ─────────────────────
+
+def test_agent_no_duplicate_globals():
+    """Task 14: agent.py must not define its own copies of globals
+    that already exist in utils.py (API_KEY, PANEL_PORT, FALLBACK_MODELS,
+    _IMPORTING_PANEL). These should come from utils or ctx, not be
+    duplicated at module level."""
+    import ast
+    import agent
+
+    duplicate_names = {'API_KEY', 'PANEL_PORT', 'FALLBACK_MODELS', '_IMPORTING_PANEL'}
+
+    with open(agent.__file__) as f:
+        tree = ast.parse(f.read())
+
+    violations = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in duplicate_names:
+                    violations.append(f"{target.id} at line {node.lineno}")
+
+    if violations:
+        pytest.fail(
+            "agent.py still defines duplicate globals: " + ", ".join(violations)
+        )
