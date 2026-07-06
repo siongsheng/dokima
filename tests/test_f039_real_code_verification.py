@@ -195,3 +195,44 @@ class TestVerifyTestImportsExist:
         assert len(result) == 1, f"Expected 1 missing, got: {result}"
         assert "pipeline.nonexistent_pipeline_func" in result[0]
         assert "test_has_missing.py" in result[0]
+
+
+# ── Task 1: verify_source_function_exists tests ──
+
+class TestVerifySourceFunctionExists:
+    """Test cases for verify_source_function_exists()."""
+
+    def test_existing_stdlib_symbol_returns_true(self, panel):
+        """os.path exists → returns (True, None)."""
+        from utils import verify_source_function_exists
+        exists, error = verify_source_function_exists("os", "path")
+        assert exists is True, f"os.path should exist, got error={error}"
+
+    def test_nonexistent_module_returns_false(self, panel):
+        """Non-existent module → returns (False, error string)."""
+        from utils import verify_source_function_exists
+        exists, error = verify_source_function_exists("nonexistent_module_xyz_12345", "foo")
+        assert exists is False, f"Expected False for non-existent module, got {exists}"
+        assert error is not None
+        assert "ModuleNotFoundError" in error or "No module" in error or "modulenotfound" in error.lower()
+
+    def test_existing_module_missing_attr_returns_false(self, panel):
+        """json.loads exists, but json.nonexistent_attr does not → returns (False, error)."""
+        from utils import verify_source_function_exists
+        exists, error = verify_source_function_exists("json", "nonexistent_attr_xyz_12345")
+        assert exists is False, f"Expected False for missing attr, got {exists}"
+        assert error is not None
+        assert "has no attribute" in error.lower() or "AttributeError" in error
+
+    def test_existing_module_with_valid_attr_returns_true(self, panel):
+        """json.loads exists → returns (True, None)."""
+        from utils import verify_source_function_exists
+        exists, error = verify_source_function_exists("json", "loads")
+        assert exists is True, f"json.loads should exist, got error={error}"
+
+    def test_module_with_import_error_returns_false_gracefully(self, panel):
+        """Module that raises on import → returns (False, error) without crashing."""
+        from utils import verify_source_function_exists
+        exists, error = verify_source_function_exists("_this_module_definitely_does_not_exist_", "fake_func")
+        assert exists is False, f"Expected False, got {exists}"
+        assert error is not None
