@@ -1544,6 +1544,89 @@ def _extract_code_context(spec_text, task_text, project_dir):
         + "\n⚡ These are the EXACT lines to modify. Start here.\n"
     )
 
+# ── F028: Map Enrichments ──────────────────────────
+
+def load_map_enrichments(project_dir):
+    """Load enrichment entries from specs/.map-enrichments.json.
+    Returns list of entry dicts. Returns empty list on missing or malformed file."""
+    enrich_path = os.path.join(project_dir, "specs", ".map-enrichments.json")
+    if not os.path.exists(enrich_path):
+        return []
+    try:
+        with open(enrich_path) as f:
+            data = json.loads(f.read())
+        return data.get("entries", [])
+    except (json.JSONDecodeError, IOError, ValueError):
+        return []
+
+
+def save_map_enrichments(project_dir, feature_id, entries):
+    """Save enrichment entries to specs/.map-enrichments.json.
+    Deduplicates by feature ID (last run wins). Uses atomic write (tempfile + os.rename)."""
+    import tempfile as _tempfile
+
+    specs_dir = os.path.join(project_dir, "specs")
+    os.makedirs(specs_dir, exist_ok=True)
+
+    enrich_path = os.path.join(specs_dir, ".map-enrichments.json")
+
+    # Load existing entries
+    existing = load_map_enrichments(project_dir)
+
+    # Dedup: remove any existing entry with the same feature ID
+    existing = [e for e in existing if e.get("feature") != feature_id]
+
+    # Append new entries
+    existing.extend(entries)
+
+    # Atomic write
+    try:
+        fd, tmp_path = _tempfile.mkstemp(dir=specs_dir, suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            json.dump({"version": 1, "entries": existing}, f, indent=2)
+        os.rename(tmp_path, enrich_path)
+    except (IOError, OSError) as e:
+        print(f"  WARNING: Failed to save map enrichments: {e}", file=sys.stderr, flush=True)
+
+
+def extract_map_enrichments(strat_output, feature_id):
+    """Extract > MAP: lines from strategist output and build enrichment entries.
+    Category defaults to 'pattern'. WARNING: prefix → 'warning', ARCH: prefix → 'architecture'.
+    Guidance text truncated to 500 chars."""
+    import datetime as _datetime
+
+    lines = re.findall(r'^> MAP:\s*(.+)$', strat_output, re.MULTILINE)
+    if not lines:
+        return []
+
+    entries = []
+    timestamp = _datetime.datetime.utcnow().isoformat()
+    for line in lines:
+        guidance = line.strip()[:500]  # Truncate at 500 chars
+        if len(line.strip()) > 500:
+            print(f"  ⚠ Map enrichment truncated to 500 chars: {line.strip()[:80]}...", file=sys.stderr, flush=True)
+
+        # Classify category
+        upper = guidance.upper()
+        if upper.startswith("WARNING:"):
+            category = "warning"
+        elif upper.startswith("ARCH:"):
+            category = "architecture"
+        elif "convention" in guidance.lower():
+            category = "convention"
+        else:
+            category = "pattern"
+
+        entries.append({
+            "feature": feature_id,
+            "timestamp": timestamp,
+            "guidance": guidance,
+            "category": category,
+        })
+
+    return entries
+
+
 def generate_codebase_map(project_dir, full=False):
     """Generate a deterministic domain-aware codebase map for agents to read at session start.
     Uses file hashes to skip unchanged files (incremental mode).

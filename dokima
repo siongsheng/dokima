@@ -35,6 +35,7 @@ from utils import (slugify, git, gh, _safe_run, _sanitize_prompt, _validate_proj
                    handle_status, handle_stop, handle_kill, handle_list_crons,
                    extract_file_paths, _hash_output, _detect_truncation,
                    _extract_code_context, generate_codebase_map, _describe_file,
+                   load_map_enrichments, save_map_enrichments, extract_map_enrichments,
                    _extract_tl_verdict, _extract_tl_blockers,
                    _extract_convention_rules, _append_convention_rules,
                    extract_should_fix_from_text, _extract_nm_summary,
