@@ -3014,17 +3014,25 @@ def _update_docs_cache(new_version):
             shutil.rmtree(clone_dir, ignore_errors=True)
 
 
-def do_release(bump, project_dir, dry_run=False):
-    """Bump version, tag, generate changelog, and publish GitHub Release.
+def bump_version(bump, project_dir, dry_run=False):
+    """Validate preconditions, bump VERSION, commit, and tag.
+
+    Handles all pre-release validation and the version bump itself:
+    - Validates bump type, git repo, clean tree, up-to-date with origin
+    - Reads and bumps VERSION
+    - git add, commit, tag, and prune old tags
 
     Args:
         bump: 'patch', 'minor', or 'major'
         project_dir: Path to the git repository
-        dry_run: If True, print the plan and exit without making changes
+        dry_run: If True, print the bump plan and exit without making changes
 
-    Exits with code 1 on any precondition failure.
+    Returns:
+        (new_version, tag_name, default_branch) on success (or dry_run)
+
+    Raises SystemExit(1) on any precondition failure.
     """
-    import shutil, tempfile
+    import tempfile
 
     # 1. Validate bump type
     if bump not in ("patch", "minor", "major"):
@@ -3089,16 +3097,12 @@ def do_release(bump, project_dir, dry_run=False):
 
     tag_name = f"v{new_version}"
 
-    # 8. Dry run: print plan and exit
+    # 8. Dry run: print bump plan and return versions
     if dry_run:
         print(f"  [DRY RUN] Would bump: {current_version} → {new_version} ({bump})")
         print(f"  [DRY RUN] Would commit: chore: bump version to {tag_name}")
         print(f"  [DRY RUN] Would tag: {tag_name}")
-        print(f"  [DRY RUN] Would push to origin/{default_branch}")
-        print(f"  [DRY RUN] Would create GitHub Release: {tag_name}")
-        print(f"  [DRY RUN] Command: gh release create {tag_name} --generate-notes --title \"{tag_name}\" --target {default_branch}")
-        print(f"  [DRY RUN] Would update docs cache")
-        return
+        return new_version, tag_name, default_branch
 
     # 9. Write new VERSION atomically (temp + rename)
     print(f"  Bumping version: {current_version} → {new_version} ({bump})", flush=True)
@@ -3137,21 +3141,76 @@ def do_release(bump, project_dir, dry_run=False):
     # 13. Prune old tags
     _prune_old_tags()
 
-    # 14. Push branch
+    return new_version, tag_name, default_branch
+
+
+def generate_changelog(project_dir, tag_name, default_branch="main"):
+    """Generate release changelog from git history since the last tag.
+
+    Args:
+        project_dir: Path to the git repository
+        tag_name: The new tag being released (for context, not used in log range)
+        default_branch: The default branch name
+
+    Returns:
+        Changelog text as a string (git log --oneline output).
+    """
+    # Find the previous tag
+    stdout, _, rc = git("-C", project_dir, "describe", "--tags", "--abbrev=0")
+    last_tag = stdout.strip() if rc == 0 else ""
+
+    if last_tag:
+        # Commits since last tag
+        stdout, _, _ = git("-C", project_dir, "log", f"{last_tag}..HEAD", "--oneline")
+    else:
+        # First release — all commits
+        stdout, _, _ = git("-C", project_dir, "log", "--oneline")
+
+    return stdout
+
+
+def create_release(bump, project_dir, dry_run=False):
+    """Orchestrate a full release: bump, push, create GitHub Release, update docs.
+
+    Delegates to bump_version() for validation and version bumping,
+    then handles pushing, GitHub Release creation, and docs cache update.
+
+    Args:
+        bump: 'patch', 'minor', or 'major'
+        project_dir: Path to the git repository
+        dry_run: If True, print the full plan and exit without making changes
+
+    Returns:
+        (new_version, tag_name) on success.
+
+    Raises SystemExit(1) on any failure.
+    """
+    # Phase 1: Bump version (validation, VERSION write, commit, tag)
+    new_version, tag_name, default_branch = bump_version(bump, project_dir, dry_run)
+
+    # Dry run: print remaining plan (push + release + docs) and exit
+    if dry_run:
+        print(f"  [DRY RUN] Would push to origin/{default_branch}")
+        print(f"  [DRY RUN] Would create GitHub Release: {tag_name}")
+        print(f'  [DRY RUN] Command: gh release create {tag_name} --generate-notes --title "{tag_name}" --target {default_branch}')
+        print(f"  [DRY RUN] Would update docs cache")
+        return
+
+    # Phase 2: Push branch
     print(f"  Pushing to origin/{default_branch}...", flush=True)
     stdout, stderr, rc = git("-C", project_dir, "push", "origin", default_branch)
     if rc != 0:
         print(f"ERROR: Push failed: {stderr}", flush=True)
         sys.exit(1)
 
-    # 15. Push tag
+    # Phase 3: Push tag
     print(f"  Pushing tag {tag_name}...", flush=True)
     stdout, stderr, rc = git("-C", project_dir, "push", "origin", tag_name)
     if rc != 0:
         print(f"ERROR: Tag push failed: {stderr}", flush=True)
         sys.exit(1)
 
-    # 16. Create GitHub Release
+    # Phase 4: Create GitHub Release
     print(f"  Creating GitHub Release {tag_name}...", flush=True)
     stdout, stderr, rc = gh(
         "release", "create", tag_name,
@@ -3163,10 +3222,10 @@ def do_release(bump, project_dir, dry_run=False):
         print(f"ERROR: GitHub Release creation failed: {stderr}", flush=True)
         sys.exit(1)
 
-    # 17. Update docs cache (non-blocking)
+    # Phase 5: Update docs cache (non-blocking)
     _update_docs_cache(new_version)
 
-    # 18. Print summary
+    # Phase 6: Print summary
     print(f"\n  ✓ Released dokima {tag_name}")
     if stdout:
         # gh release create outputs the release URL
@@ -3174,6 +3233,24 @@ def do_release(bump, project_dir, dry_run=False):
             if line.startswith("https://"):
                 print(f"  Release: {line}")
                 break
+
+    return new_version, tag_name
+
+
+def do_release(bump, project_dir, dry_run=False):
+    """Bump version, tag, generate changelog, and publish GitHub Release.
+
+    Thin wrapper around create_release() that orchestrates the full
+    release pipeline: bump_version → push → GitHub Release → docs cache.
+
+    Args:
+        bump: 'patch', 'minor', or 'major'
+        project_dir: Path to the git repository
+        dry_run: If True, print the plan and exit without making changes
+
+    Exits with code 1 on any precondition failure.
+    """
+    create_release(bump, project_dir, dry_run)
 
 
 # Module-level original references for delegation checks (F022 modular refactor)
