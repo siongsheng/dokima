@@ -505,6 +505,8 @@ def verify_spec_quality(spec_text: str, confidence: str = "Medium") -> tuple:
         files_m = re.search(r'^\s*(?:\*\*)?Files?:?(?:\*\*)?[ \t]*(.*?)\s*$', body, re.MULTILINE)
         if not files_m or not files_m.group(1).strip():
             failures.append(f"Task {tid}: missing Files field")
+        elif files_m.group(1).strip().lower() in ('from spec', 'from spec files', 'n/a', 'tbd', 'see spec'):
+            failures.append(f"Task {tid}: Files field is generic placeholder — must specify actual file paths (not '{files_m.group(1).strip()}')")
 
         # Check Dependencies field
         deps_m = re.search(r'^\s*(?:\*\*)?Dependencies?:?(?:\*\*)?[ \t]*(.*?)\s*$', body, re.MULTILINE)
