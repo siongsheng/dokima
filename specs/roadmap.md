@@ -150,7 +150,7 @@
 ### F038: Surface nm and TL findings in PR body — when nm runs (Phase 4) or TL reviews (Phase 5), inject their findings into the PR body as `### nm Review` and `### TL Review` sections. At depth=vet+nm (no TL), nm findings still appear. Currently nm output is invisible (37K chars logged but never surfaced); TL findings only appear via a separate PR comment. SHOULD FIX items from both nm and TL are extracted as GitHub issues regardless of depth.
 **Priority:** P2
 **Dependencies:** F036, F037
-**Status:** [x] Done
+**Status:** [ ] Pending
 **User Story:** As a developer reviewing a pipeline PR, I see all review findings directly in the PR body — nm adversarial review and TL review each have their own section with risk assessment, blockers, and SHOULD FIX items. I don't need to dig through pipeline logs or click through to separate comments to know what was found.
 
 ### F032: Agent-as-Judge self-assessment: coder answers 3 questions before pushing — does every spec requirement have code, what am I least confident about, what would TL flag. Catches empty PRs at source.
@@ -163,7 +163,7 @@
 ### F033: Cross-run learning via conventions.md: when TL blocks a PR for a pattern violation, append a one-line rule to conventions.md. Next strategist reads it. No vector DB, no pattern extraction — human-readable rules that compound.
 **Priority:** P2
 **Dependencies:** None
-**Status:** [x] Done
+**Status:** [ ] Pending
 **User Story:** As a user, I can cross-run learning via conventions.md: when tl blocks a pr for a pattern violation, append a one-line rule to conventions.md. next strategist reads it. no vector db, no pattern extraction — human-readable rules that compound.
 
 
@@ -250,4 +250,10 @@
 **Dependencies:** None
 **Status:** [x] Done
 **User Story:** As a user, I can gitlab support: swap gh cli for glab or abstract vcs layer.
+
+### F039: Real-code verification in vet phase — after tests pass, verify that functions referenced in tests actually exist in source modules. Mock-based tests (autospec=True, create=True) can pass even when the real implementation is missing (F032, F033, F034, F038 all shipped with this bug). The vet phase should grep test files for function names and verify they're importable from the source modules. Blocks pipeline if tests pass but implementation is missing.
+**Priority:** P0
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a developer, I trust that when tests pass and vet approves, the implementation actually exists. Mock-based passing tests that hide missing functions are caught and blocked before merge.
 
