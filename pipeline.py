@@ -1688,13 +1688,26 @@ Report: what you fixed, commit hash."""
             print(f"  ⚠ Could not update PR body (gh api rc={edit_rc}): {edit_err[:200]}", flush=True)
 
     # Create GitHub Issues for SHOULD FIX items
-    should_fix_lines = [l for l in tl_output.split("\n") if "SHOULD FIX" in l.upper() and "—" in l]
-    if should_fix_lines:
-        print(f"\n── Creating GitHub Issues for {len(should_fix_lines)} SHOULD FIX items ──", flush=True)
-        for line in should_fix_lines[:5]:
-            parts = line.split("—", 1)
-            desc = parts[1].strip() if len(parts) > 1 else line.strip()
-            title = f"SHOULD FIX: {desc[:80]}"
+    should_fix_items = extract_should_fix_from_text(tl_output)
+    if should_fix_items:
+        print(f"\n── Creating GitHub Issues for {len(should_fix_items)} SHOULD FIX items ──", flush=True)
+        for item in should_fix_items[:5]:
+            detail = item.get("detail", "")
+            dimension = item.get("dimension", "")
+            location = item.get("location", "")
+
+            # Build title with dimension prefix when available
+            if dimension:
+                title = f"SHOULD FIX [{dimension}]: {detail[:80]}"
+            else:
+                title = f"SHOULD FIX: {detail[:80]}"
+
+            # Build body with ### What and ### Source sections
+            what_lines = [detail]
+            if location:
+                what_lines.append(f"\n**Location:** {location}")
+            what_section = "\n".join(what_lines)
+
             body = (
                 f"## Tech Lead Review Finding\n\n"
                 f"**Feature:** {feature}\n"
@@ -1702,9 +1715,12 @@ Report: what you fixed, commit hash."""
                 f"**PR:** {pr_url or 'N/A'}\n"
                 f"**Verdict:** {verdict}\n"
                 f"**Spec:** {spec_path}\n\n"
-                f"### Finding\n{line.strip()}\n\n"
-                f"### Context\nFound during adversarial review of `{branch}` against the spec. "
-                f"See the PR for full review details and other findings."
+                f"### What\n{what_section}\n\n"
+                f"### Fix\nApply the recommended change. "
+                f"See {pr_url} for full review details.\n\n"
+                f"### Verify\nRun tests and confirm the fix resolves the finding.\n\n"
+                f"### Source\nFound during adversarial review of `{branch}` against the spec. "
+                f"See {pr_url} for full review details and other findings."
             )
             stdout, stderr, rc = gh("issue", "create", "--repo", REPO,
                                     "--title", title, "--body", body)
