@@ -17,6 +17,9 @@ This repo IS the panel — you don't run the panel on itself.
 - Verify vet script: `bash -n scripts/vet`
 - Vet with real-code verification: `scripts/vet --verify-code .` (or `REAL_CODE_VERIFY=1 scripts/vet .`)
 - Standalone real-code check: `python3 scripts/verify_imports.py <project-dir>`
+- Demo real-code check (src+test fixtures): `python3 vet/real_code_check.py --src-dir src --test-dir tests`
+  - Exit 0: all mock.patch targets verified importable
+  - Exit 1: at least one mock.patch target is unresolvable (missing module or function)
 
 ## Testing
 1029 tests pass, 4 skipped, 1033 total (pytest). Coverage: core functions + control panel + edge cases.
