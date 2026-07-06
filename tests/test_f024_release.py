@@ -577,13 +577,16 @@ class TestBumpVersionFunction:
 
         def fake_git(*args):
             git_calls.append(args)
-            if args[0] == "diff-index":
+            # git() is called as git("-C", project_dir, subcommand, ...)
+            # args[0] is "-C", args[1] is project_dir, args[2] is the subcommand
+            subcmd = args[2] if len(args) > 2 else args[0]
+            if subcmd == "diff-index":
                 return ("", "", 0)
-            if args[0] == "fetch":
+            if subcmd == "fetch":
                 return ("", "", 0)
-            if args[0] == "rev-list":
+            if subcmd == "rev-list":
                 return ("", "", 0)
-            if args[0] == "rev-parse":
+            if subcmd == "rev-parse":
                 return ("main", "", 0)
             return ("", "", 0)
 
@@ -593,6 +596,8 @@ class TestBumpVersionFunction:
              patch("builtins.open", create=True) as mock_open, \
              patch("os.path.exists", return_value=True), \
              patch("os.replace"), \
+             patch("os.write"), \
+             patch("os.close"), \
              patch("tempfile.mkstemp", return_value=(99, "/tmp/.VERSION.abc")):
             mock_open.return_value.__enter__.return_value.read.return_value = "1.2.1\n"
             result = utils.bump_version("patch", "/tmp/test")
@@ -609,13 +614,14 @@ class TestBumpVersionFunction:
 
         def fake_git(*args):
             git_calls.append(args)
-            if args[0] == "diff-index":
+            subcmd = args[2] if len(args) > 2 else args[0]
+            if subcmd == "diff-index":
                 return ("", "", 0)
-            if args[0] == "fetch":
+            if subcmd == "fetch":
                 return ("", "", 0)
-            if args[0] == "rev-list":
+            if subcmd == "rev-list":
                 return ("", "", 0)
-            if args[0] == "rev-parse":
+            if subcmd == "rev-parse":
                 return ("main", "", 0)
             return ("", "", 0)
 
@@ -691,9 +697,10 @@ class TestGenerateChangelog:
 
         def fake_git(*args):
             git_calls.append(args)
-            if args[0] == "describe":
+            subcmd = args[2] if len(args) > 2 else args[0]
+            if subcmd == "describe":
                 return ("v1.1.0", "", 0)
-            if args[0] == "log":
+            if subcmd == "log":
                 return ("abc123 feat: add thing\ndef456 fix: bug", "", 0)
             return ("", "", 0)
 
@@ -708,9 +715,10 @@ class TestGenerateChangelog:
 
         def fake_git(*args):
             git_calls.append(args)
-            if args[0] == "describe":
+            subcmd = args[2] if len(args) > 2 else args[0]
+            if subcmd == "describe":
                 return ("", "fatal: no tag", 128)
-            if args[0] == "log":
+            if subcmd == "log":
                 return ("initial commit", "", 0)
             return ("", "", 0)
 
