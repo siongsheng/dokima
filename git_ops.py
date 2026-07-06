@@ -112,9 +112,7 @@ def _detect_default_branch(project_dir):
 
 def _set_gh_token():
     """Backward-compatible alias for _set_vcs_token()."""
-    import utils as _u
-
-    _u._set_vcs_token()
+    _set_vcs_token()
 
 
 def load_key():
