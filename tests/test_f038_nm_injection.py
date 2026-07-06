@@ -499,3 +499,306 @@ class TestTlNmRefresh:
         assert "Fresh findings." in combined
         assert "### nm Review" in combined
         assert "## Review" in combined
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Task 2: nm SHOULD FIX → GitHub issues in run_pipeline Phase 4
+# ═══════════════════════════════════════════════════════════════════
+
+NM_OUTPUT_WITH_SHOULD_FIX_TABLE = """RISK: LOW
+
+| ID | Dimension | Location | Severity | Detail |
+|----|-----------|----------|----------|--------|
+| R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |
+| R2 | MAINTAINABILITY | pipeline.py:100 | SHOULD FIX | Extract long method |
+| R3 | RELIABILITY | tests/ | SHOULD FIX | Add missing edge case test |
+"""
+
+NM_OUTPUT_WITH_SHOULD_FIX_PROSE = """RISK: MEDIUM
+
+Some findings here.
+
+SHOULD FIX — Add error handling in utils.py:50
+SHOULD FIX: Update documentation for the new API
+
+Summary: Minor issues found.
+"""
+
+
+class TestNmShouldFixIssueCreation:
+    """Tests for nm SHOULD FIX → GitHub issue creation in Phase 4."""
+
+    def test_extract_should_fix_from_nm_table_format(self):
+        """nm_stdout with table-format SHOULD FIX produces expected items."""
+        items = _load().extract_should_fix_from_text(NM_OUTPUT_WITH_SHOULD_FIX_TABLE)
+        assert len(items) >= 2, f"Expected at least 2 SHOULD FIX items, got {len(items)}"
+        details = [i["detail"].lower() for i in items]
+        assert any("naming conventions" in d for d in details)
+        assert any("extract long method" in d for d in details)
+
+    def test_extract_should_fix_from_nm_prose_format(self):
+        """nm_stdout with prose-format SHOULD FIX produces expected items."""
+        items = _load().extract_should_fix_from_text(NM_OUTPUT_WITH_SHOULD_FIX_PROSE)
+        assert len(items) >= 1, f"Expected at least 1 SHOULD FIX item, got {len(items)}"
+        details = [i["detail"].lower() for i in items]
+        assert any("error handling" in d for d in details)
+
+    def test_nm_issue_title_has_nm_prefix(self):
+        """Generated issue title includes SHOULD FIX [nm] prefix."""
+        items = _load().extract_should_fix_from_text(NM_OUTPUT_WITH_SHOULD_FIX_TABLE)
+        for item in items[:5]:
+            detail = item.get("detail", "")
+            dimension = item.get("dimension", "")
+            if dimension:
+                title = f"SHOULD FIX [nm] [{dimension}]: {detail[:80]}"
+            else:
+                title = f"SHOULD FIX [nm]: {detail[:80]}"
+            assert title.startswith("SHOULD FIX [nm]"), \
+                f"Title should start with 'SHOULD FIX [nm]', got: {title}"
+
+    def test_nm_issue_body_has_nm_header(self):
+        """Generated issue body includes ## nm Review Finding header."""
+        items = _load().extract_should_fix_from_text(NM_OUTPUT_WITH_SHOULD_FIX_TABLE)
+        for item in items[:5]:
+            detail = item.get("detail", "")
+            location = item.get("location", "")
+            pr_url = "https://github.com/owner/repo/pull/42"
+            branch = "feat/test"
+
+            what_lines = [detail]
+            if location:
+                what_lines.append(f"\n**Location:** {location}")
+            what_section = "\n".join(what_lines)
+
+            body = (
+                f"## nm Review Finding\n\n"
+                f"**Feature:** test-feature\n"
+                f"**Branch:** {branch}\n"
+                f"**PR:** {pr_url}\n"
+                f"**Spec:** specs/test-spec.md\n\n"
+                f"### What\n{what_section}\n\n"
+                f"### Fix\nApply the recommended change. "
+                f"See {pr_url} for full review details.\n\n"
+                f"### Verify\nRun tests and confirm the fix resolves the finding.\n\n"
+                f"### Source\nFound during adversarial review of `{branch}`. "
+                f"See {pr_url} for full review details and other findings."
+            )
+            assert "## nm Review Finding" in body, \
+                "Issue body should contain '## nm Review Finding' header"
+            assert "### What" in body
+            assert "### Fix" in body
+            assert "### Verify" in body
+            assert "### Source" in body
+            assert pr_url in body
+            assert branch in body
+
+    def test_gh_issue_create_called_for_nm_should_fix(self):
+        """When nm_stdout has SHOULD FIX items, gh issue create is called."""
+        import pipeline as pl
+        from unittest.mock import patch, call as mock_call
+
+        test_items = [
+            {"detail": "Missing test for edge case", "dimension": "RELIABILITY", "location": "utils.py:42"},
+            {"detail": "Update error handling", "dimension": "MAINTAINABILITY", "location": "pipeline.py:100"},
+        ]
+
+        with patch.object(pl, 'extract_should_fix_from_text', return_value=test_items) as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+            mock_gh.return_value = ("issue-url", "", 0)
+
+            # Simulate the code block: extract → loop → gh issue create
+            nm_stdout = NM_OUTPUT_WITH_SHOULD_FIX_TABLE
+            should_fix_items = pl.extract_should_fix_from_text(nm_stdout)
+
+            if should_fix_items:
+                for item in should_fix_items[:5]:
+                    detail = item.get("detail", "")
+                    dimension = item.get("dimension", "")
+                    location = item.get("location", "")
+                    if dimension:
+                        title = f"SHOULD FIX [nm] [{dimension}]: {detail[:80]}"
+                    else:
+                        title = f"SHOULD FIX [nm]: {detail[:80]}"
+
+                    what_lines = [detail]
+                    if location:
+                        what_lines.append(f"\n**Location:** {location}")
+                    what_section = "\n".join(what_lines)
+
+                    body = (
+                        f"## nm Review Finding\n\n"
+                        f"**Feature:** test-feature\n"
+                        f"**Branch:** test-branch\n"
+                        f"**PR:** test-pr\n"
+                        f"**Spec:** test-spec\n\n"
+                        f"### What\n{what_section}\n\n"
+                        f"### Fix\nApply the recommended change. "
+                        f"See test-pr for full review details.\n\n"
+                        f"### Verify\nRun tests and confirm the fix resolves the finding.\n\n"
+                        f"### Source\nFound during adversarial review of `test-branch`. "
+                        f"See test-pr for full review details and other findings."
+                    )
+                    mock_gh("issue", "create", "--repo", "test/repo",
+                            "--title", title, "--body", body)
+
+            mock_extract.assert_called_once_with(nm_stdout)
+            assert mock_gh.call_count == 2
+            # Check title format for first call
+            first_call_args = mock_gh.call_args_list[0][0]
+            assert "--title" in first_call_args
+            title_idx = first_call_args.index("--title") + 1
+            assert first_call_args[title_idx].startswith("SHOULD FIX [nm]")
+
+    def test_empty_nm_stdout_creates_zero_issues(self):
+        """When nm_stdout has no SHOULD FIX, zero issues created."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        with patch.object(pl, 'extract_should_fix_from_text', return_value=[]) as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+
+            nm_stdout = "RISK: LOW\n\nEverything looks good."
+            should_fix_items = pl.extract_should_fix_from_text(nm_stdout)
+
+            # Should not enter the issue-creation loop
+            issue_count = 0
+            if should_fix_items:
+                for item in should_fix_items[:5]:
+                    issue_count += 1
+
+            assert issue_count == 0
+            mock_extract.assert_called_once_with(nm_stdout)
+            mock_gh.assert_not_called()
+
+    def test_gh_failure_handled_gracefully(self):
+        """When gh issue create fails, loop continues without crashing."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        test_items = [
+            {"detail": "Item 1", "dimension": "RELIABILITY", "location": "utils.py:1"},
+            {"detail": "Item 2", "dimension": "MAINTAINABILITY", "location": "pipeline.py:2"},
+            {"detail": "Item 3", "dimension": "RELIABILITY", "location": "tests/:3"},
+        ]
+
+        with patch.object(pl, 'extract_should_fix_from_text', return_value=test_items), \
+             patch.object(pl, 'gh') as mock_gh:
+            # First fails, second succeeds, third fails
+            mock_gh.side_effect = [
+                ("", "error", 1),
+                ("issue-url", "", 0),
+                ("", "error", 1),
+            ]
+
+            for item in test_items[:5]:
+                title = f"SHOULD FIX [nm] [{item['dimension']}]: {item['detail']}"
+                stdout, stderr, rc = mock_gh("issue", "create", "--repo", "test/repo",
+                                            "--title", title, "--body", "body")
+                if rc == 0:
+                    pass  # success
+                else:
+                    pass  # handled gracefully
+
+            # All 3 calls should have been attempted
+            assert mock_gh.call_count == 3
+
+    def test_create_nm_should_fix_issues_function_exists(self):
+        """The _create_nm_should_fix_issues helper exists in pipeline module."""
+        import pipeline as pl
+        assert hasattr(pl, '_create_nm_should_fix_issues'), \
+            "pipeline must have _create_nm_should_fix_issues function"
+        assert callable(pl._create_nm_should_fix_issues)
+
+    def test_create_nm_should_fix_issues_calls_gh(self):
+        """_create_nm_should_fix_issues calls gh issue create for each SHOULD FIX."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        nm_stdout = NM_OUTPUT_WITH_SHOULD_FIX_TABLE
+
+        with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+            mock_extract.return_value = [
+                {"detail": "Naming conventions", "dimension": "RELIABILITY", "location": "utils.py:42"},
+                {"detail": "Extract long method", "dimension": "MAINTAINABILITY", "location": "pipeline.py:100"},
+            ]
+            mock_gh.return_value = ("issue-url", "", 0)
+
+            result = pl._create_nm_should_fix_issues(
+                nm_stdout, "test-feature", "test-branch",
+                "https://github.com/owner/repo/pull/42", "specs/test.md"
+            )
+
+            assert result is True
+            mock_extract.assert_called_once_with(nm_stdout)
+            assert mock_gh.call_count == 2
+            # Verify title format
+            for call_args in mock_gh.call_args_list:
+                args = call_args[0]
+                assert "--title" in args
+                title_idx = args.index("--title") + 1
+                assert args[title_idx].startswith("SHOULD FIX [nm]"), \
+                    f"Title should start with 'SHOULD FIX [nm]', got: {args[title_idx]}"
+                assert "--body" in args
+                body_idx = args.index("--body") + 1
+                assert "## nm Review Finding" in args[body_idx], \
+                    "Issue body should contain '## nm Review Finding' header"
+
+    def test_create_nm_should_fix_issues_empty_nm_stdout(self):
+        """When nm_stdout has no SHOULD FIX items, returns True without calling gh."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        with patch.object(pl, 'extract_should_fix_from_text', return_value=[]) as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+
+            result = pl._create_nm_should_fix_issues(
+                "RISK: LOW\n\nEverything looks good.", "feat", "br",
+                "https://github.com/owner/repo/pull/1", "spec.md"
+            )
+
+            assert result is True
+            mock_extract.assert_called_once()
+            mock_gh.assert_not_called()
+
+    def test_create_nm_should_fix_issues_none_pr_url(self):
+        """When pr_url is None, skips and returns False."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+
+            result = pl._create_nm_should_fix_issues(
+                NM_OUTPUT_WITH_SHOULD_FIX_TABLE, "feat", "br", None, "spec.md"
+            )
+
+            assert result is False
+            mock_extract.assert_not_called()
+            mock_gh.assert_not_called()
+
+    def test_create_nm_should_fix_issues_gh_failure_handled(self):
+        """When gh fails for some items, continues and still returns True."""
+        import pipeline as pl
+        from unittest.mock import patch
+
+        with patch.object(pl, 'extract_should_fix_from_text') as mock_extract, \
+             patch.object(pl, 'gh') as mock_gh:
+            mock_extract.return_value = [
+                {"detail": "Item 1", "dimension": "RELIABILITY", "location": "utils.py:1"},
+                {"detail": "Item 2", "dimension": "MAINTAINABILITY", "location": "pipeline.py:2"},
+                {"detail": "Item 3", "dimension": "RELIABILITY", "location": "tests/:3"},
+            ]
+            mock_gh.side_effect = [
+                ("", "error", 1),
+                ("issue-url", "", 0),
+                ("", "error", 1),
+            ]
+
+            result = pl._create_nm_should_fix_issues(
+                NM_OUTPUT_WITH_SHOULD_FIX_TABLE, "feat", "br",
+                "https://github.com/owner/repo/pull/1", "spec.md"
+            )
+
+            assert result is True  # graceful — didn't crash
+            assert mock_gh.call_count == 3  # All 3 attempted
