@@ -21,13 +21,12 @@ class TestVcsPrUpdateBody:
     """VCS-agnostic PR body update."""
 
     def test_vcs_pr_update_body_github(self):
-        """GitHub → calls gh api PATCH with correct args."""
+        """GitHub → calls gh api PATCH with correct args (via ctx)."""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'github'), \
-             patch.object(vcs, 'REPO', 'owner/repo'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_update_body(42, "Updated body")
+            stdout, stderr, rc = vcs.vcs_pr_update_body(42, "Updated body", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "gh"
@@ -39,13 +38,12 @@ class TestVcsPrUpdateBody:
             assert "body=Updated body" in args
 
     def test_vcs_pr_update_body_gitlab(self):
-        """GitLab → calls glab mr update with correct args."""
+        """GitLab → calls glab mr update with correct args (via ctx)."""
         import vcs
-        with patch.object(vcs, 'VCS_BACKEND', 'gitlab'), \
-             patch.object(vcs, 'REPO', 'group/project'), \
-             patch.object(subprocess, 'run') as mock_run:
+        ctx = _make_ctx(vcs_backend='gitlab', vcs_token_env='GLAB_TOKEN', repo='group/project')
+        with patch.object(subprocess, 'run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            stdout, stderr, rc = vcs.vcs_pr_update_body(42, "Updated body")
+            stdout, stderr, rc = vcs.vcs_pr_update_body(42, "Updated body", ctx=ctx)
             assert rc == 0
             args = mock_run.call_args[0][0]
             assert args[0] == "glab"
