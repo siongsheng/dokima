@@ -1,0 +1,4 @@
+# F040 Task 12 — Verification State
+# RED phase: verification pending
+status: pending
+baseline_commit: 15daadb
