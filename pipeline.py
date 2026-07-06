@@ -117,7 +117,7 @@ def _status_update(**kwargs):
     except Exception:
         pass
 
-def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode):
+def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, verdict, impact, branch, spec_path, strat_output, mode, ctx=None):
     """Post-pipeline: report, roadmap update, auto-merge. Returns continue_loop."""
     global PANEL_FEATURE, PROJECT_DIR, REPO, OUTPUT_LOG
     print("\n" + "═" * 55)
@@ -200,7 +200,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
     return continue_loop
 
 
-def discover_blocked_pr():
+def discover_blocked_pr(ctx=None):
     """Detect most recent BLOCKED PR via gh CLI.
     Returns {number, title, headRefName, body} or None."""
     # Allow test patching via dokima.discover_blocked_pr override (F022 modular refactor)
@@ -258,7 +258,7 @@ def discover_blocked_pr():
 
 
 
-def extract_blockers_from_pr(pr_body, pr_number=None):
+def extract_blockers_from_pr(pr_body, pr_number=None, ctx=None):
     """Parse PR body for blocker descriptions under ### Blockers section.
     Returns list of blocker strings with ARCHITECTURAL lines excluded.
     Falls back to PR comments if pr_number provided."""
@@ -302,7 +302,7 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
     return filtered
 
 
-def run_fix_mode_issue(project_dir, issue_number):
+def run_fix_mode_issue(project_dir, issue_number, ctx=None):
     """Fix a specific GitHub issue by extracting What/Fix/Verify sections and spawning coder.
 
     F034: dokima fix --issue N — pulls issue body, extracts structured fix
@@ -415,7 +415,7 @@ def run_fix_mode_issue(project_dir, issue_number):
 
 
 
-def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
+def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False, ctx=None):
     """Fix-mode orchestrator: detect BLOCKED PR, extract blockers, run fix pipeline."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
     PROJECT_DIR = project_dir
@@ -699,7 +699,7 @@ def run_fix_mode(project_dir, fix_all=False, skip_human_gate=False):
         generate_codebase_map(project_dir)
 
 
-def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next):
+def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, branch, depth, mode, is_next, ctx=None):
     """Phase 2: Coder — spawn coder, retry loop, TDD verification. Returns dict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD, LINT_CMD
     max_retries = 2
@@ -980,7 +980,7 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
     }
 
 
-def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet", confidence="High"):
+def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet", confidence="High", ctx=None):
     """Phase 3: vet — checkout branch, run tests, run build, create PR, merge worktrees.
     Returns dict with: nm_output, pr_url, coder_failed, verdict."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -1483,7 +1483,7 @@ def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
     return True
 
 
-def run_phase4_nm(feature, branch, impact, pr_url_in):
+def run_phase4_nm(feature, branch, impact, pr_url_in, ctx=None):
     """Phase 4: nm — adversarial review, parse PR. Returns dict with nm_ok, pr_url, risk."""
     global PROJECT_DIR, REPO
     print("\n── Phase 4: nm (adversarial review) ──", flush=True)
@@ -1627,7 +1627,7 @@ def _verify_pr_impact_alignment(pr_body: str, spec_text: str) -> str | None:
             "Regenerate PR body from spec or update Impact to match.")
 
 
-def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output=""):
+def run_phase5_tech_lead(feature, pr_url, branch, spec_path, impact, nm_output="", ctx=None):
     """Phase 5: Tech Lead — spawn tech lead, handle BLOCKED/CHANGES_REQUESTED verdicts, auto-fix loop.
     Returns dict with: verdict, tl_output, changes_made."""
     global PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD
@@ -1859,7 +1859,7 @@ Report: what you fixed, commit hash."""
     return {"verdict": verdict, "tl_output": tl_output}
 
 
-def run_phase1_strategist(feature, user_answers_prefill):
+def run_phase1_strategist(feature, user_answers_prefill, ctx=None):
     """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
     Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
     global PROJECT_DIR, PROFILES, REAL_HOME
@@ -2518,7 +2518,7 @@ Output NOTHING ELSE."""
     }
 
 
-def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None):
+def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None, ctx=None):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO
 
