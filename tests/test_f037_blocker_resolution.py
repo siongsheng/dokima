@@ -1,8 +1,18 @@
 """Tests for F037: Blocker Resolution Tracking."""
 import subprocess
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _make_ctx(vcs_backend='github', vcs_token_env='GH_TOKEN', repo='owner/repo'):
+    """Create a minimal ctx-like object for vcs function tests."""
+    return SimpleNamespace(
+        vcs_backend=vcs_backend,
+        vcs_token_env=vcs_token_env,
+        repo=repo,
+    )
 
 
 # ── Task 1: vcs_pr_update_body() ────────────────────────────────────
