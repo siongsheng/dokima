@@ -1381,8 +1381,15 @@ def _verify_test_imports_exist(project_dir):
     if not os.path.isdir(tests_dir):
         return []
 
-    # Hardcoded module list (auto-discover replaced in Task 5)
-    source_modules = ["pipeline", "utils", "agent", "tasks", "roadmap", "vcs", "status"]
+    # Auto-discover source modules: glob *.py in project_dir, exclude __init__.py and test_*
+    import glob
+    source_modules = []
+    for pyfile in sorted(glob.glob(os.path.join(project_dir, "*.py"))):
+        basename = os.path.basename(pyfile)
+        mod_name = os.path.splitext(basename)[0]
+        if basename == "__init__.py" or basename.startswith("test_"):
+            continue
+        source_modules.append(mod_name)
 
     # Load each source module and build set of exportable names
     source_names = {}  # module_name -> set of dir() names
