@@ -803,193 +803,18 @@ def _extract_code_context(spec_text, task_text, project_dir):
     )
 
 # ── F028: Map Enrichments ──────────────────────────
-
-def load_map_enrichments(project_dir):
-    """Load enrichment entries from specs/.map-enrichments.json.
-    Returns list of entry dicts. Returns empty list on missing or malformed file."""
-    enrich_path = os.path.join(project_dir, "specs", ".map-enrichments.json")
-    if not os.path.exists(enrich_path):
-        return []
-    try:
-        with open(enrich_path) as f:
-            data = json.loads(f.read())
-        return data.get("entries", [])
-    except (json.JSONDecodeError, IOError, ValueError):
-        return []
-
-
-def save_map_enrichments(project_dir, feature_id, entries):
-    """Save enrichment entries to specs/.map-enrichments.json.
-    Deduplicates by feature ID (last run wins). Uses atomic write (tempfile + os.rename)."""
-    import tempfile as _tempfile
-
-    specs_dir = os.path.join(project_dir, "specs")
-    os.makedirs(specs_dir, exist_ok=True)
-
-    enrich_path = os.path.join(specs_dir, ".map-enrichments.json")
-
-    # Load existing entries
-    existing = load_map_enrichments(project_dir)
-
-    # Dedup: remove any existing entry with the same feature ID
-    existing = [e for e in existing if e.get("feature") != feature_id]
-
-    # Append new entries
-    existing.extend(entries)
-
-    # Atomic write
-    try:
-        fd, tmp_path = _tempfile.mkstemp(dir=specs_dir, suffix=".json")
-        with os.fdopen(fd, "w") as f:
-            json.dump({"version": 1, "entries": existing}, f, indent=2)
-        os.rename(tmp_path, enrich_path)
-    except (IOError, OSError) as e:
-        print(f"  WARNING: Failed to save map enrichments: {e}", file=sys.stderr, flush=True)
-
-
-def extract_map_enrichments(strat_output, feature_id):
-    """Extract > MAP: lines from strategist output and build enrichment entries.
-    Category defaults to 'pattern'. WARNING: prefix → 'warning', ARCH: prefix → 'architecture'.
-    Guidance text truncated to 500 chars."""
-    import datetime as _datetime
-
-    lines = re.findall(r'^> MAP:\s*(.+)$', strat_output, re.MULTILINE)
-    if not lines:
-        return []
-
-    entries = []
-    timestamp = _datetime.datetime.utcnow().isoformat()
-    for line in lines:
-        guidance = line.strip()[:500]  # Truncate at 500 chars
-        if len(line.strip()) > 500:
-            print(f"  ⚠ Map enrichment truncated to 500 chars: {line.strip()[:80]}...", file=sys.stderr, flush=True)
-
-        # Classify category
-        upper = guidance.upper()
-        if upper.startswith("WARNING:"):
-            category = "warning"
-        elif upper.startswith("ARCH:"):
-            category = "architecture"
-        elif "convention" in guidance.lower():
-            category = "convention"
-        else:
-            category = "pattern"
-
-        entries.append({
-            "feature": feature_id,
-            "timestamp": timestamp,
-            "guidance": guidance,
-            "category": category,
-        })
-
-    return entries
-
+# load_map_enrichments moved to codebase_map.py — imported below
+# save_map_enrichments moved to codebase_map.py — imported below
+# extract_map_enrichments moved to codebase_map.py — imported below
 
 # codebase map functions moved to codebase_map.py — imported below
 
 
 
+# _build_test_map moved to codebase_map.py — imported below
+# _find_key_files moved to codebase_map.py — imported below
+# _describe_file moved to codebase_map.py — imported below
 
-def _build_test_map(all_files):
-    """Build the Test Map section: test file → source module mapping."""
-    test_to_source = {}
-    source_files = set()
-
-    for rel_path, _ in all_files:
-        basename = os.path.basename(rel_path)
-        if basename.startswith('test_'):
-            # test_foo.py → foo.py or foo
-            rest = basename[5:]  # remove 'test_'
-            rest_no_ext = os.path.splitext(rest)[0]
-            test_to_source[rel_path] = rest_no_ext
-        elif not rel_path.startswith('tests/'):
-            name_no_ext = os.path.splitext(basename)[0]
-            source_files.add(name_no_ext)
-
-    lines = []
-    for test_path in sorted(test_to_source.keys()):
-        target = test_to_source[test_path]
-        if target in source_files:
-            lines.append(f"- {test_path} → {target}")
-        else:
-            lines.append(f"- {test_path} → (no matching source module)")
-
-    if not lines:
-        return "No test files detected."
-
-    return '\n'.join(lines)
-
-
-def _find_key_files(all_files):
-    """Find key entry-point files for the Start Here section."""
-    key_patterns = ['dokima', 'main.py', 'main.ts', 'main.js', 'index.ts', 'index.js',
-                    'pipeline.py', 'pipeline.ts', 'utils.py', 'agent.py',
-                    'app.py', 'server.py', 'server.ts']
-    found = []
-    for rel_path, _ in all_files:
-        basename = os.path.basename(rel_path)
-        if basename in key_patterns:
-            found.append(basename)
-    # Limit and order
-    return found[:6]
-
-def _describe_file(filename, content, rel_path):
-    """Extract a one-line description from a source file.
-    Uses exports, JSDoc, docstrings, and inferred roles."""
-    lines = content.split('\n')
-    ext = os.path.splitext(filename)[1]
-    basename = os.path.splitext(filename)[0]
-
-    # Try first docstring/comment
-    for line in lines[:10]:
-        line = line.strip()
-        if line.startswith('# ') or line.startswith('// '):
-            desc = line[2:].strip()
-            if len(desc) > 5:
-                return desc
-        if line.startswith('/**') or line.startswith('/*'):
-            continue
-    # Try JSDoc
-    for i, line in enumerate(lines):
-        if '/**' in line and i + 1 < len(lines):
-            next_line = lines[i + 1].strip().lstrip('*').strip()
-            if next_line and len(next_line) > 5:
-                return next_line
-
-    # Exports for JS/TS
-    if ext in ('.ts', '.tsx', '.js', '.jsx'):
-        exports = []
-        for line in lines[:50]:
-            m = re.search(r'export\s+(?:default\s+)?(?:function|class|const|interface|type|enum)\s+(\w+)', line)
-            if m:
-                exports.append(m.group(1))
-        if exports:
-            return f"Exports: {', '.join(exports[:5])}"
-
-    # Functions/classes for Python
-    if ext == '.py':
-        exports = []
-        for line in lines[:50]:
-            m = re.search(r'^(?:def|class)\s+(\w+)', line)
-            if m:
-                exports.append(m.group(1))
-        if exports:
-            return f"Exports: {', '.join(exports[:5])}"
-
-    # Fallback: infer from filename
-    role_map = {
-        'layout': 'RootLayout: <html> + <body> + children',
-        'page': 'Page component',
-        'globals': 'Global styles / CSS variables',
-        'config': 'Configuration / constants',
-        'setup': 'Test setup / fixtures',
-        'index': 'Entry point / barrel export',
-    }
-    for key, desc in role_map.items():
-        if key in basename.lower():
-            return desc
-
-    return ""
 # _extract_tl_verdict moved to spec_extract.py — imported below
 # _extract_tl_blockers moved to spec_extract.py — imported below
 # format_blocker_cross_reference moved to spec_extract.py — imported below
@@ -1692,7 +1517,7 @@ def collect_init_interview_answers(questions, interview_state, path=None):
     return (user_answers, 0)
 
 # ── Re-exports from domain modules (F041: Split utils.py) ──────────
-from codebase_map import generate_codebase_map, _build_domain_map, _build_impact_map  # noqa: E402,F401
+from codebase_map import generate_codebase_map, _build_domain_map, _build_impact_map, _classify_domain, load_map_enrichments, save_map_enrichments, extract_map_enrichments, _build_test_map, _find_key_files, _describe_file  # noqa: E402,F401
 from control_panel import handle_status, handle_stop, handle_kill, handle_list_crons  # noqa: E402,F401
 from spec_extract import extract_pr_sections, clean_spec_content, verify_spec_quality, _check_pr_body_quality, extract_should_fix_from_text, _extract_nm_summary, extract_issue_sections, extract_agent_messages, extract_file_paths, _extract_tl_verdict, _extract_tl_blockers, format_blocker_cross_reference, _extract_convention_rules, _append_convention_rules  # noqa: E402,F401
 from git_ops import git, gh, detect_repo, load_key, load_github_token, _safe_run, detect_commands, _detect_referenced_repo, _detect_default_branch, _set_vcs_token, _set_gh_token, _load_token_from_env_file, try_auto_merge, _supplement_pr_sections  # noqa: E402,F401
