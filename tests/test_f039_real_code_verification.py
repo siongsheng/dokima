@@ -41,7 +41,7 @@ class TestVerifyTestImportsExist:
             f.write("def test_slugify():\n")
             f.write("    assert slugify('hello') == 'hello'\n")
 
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         assert result == [], f"Expected empty list, got: {result}"
 
     def test_missing_function_flagged(self, panel, temp_project):
@@ -53,7 +53,7 @@ class TestVerifyTestImportsExist:
             f.write("def test_thing():\n")
             f.write("    pass\n")
 
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         assert len(result) == 1, f"Expected 1 missing, got: {result}"
         assert "utils.nonexistent_func" in result[0]
         assert "test_bad.py" in result[0]
@@ -67,7 +67,7 @@ class TestVerifyTestImportsExist:
             f.write("def test_uses_secret():\n")
             f.write("    pass\n")
 
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         assert result == [], f"Private imports should be skipped, got: {result}"
 
     def test_no_tests_dir_returns_empty(self, panel, temp_project):
@@ -76,7 +76,7 @@ class TestVerifyTestImportsExist:
         import shutil
         shutil.rmtree(os.path.join(temp_project, "tests"))
 
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         assert result == []
 
     def test_module_load_failure_skipped_gracefully(self, panel, temp_project):
@@ -91,7 +91,7 @@ class TestVerifyTestImportsExist:
             f.write("from bad_mod import something\n")
 
         # Should not crash — just skip the bad module
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         # 'something' is not in bad_mod (module failed to load), so it's skipped
         # The function should not crash
         assert isinstance(result, list)
@@ -102,5 +102,20 @@ class TestVerifyTestImportsExist:
         with open(test_file, "w") as f:
             f.write("this is not valid python @@@@\n")
 
-        result = panel._verify_test_imports_exist(temp_project)
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
         assert isinstance(result, list)  # should not crash
+
+    def test_auto_discovers_source_modules(self, panel, temp_project):
+        """Module not in hardcoded list is still discovered and checked."""
+        # Create a source module NOT in the hardcoded list
+        with open(os.path.join(temp_project, "custom_mod.py"), "w") as f:
+            f.write("def custom_func(): pass\n")
+
+        test_file = os.path.join(temp_project, "tests", "test_custom.py")
+        with open(test_file, "w") as f:
+            f.write("from custom_mod import nonexistent_in_custom\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # custom_mod must be discovered and checked — nonexistent_in_custom flagged
+        assert len(result) == 1, f"Expected 1 missing from custom_mod, got: {result}"
+        assert "custom_mod.nonexistent_in_custom" in result[0]
