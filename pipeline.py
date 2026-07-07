@@ -734,11 +734,14 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 
         if mode == "fix" and spec:
             # Fix mode: spec IS the fix prompt (blockers + constraints inline)
+            # F046: Mandatory pre-flight branch verification
             coder_prompt = (
                 spec + "\n\n"
-                f"### Branch Setup\n"
-                f"FIRST: Switch to the existing branch — do NOT create a new one:\n"
-                f"  git checkout {branch} && git pull origin {branch}\n"
+                f"### Branch Setup — MANDATORY PRE-FLIGHT\n"
+                f"MANDATORY PRE-FLIGHT — Before writing ANY code, run:\n"
+                f"  git fetch origin {branch} && git checkout {branch} && echo 'BRANCH VERIFIED: {branch}'\n"
+                f"If the checkout fails, STOP immediately and report the error.\n"
+                f"Do NOT write any code until you confirm you are on branch '{branch}'.\n"
                 f"All fixes go on this branch. Do NOT create a new branch.\n"
             )
         else:
