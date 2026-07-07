@@ -222,6 +222,18 @@ def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str):
     git("push", "origin", DEFAULT_BRANCH)
     print(f"  Roadmap updated: {feature_id} → {action}")
 
+def _has_code_changes(pr_num: str) -> bool:
+    """Check if a PR contains actual source code changes (not just spec files).
+    Calls gh pr diff --stat and filters out specs/ paths.
+    Returns True if at least one non-specs/ file was changed."""
+    diff_out, _, drc = gh("pr", "diff", pr_num, "--repo", REPO, "--stat")
+    code_files = [l for l in (diff_out or "").split("\n")
+                  if l.strip() and not l.startswith("specs/")
+                  and not l.startswith(" .../") and "file changed" not in l
+                  and l.strip()]
+    return len(code_files) > 0
+
+
 def auto_repair_status(features: list, roadmap_path: str) -> int:
     """Check for features not marked done that have merged PRs → auto-mark [x].
        Returns count of repaired features."""
@@ -250,15 +262,9 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
                 continue
 
             # Guard: only auto-repair if the PR had real code changes (not just specs)
-            if pr_num:
-                diff_out, _, drc = gh("pr", "diff", str(pr_num), "--repo", REPO, "--stat")
-                code_files = [l for l in (diff_out or "").split("\n")
-                              if l.strip() and not l.startswith("specs/")
-                              and not l.startswith(" .../") and "file changed" not in l
-                              and l.strip()]
-                if not code_files:
-                    print(f"  Auto-repair: SKIPPED {f.id} — merged PR #{pr_num} has no code changes (spec-only)")
-                    continue
+            if pr_num and not _has_code_changes(str(pr_num)):
+                print(f"  Auto-repair: SKIPPED {f.id} — merged PR #{pr_num} has no code changes (spec-only)")
+                continue
 
             update_roadmap_status(roadmap_path, f.id, "done")
             print(f"  Auto-repair: {f.id} → [x] Done (merged PR: {pr_url})")
