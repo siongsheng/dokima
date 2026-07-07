@@ -248,3 +248,140 @@ This is the impact section.
         assert sections["what"] == "Fix the login bug in `auth.py`."
         assert "Add validation" in sections["fix"]
         assert sections["file_path"] == "auth.py"
+
+    # ── F044: _trim_to_sentences tests ──
+
+    def test_trim_to_sentences_two(self):
+        """_trim_to_sentences returns first 2 sentences from 3-sentence input."""
+        import spec_extract
+        text = "First sentence. Second sentence. Third sentence."
+        result = spec_extract._trim_to_sentences(text, max_sentences=2, max_chars=500)
+        assert "First sentence." in result
+        assert "Second sentence." in result
+        assert "Third sentence." not in result
+        assert result.endswith("...")
+
+    def test_trim_to_sentences_char_cap(self):
+        """_trim_to_sentences truncates at max_chars with ellipsis."""
+        import spec_extract
+        text = "A" * 210 + ". B."
+        result = spec_extract._trim_to_sentences(text, max_sentences=2, max_chars=200)
+        assert len(result) <= 200 + 3  # text + "..."
+        assert result.endswith("...")
+
+    def test_trim_to_sentences_abbreviations(self):
+        """_trim_to_sentences does not split on Dr. Mr. Inc. i.e. e.g. etc."""
+        import spec_extract
+        text = "Visit Dr. Smith then. Meet Mr. Jones later."
+        result = spec_extract._trim_to_sentences(text, max_sentences=2, max_chars=500)
+        assert "Dr. Smith then." in result
+        assert "Mr. Jones later." in result
+
+    # ── F044: _filter_impact_product_only tests ──
+
+    def test_filter_impact_strips_meta(self):
+        """_filter_impact_product_only removes meta-commentary phrases."""
+        import spec_extract
+        text = "Here is the COMPLETE corrected spec for F044.\nThis reduces PR body noise by 80%."
+        result = spec_extract._filter_impact_product_only(text)
+        assert "Here is the COMPLETE corrected spec" not in result
+        assert "reduces PR body noise by 80%" in result
+
+    def test_filter_impact_strips_chatter(self):
+        """_filter_impact_product_only removes model sign-off lines."""
+        import spec_extract
+        text = "This fixes a race condition.\nDo you want me to proceed?\nShall I implement this now?"
+        result = spec_extract._filter_impact_product_only(text)
+        assert "Do you want me to" not in result
+        assert "Shall I" not in result
+        assert "fixes a race condition" in result
+
+    def test_filter_impact_preserves_product(self):
+        """_filter_impact_product_only preserves product-value text."""
+        import spec_extract
+        text = "This reduces PR body noise by 80%.\n\nUsers will see cleaner output."
+        result = spec_extract._filter_impact_product_only(text)
+        assert "reduces PR body noise by 80%" in result
+        assert "Users will see cleaner output" in result
+
+    # ── F044: extract_pr_sections trimmed output tests ──
+
+    def test_extract_pr_sections_trimmed_why(self):
+        """extract_pr_sections Why section is trimmed to 2 sentences max 200 chars."""
+        spec = (
+            "Position: Sentence one. Sentence two. Sentence three. Sentence four. "
+            "Sentence five which is extra.\n\n"
+            "## Impact\n\nThis is the impact section.\n\n"
+            "## What Changed\n- Added feature X\n"
+        )
+        import spec_extract
+        result = spec_extract.extract_pr_sections(spec, "Test Feature")
+        assert "## Why" in result
+        # Should not contain all 5 sentences
+        assert "Sentence five" not in result
+
+    def test_extract_pr_sections_clean_impact(self):
+        """extract_pr_sections Impact section has meta-commentary stripped."""
+        spec = (
+            "## Impact\n\n"
+            "Here is the COMPLETE corrected spec for F044.\n"
+            "This feature improves PR body quality.\n"
+            "Do you want me to proceed?\n\n"
+            "## What Changed\n- Added trim helpers\n"
+        )
+        import spec_extract
+        result = spec_extract.extract_pr_sections(spec, "Test Feature")
+        assert "## Impact" in result
+        assert "improves PR body quality" in result
+        assert "Here is the COMPLETE corrected spec" not in result
+        assert "Do you want me to" not in result
+
+    # ── F044: _strip_nm_noise tests ──
+
+    def test_strip_nm_noise_shell_commands(self):
+        """_strip_nm_noise removes shell command blocks."""
+        import spec_extract
+        text = "Running tests.\n```bash\n$ npm test\n$ cargo build\n```\n\nResult: all pass."
+        result = spec_extract._strip_nm_noise(text)
+        assert "$ npm test" not in result
+        assert "```bash" not in result
+        assert "Result: all pass." in result
+
+    def test_strip_nm_noise_reasoning(self):
+        """_strip_nm_noise removes reasoning noise lines."""
+        import spec_extract
+        text = "Let me think about this approach.\nI should check the file first.\n\nRISK: HIGH - possible race condition."
+        result = spec_extract._strip_nm_noise(text)
+        assert "Let me think" not in result
+        assert "I should" not in result
+        assert "RISK: HIGH" in result
+
+    def test_strip_nm_noise_preserves_findings(self):
+        """_strip_nm_noise preserves risk findings and file references."""
+        import spec_extract
+        text = "RISK: HIGH\n\nMissing error handling in utils.py:42\n\nLet me check the code.\n"
+        result = spec_extract._strip_nm_noise(text)
+        assert "RISK: HIGH" in result
+        assert "Missing error handling in utils.py:42" in result
+        assert "Let me check" not in result
+
+    def test_extract_nm_summary_noise_stripped(self):
+        """_extract_nm_summary key_findings is free of noise after filtering."""
+        import spec_extract
+        nm_output = (
+            "You are running adversarial review.\n"
+            "STAGE 1: Analyzing code...\n"
+            "$ npm test\n"
+            "Let me think about the results.\n"
+            "RISK: MEDIUM\n"
+            "Missing null check in handler.py:88\n"
+            "I should verify the fix.\n"
+        )
+        summary = spec_extract._extract_nm_summary(nm_output)
+        kf = summary["key_findings"]
+        assert "$ npm test" not in kf
+        assert "Let me think" not in kf
+        assert "I should" not in kf
+        # RISK captured in risk field, intentionally excluded from key_findings
+        assert summary["risk"] == "MEDIUM"
+        assert "Missing null check in handler.py:88" in kf

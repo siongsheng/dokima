@@ -287,7 +287,7 @@
 ### F044: PR body quality — `extract_pr_sections()` currently dumps the strategist's full spec into Why/Impact instead of extracting concise summaries. Fix: trim Why to first 2 sentences (max 200 chars), Impact to product-value-only (strip meta-commentary and internal thinking), strip nm Review of shell commands and reasoning noise.
 **Priority:** P1
 **Dependencies:** F038
-**Status:** [ ] Pending
+**Status:** [~] In Progress
 **User Story:** As a reviewer, I open a PR and immediately understand what changed and why — no walls of strategist text, no shell commands in review sections.
 
 ### F045: Roadmap auto-update verification — `commit_roadmap_update()` marks features Done without verifying implementation exists. When a pipeline merges, it updates ALL feature statuses in roadmap.md — including unrelated ones. Fix: only update the specific feature that was built, and verify source changes exist before marking Done.

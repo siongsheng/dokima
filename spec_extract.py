@@ -11,6 +11,203 @@ import datetime
 import os
 import re
 
+# ── Abbreviation patterns that should NOT be treated as sentence boundaries ──
+_ABBREVIATIONS = {
+    'Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Capt', 'Col', 'Gen', 'Lt', 'Maj',
+    'Sr', 'Jr', 'St', 'Inc', 'Ltd', 'Co', 'Corp',
+    'i.e', 'e.g', 'etc', 'vs', 'viz', 'aka', 'et al',
+    'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+}
+
+
+def _trim_to_sentences(text: str, max_sentences: int = 2, max_chars: int = 200) -> str:
+    """Trim text to max_sentences sentence boundaries, capped at max_chars.
+
+    Preserves abbreviations (Dr., Mr., Inc., i.e., e.g., etc.) so they
+    are not treated as sentence boundaries. Returns the trimmed string
+    with '...' appended if truncation occurred.
+    """
+    if not text:
+        return text
+
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+
+    # Split on sentence boundaries: punctuation + space + capital letter
+    # But skip abbreviation patterns
+    sentences = []
+    i = 0
+    n = len(stripped)
+    truncated = False
+    total_chars = 0
+
+    while i < n and len(sentences) < max_sentences:
+        # Check char cap: if we've exceeded max_chars, stop
+        remaining = max_chars - total_chars
+        if remaining <= 0:
+            truncated = True
+            break
+
+        # Find next sentence boundary: .!? followed by whitespace then capital letter
+        boundary = -1
+        for j in range(i, min(i + remaining + 1, n)):
+            if stripped[j] in '.!?':
+                # Check: followed by whitespace then capital letter
+                k = j + 1
+                while k < n and stripped[k] in ' \t':
+                    k += 1
+                if k < n and stripped[k].isupper() and stripped[k].isalpha():
+                    # Check abbreviation: word before dot is not an abbreviation
+                    word_start = j - 1
+                    while word_start >= i and stripped[word_start].isalpha():
+                        word_start -= 1
+                    word_start += 1
+                    word_before = stripped[word_start:j]
+                    if word_before in _ABBREVIATIONS:
+                        continue  # skip this boundary, keep scanning
+                    boundary = j
+                    break  # take the FIRST valid boundary
+
+        if boundary >= 0:
+            # Count this sentence from i to boundary+1 (include punctuation)
+            sent = stripped[i:boundary + 1].strip()
+            if sent:
+                sentences.append(sent)
+                total_chars += len(sent)
+            i = boundary + 1
+            # Skip whitespace after sentence end
+            while i < n and stripped[i] in ' \t\n':
+                i += 1
+        else:
+            # No more sentence boundaries within char cap: take remaining text
+            # up to char cap as a single sentence
+            remaining_text = stripped[i:i + remaining].rstrip()
+            if remaining_text:
+                sentences.append(remaining_text)
+                total_chars += len(remaining_text)
+            # If there's text beyond what we captured, it's truncated
+            if i + remaining < n:
+                truncated = True
+            i = n
+            break
+
+    if truncated or i < n or len(sentences) > max_sentences:
+        # Truncation occurred — add ellipsis
+        result = ' '.join(sentences)
+        if len(result) > max_chars:
+            result = result[:max_chars].rstrip()
+        return result + '...'
+
+    result = ' '.join(sentences)
+    return result
+
+
+def _filter_impact_product_only(text: str) -> str:
+    """Filter Impact text to product-value content only.
+
+    Strips:
+    - Meta-commentary phrases ('Here is the COMPLETE corrected spec', etc.)
+    - Model sign-off / chatter lines (Do you want me to, Shall I, etc.)
+    - Ponytail Guard verdict blocks
+    - Strategist instruction echoes ('Write a spec for F044')
+    """
+    if not text:
+        return text
+
+    result = text
+
+    # ── Remove Ponytail Guard blocks ──
+    result = re.sub(
+        r'(?:\n|^)\s*Ponytail Guard verdict:.*?(?:\n|$)',
+        '\n', result, flags=re.DOTALL | re.IGNORECASE
+    )
+
+    # ── Meta-commentary phrases ──
+    meta_patterns = [
+        r'Here is the COMPLETE corrected spec[^\n]*',
+        r'Here is the corrected spec[^\n]*',
+        r'the spec was a skeleton[^\n]*',
+        r'Write a spec for F\d+[^\n]*',
+        r'Now I have full context[^\n]*',
+        r'Let me produce the corrected spec[^\n]*',
+    ]
+    for pat in meta_patterns:
+        result = re.sub(rf'(?:\n|^)\s*{pat}\n?', '\n', result, flags=re.IGNORECASE)
+
+    # ── Model sign-off / chatter lines (reuse chatter_patterns style from clean_spec_content) ──
+    chatter_patterns = [
+        r'The spec is ready[^\n]*',
+        r'Do you want me to[^\n]*',
+        r'Shall I[^\n]*',
+        r'Let me know if[^\n]*',
+        r'Would you like me to[^\n]*',
+        r'I can make changes[^\n]*',
+        r'Is there anything[^\n]*',
+        r'Feel free to[^\n]*',
+        r'The spec is complete[^\n]*',
+    ]
+    for pat in chatter_patterns:
+        result = re.sub(rf'(?:\n|^)\s*{pat}\n?', '\n', result, flags=re.IGNORECASE)
+
+    # ── Collapse multiple blank lines ──
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    result = result.strip()
+
+    return result
+
+
+def _strip_nm_noise(text: str) -> str:
+    """Strip noise from nm (adversarial review) output.
+
+    Removes:
+    - Shell command blocks (triple-backtick fenced code blocks, $ command lines)
+    - Reasoning noise lines (Let me think, I should, Looking at, etc.)
+    - Terminal output (ANSI escape sequences, checkmark/x-mark lines)
+    - Mid-text boilerplate markers (You are running, STAGE N)
+    """
+    if not text:
+        return text
+
+    result = text
+
+    # ── Remove triple-backtick fenced code blocks (shell commands) ──
+    result = re.sub(r'```[a-z]*\n.*?```', '', result, flags=re.DOTALL)
+
+    # ── Remove lines starting with $ (shell commands) ──
+    result = re.sub(r'^\$\s+.+$', '', result, flags=re.MULTILINE)
+
+    # ── Remove reasoning noise lines ──
+    reasoning_patterns = [
+        r'Let me think[^\n]*',
+        r'I should[^\n]*',
+        r'Looking at[^\n]*',
+        r'Let me check[^\n]*',
+        r'The code looks[^\n]*',
+        r'I can see[^\n]*',
+        r'This is because[^\n]*',
+        r'First, let me[^\n]*',
+        r'Now I need to[^\n]*',
+    ]
+    for pat in reasoning_patterns:
+        result = re.sub(rf'^{pat}$', '', result, flags=re.MULTILINE | re.IGNORECASE)
+
+    # ── Remove ANSI escape sequences ──
+    result = re.sub(r'\x1b\[[0-9;]*m', '', result)
+
+    # ── Remove terminal checkmark/x-mark output lines ──
+    result = re.sub(r'^\s*[✓✗√].*$', '', result, flags=re.MULTILINE)
+
+    # ── Remove mid-text boilerplate markers (not just line-start) ──
+    result = re.sub(r'You are running[^\n]*\n?', '', result, flags=re.IGNORECASE)
+    result = re.sub(r'STAGE\s+\d[^\n]*\n?', '', result, flags=re.IGNORECASE)
+
+    # ── Collapse multiple blank lines ──
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    result = result.strip()
+
+    return result
+
 
 def extract_pr_sections(spec_text: str, feature: str) -> str:
     """Extract Why, Impact, and What Changed from the strategist's spec.
@@ -26,8 +223,8 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
     if pos_m:
         pos = pos_m.group(1).strip()
         pos = re.sub(r'\s+', ' ', pos)
-        if len(pos) > 400:
-            pos = pos[:397] + "..."
+        # F044: sentence-aware trim (2 sentences, 200 chars)
+        pos = _trim_to_sentences(pos, max_sentences=2, max_chars=200)
         why += f"\n\n{pos}"
 
     # 2. ## Impact — what's affected (paragraph under ## N. Impact header)
@@ -39,21 +236,27 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
     if imp_m:
         impact_text = imp_m.group(1).strip()
         if impact_text:
-            impact = f"## Impact\n\n{impact_text}"
+            impact_text = _filter_impact_product_only(impact_text)
+            if impact_text:
+                impact = f"## Impact\n\n{impact_text}"
     if not impact:
         # Legacy: Impact: <text> (colon format)
         imp_m = re.search(
             r'Impact:\s*(.+?)(?=\n\s*\n|\n(?:What Changed|Confidence|### Task|\Z))',
             spec_text, re.DOTALL | re.IGNORECASE)
         if imp_m and imp_m.group(1).strip():
-            impact = f"## Impact\n\n{imp_m.group(1).strip()}"
+            impact_text = _filter_impact_product_only(imp_m.group(1).strip())
+            if impact_text:
+                impact = f"## Impact\n\n{impact_text}"
     if not impact:
         # Fallback: Executive Summary section
         exec_m = re.search(
             r'^##?\s*Executive\s+Summary\s*\n+(.+?)(?=\n##\s|\n###\s|\n\*\*Confidence|\Z)',
             spec_text, re.DOTALL | re.IGNORECASE | re.MULTILINE)
         if exec_m and exec_m.group(1).strip():
-            impact = f"## Impact\n\n{exec_m.group(1).strip()}"
+            impact_text = _filter_impact_product_only(exec_m.group(1).strip())
+            if impact_text:
+                impact = f"## Impact\n\n{impact_text}"
     if not impact:
         # Fallback: Position: <text> (used in older spec formats)
         pos_m2 = re.search(
@@ -65,7 +268,9 @@ def extract_pr_sections(spec_text: str, feature: str) -> str:
             text = re.sub(r'\n\s+', ' ', text)
             if len(text) > 500:
                 text = text[:497] + "..."
-            impact = f"## Impact\n\n{text}"
+            text = _filter_impact_product_only(text)
+            if text:
+                impact = f"## Impact\n\n{text}"
 
     # 3. ## What Changed — bullet list under ## N. What Changed header
     what_changed = ""
@@ -467,6 +672,9 @@ def _extract_nm_summary(nm_stdout):
             break
 
     key_findings = "\n".join(key_findings_parts).strip()
+
+    # F044: strip nm noise — shell commands, reasoning, terminal output
+    key_findings = _strip_nm_noise(key_findings)
 
     # ── Extract SHOULD FIX items (delegate) ──
     try:
