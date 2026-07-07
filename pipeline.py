@@ -1427,6 +1427,60 @@ def _verify_test_imports_exist(project_dir):
     return missing
 
 
+def _verify_branch(branch):
+    """F046: Verify we are on the expected branch. Checks out if needed.
+
+    Returns True if on the correct branch, False if checkout fails.
+    Raises ValueError for empty branch name.
+    Calls halt_and_revert for detached HEAD.
+    """
+    if not branch or not branch.strip():
+        raise ValueError("_verify_branch: branch name must not be empty")
+
+    # Step 1: Get current branch
+    rev_out, rev_err, rev_rc = git("rev-parse", "--abbrev-ref", "HEAD")
+    current = (rev_out or "").strip()
+
+    # Detached HEAD → git returns "HEAD"
+    if current == "HEAD":
+        print(f"  FATAL: Detached HEAD — cannot verify branch '{branch}'", flush=True)
+        halt_and_revert(
+            f"Detached HEAD — cannot verify branch '{branch}'",
+            "PHASE (branch verification)", branch
+        )
+        # halt_and_revert raises SystemExit, but just in case:
+        return False
+
+    # Step 2: Already on correct branch?
+    if current == branch:
+        return True
+
+    # Step 3: Attempt checkout
+    print(f"  ⚠ Expected branch '{branch}' but on '{current}' — checking out...", flush=True)
+    co_out, co_err, co_rc = git("checkout", branch)
+    if co_rc != 0:
+        print(f"  FATAL: Not on branch {branch} — refusing to proceed.", flush=True)
+        print(f"  Checkout failed: {co_err[:200]}", flush=True)
+        halt_and_revert(
+            f"nm: cannot checkout {branch} for verification",
+            "PHASE (branch verification)", branch
+        )
+        return False
+
+    # Step 4: Re-verify after checkout
+    rev_out2, rev_err2, rev_rc2 = git("rev-parse", "--abbrev-ref", "HEAD")
+    current2 = (rev_out2 or "").strip()
+    if current2 == branch:
+        return True
+
+    print(f"  FATAL: Checked out but still not on {branch} (got {current2}) — refusing to proceed.", flush=True)
+    halt_and_revert(
+        f"nm: checked out {branch} but rev-parse returned {current2}",
+        "PHASE (branch verification)", branch
+    )
+    return False
+
+
 def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
     """Create GitHub issues for nm SHOULD FIX findings.
 

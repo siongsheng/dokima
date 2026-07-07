@@ -752,11 +752,12 @@ def test_verify_branch_wrong_branch_triggers_checkout(panel):
     git_calls = []
 
     def mock_git(*args, **kwargs):
-        git_calls.append(args)
         cmd_str = " ".join(args)
+        # Count rev-parse calls BEFORE appending this one
+        rev_count = len([c for c in git_calls if "rev-parse" in " ".join(c)])
+        git_calls.append(args)
         if "rev-parse" in cmd_str and "--abbrev-ref" in cmd_str:
-            # First call: wrong branch, second call: correct
-            if len([c for c in git_calls if "rev-parse" in " ".join(c)]) == 0:
+            if rev_count == 0:
                 return ("master\n", "", 0)
             return ("fix/issue-42\n", "", 0)
         if "checkout" in cmd_str:
@@ -781,10 +782,9 @@ def test_verify_branch_empty_branch_raises(panel):
 
 
 def test_verify_branch_detached_head_refuses(panel):
-    """Task 2: _verify_branch in detached HEAD state → halts."""
+    """Task 2: _verify_branch in detached HEAD state → returns False (halted)."""
     from unittest.mock import patch
     import pipeline as _pipeline
-    import pytest as _pytest
 
     def mock_git(*args, **kwargs):
         cmd_str = " ".join(args)
@@ -793,8 +793,9 @@ def test_verify_branch_detached_head_refuses(panel):
         return ("", "", 0)
 
     with patch.object(_pipeline, 'git', side_effect=mock_git):
-        with _pytest.raises(SystemExit):
-            _pipeline._verify_branch("fix/issue-42")
+        with patch('sys.stdout'):
+            result = _pipeline._verify_branch("fix/issue-42")
+            assert result is False
 
 
 def test_verify_branch_checkout_fails_returns_false(panel):
