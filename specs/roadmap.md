@@ -281,7 +281,7 @@
 ### F043: Phase function decomposition — split run_phase1_strategist (656 lines, CC=125), run_phase2_coder (277, CC=77), run_pipeline (280, CC=79), run_fix_mode (281, CC=67), run_init (455, CC=60) into sub-operations. Target: max 150 lines, CC < 30 per function.
 **Priority:** P2
 **Dependencies:** F040
-**Status:** [x] Done
+**Status:** [ ] Pending
 **User Story:** As a contributor, I can understand and modify a phase function without tracing 125 branching paths.
 
 ### F044: PR body quality — `extract_pr_sections()` currently dumps the strategist's full spec into Why/Impact instead of extracting concise summaries. Fix: trim Why to first 2 sentences (max 200 chars), Impact to product-value-only (strip meta-commentary and internal thinking), strip nm Review of shell commands and reasoning noise.
