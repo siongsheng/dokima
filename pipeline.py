@@ -2079,35 +2079,8 @@ def _restore_strategist_config(orig_reasoning, orig_yaml, strat_config):
         print(f"  Restored strategist reasoning_effort \u2192 {orig_reasoning}", flush=True)
 
 
-def run_phase1_strategist(feature, user_answers_prefill):
-    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
-    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
-    global PROJECT_DIR, PROFILES, REAL_HOME
-    print("\n── Phase 1: Strategist (full session) ──", flush=True)
-    _orig_reasoning, _orig_yaml, _strat_config = _configure_strategist_reasoning(PROFILES)
-
-    # Check for existing spec at standard path BEFORE spawning strategist.
-    # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
-    # the strategist must validate and refine it, not replace it.
-    _refine_note = _check_existing_spec(PROJECT_DIR, feature)
-
-    # Detect if this project documents an external system (e.g. docs site for the panel itself)
-    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
-    if _ref_context:
-        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
-
-    strat_prompt = _build_strategist_prompt(PROJECT_DIR, feature, user_answers_prefill, _refine_note, _ref_context)
-
-    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
-    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
-
-    # ── DAG format enforcement ──
-    orig_strat_output = strat_output  # save in case re-prompt produces garbage
-    strat_output = _handle_dag_reprompt(strat_output, feature, PROJECT_DIR)
-
-    _restore_strategist_config(_orig_reasoning, _orig_yaml, _strat_config)
-
-
+def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_prefill, project_dir):
+    """Extracted from run_phase1_strategist."""
     # ── Interview gate ──
     agent_text_pre = extract_agent_messages(strat_output)
     interview_mode = "DECISION: INTERVIEW MODE" in agent_text_pre
@@ -2214,17 +2187,19 @@ def run_phase1_strategist(feature, user_answers_prefill):
                 print("\n  \u26a1 Running strategist with defaults (no user answers)...", flush=True)
                 strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
                 print(f"\n\u2713 Default spec finished ({len(strat_output)} chars)", flush=True)
+    return strat_output
 
+
+def _check_strategist_timeout(strat_output):
+    """Extracted from run_phase1_strategist."""
     # Strategist contingency
     if "[TIMEOUT:" in strat_output and len(strat_output) < 500:
         print("ERROR: Strategist timed out with insufficient output \u2014 aborting pipeline")
         sys.exit(1)
 
-    spec = extract_agent_messages(strat_output, last_only=True)
-    if len(spec) < 100 and len(strat_output) > 500:
-        spec = strat_output
-    spec = clean_spec_content(spec)
 
+def _check_spec_quality_gate(spec, strat_output, feature, project_dir):
+    """Validate spec quality, re-prompt on failure. Returns (spec, strat_output)."""
     # Quality gate: validate spec quality, re-prompt once on failure
     _qg_passed, _qg_failures = verify_spec_quality(spec)
     _on_fallback = "[strategist:fallback]" in strat_output or "[fallback]" in strat_output
@@ -2264,9 +2239,11 @@ def run_phase1_strategist(feature, user_answers_prefill):
             print(f"  ⚠ Quality gate still has {len(_qg_failures2)} issue(s) after re-prompt — proceeding with degraded quality", flush=True)
             for _f in _qg_failures2:
                 print(f"     - {_f}", flush=True)
+    return spec, strat_output
 
-    print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
 
+def _detect_spec_garbage(spec, strat_output, orig_strat_output):
+    """Detect and recover from garbage spec output. Returns spec."""
     # Garbage detection: if spec looks like format-fix chatter, not a real spec
     _garbage_markers = [
         r'Done\.\s*Spec\s+saved\s+to', r'Format\s+fixes\s+applied',
@@ -2311,7 +2288,11 @@ def run_phase1_strategist(feature, user_answers_prefill):
 
         if not recovered:
             print(f"  ⚠ Spec may be degraded — garbage markers detected", flush=True)
+    return spec
 
+
+def _save_spec_and_extract_tasks(spec, feature, strat_output, project_dir):
+    """Extracted from run_phase1_strategist."""
     spec_dir = os.path.join(PROJECT_DIR, "specs")
     os.makedirs(spec_dir, exist_ok=True)
     spec_name = slugify(feature)[:50]
@@ -2354,7 +2335,11 @@ def run_phase1_strategist(feature, user_answers_prefill):
     except Exception as e:
         tasks_extract_path = ""
         print(f"  \u26a0 Task extraction failed: {e} \u2014 coder will read full spec", flush=True)
+    return spec_path, tasks_extract_path
 
+
+def _run_tech_lead_prereview(spec_path, project_dir):
+    """Extracted from run_phase1_strategist."""
     # Tech Lead spec pre-review
     if not os.environ.get("PANEL_SKIP_ORCHESTRATOR_REVIEW"):
         print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2500\u2500", flush=True)
@@ -2393,6 +2378,9 @@ Output NOTHING ELSE."""
     else:
         print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2014 SKIPPED (PANEL_SKIP_ORCHESTRATOR_REVIEW=1) \u2500\u2500", flush=True)
 
+
+def _compute_depth_and_orchestrator_gate(spec, feature, project_dir):
+    """Compute confidence, impact, depth, mode, branch. Returns 6-tuple."""
     # Orchestra gate
     print("\n\u2500\u2500 Orchestrator Gate \u2500\u2500", flush=True)
     confidence = "Medium"
@@ -2432,7 +2420,11 @@ Output NOTHING ELSE."""
     # Update live status
     _status_update(branch=branch, depth=depth, risk=impact, mode=mode,
                    feature=feature, project=PROJECT_DIR, log_path=OUTPUT_LOG)
+    return confidence, impact, depth, mode, branch
 
+
+def _run_human_gate(feature, depth, confidence, impact, branch, spec_path, tasks_extract_path, spec, pr_sections, project_dir):
+    """Interactive/non-interactive human gate. Returns (spec, pr_sections, tasks_extract_path). May sys.exit(0)."""
     # Human gate
     if sys.stdin.isatty() and not SKIP_HUMAN_GATE:
         print(f"\n{'─' * 55}", flush=True)
@@ -2491,7 +2483,11 @@ Output NOTHING ELSE."""
         print("\n  ⚠ Human gate skipped (--skip-human-gate)", flush=True)
     else:
         print("\n  \u26a0 Human gate skipped (non-interactive \u2014 Telegram/cron mode)", flush=True)
+    return spec, pr_sections, tasks_extract_path
 
+
+def _create_adr(feature, spec_path, spec, project_dir, real_home):
+    """Extracted from run_phase1_strategist."""
     # ADR creation
     adr_dir = os.path.join(PROJECT_DIR, "docs", "adr")
     adr_bin = os.path.join(REAL_HOME, "adr-tools", "src")
@@ -2534,6 +2530,9 @@ Output NOTHING ELSE."""
     else:
         print(f"  \u2139 ADR dir not found ({adr_dir}) \u2014 skipping ADR creation. Run `adr init docs/adr` to enable.", flush=True)
 
+
+def _assemble_strategist_result(spec, spec_path, pr_sections, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output):
+    """Pack return dict with parallel_enabled flag."""
     # Parallel execution gate
     parallel_enabled = os.environ.get("PANEL_PARALLEL", "1") == "1"
     return {
@@ -2550,7 +2549,72 @@ Output NOTHING ELSE."""
         "parallel_enabled": parallel_enabled,
     }
 
+def run_phase1_strategist(feature, user_answers_prefill):
+    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
+    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
+    global PROJECT_DIR, PROFILES, REAL_HOME
+    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+    _orig_reasoning, _orig_yaml, _strat_config = _configure_strategist_reasoning(PROFILES)
 
+    # Check for existing spec at standard path BEFORE spawning strategist.
+    # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
+    # the strategist must validate and refine it, not replace it.
+    _refine_note = _check_existing_spec(PROJECT_DIR, feature)
+
+    # Detect if this project documents an external system (e.g. docs site for the panel itself)
+    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
+    if _ref_context:
+        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
+
+    strat_prompt = _build_strategist_prompt(PROJECT_DIR, feature, user_answers_prefill, _refine_note, _ref_context)
+
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
+
+    # ── DAG format enforcement ──
+    orig_strat_output = strat_output  # save in case re-prompt produces garbage
+    strat_output = _handle_dag_reprompt(strat_output, feature, PROJECT_DIR)
+
+    _restore_strategist_config(_orig_reasoning, _orig_yaml, _strat_config)
+
+
+    # ── Interview gate ──
+    strat_output = _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_prefill, PROJECT_DIR)
+
+    # Strategist contingency
+    _check_strategist_timeout(strat_output)
+
+    spec = extract_agent_messages(strat_output, last_only=True)
+    if len(spec) < 100 and len(strat_output) > 500:
+        spec = strat_output
+    spec = clean_spec_content(spec)
+
+    # Quality gate: validate spec quality, re-prompt once on failure
+    spec, strat_output = _check_spec_quality_gate(spec, strat_output, feature, PROJECT_DIR)
+
+    print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
+
+    # Garbage detection: if spec looks like format-fix chatter, not a real spec
+    spec = _detect_spec_garbage(spec, strat_output, orig_strat_output)
+
+    spec_path, tasks_extract_path = _save_spec_and_extract_tasks(spec, feature, strat_output, PROJECT_DIR)
+
+    pr_sections = extract_pr_sections(spec, feature)
+    print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
+
+    # Tech Lead spec pre-review
+    _run_tech_lead_prereview(spec_path, PROJECT_DIR)
+
+    # Orchestra gate
+    confidence, impact, depth, mode, branch = _compute_depth_and_orchestrator_gate(spec, feature, PROJECT_DIR)
+
+    # Human gate
+    spec, pr_sections, tasks_extract_path = _run_human_gate(feature, depth, confidence, impact, branch, spec_path, tasks_extract_path, spec, pr_sections, PROJECT_DIR)
+
+    # ADR creation
+    _create_adr(feature, spec_path, spec, PROJECT_DIR, REAL_HOME)
+
+    return _assemble_strategist_result(spec, spec_path, pr_sections, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output)
 def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO
