@@ -720,3 +720,96 @@ def test_fix_mode_issue_pushes_branch_to_origin(panel):
         f"Expected push for fix/issue-42, got: {push_args}"
     )
     assert "origin" in push_args or "push" in push_args
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F046: Branch isolation — Task 2: _verify_branch() helper
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_verify_branch_on_correct_branch(panel):
+    """Task 2: _verify_branch returns True when already on the right branch."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    # git rev-parse --abbrev-ref HEAD returns the expected branch
+    def mock_git(*args, **kwargs):
+        cmd_str = " ".join(args)
+        if "rev-parse" in cmd_str and "--abbrev-ref" in cmd_str:
+            return ("fix/issue-42\n", "", 0)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'git', side_effect=mock_git):
+        result = _pipeline._verify_branch("fix/issue-42")
+        assert result is True
+
+
+def test_verify_branch_wrong_branch_triggers_checkout(panel):
+    """Task 2: _verify_branch checks out the right branch when on wrong one."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    git_calls = []
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        cmd_str = " ".join(args)
+        if "rev-parse" in cmd_str and "--abbrev-ref" in cmd_str:
+            # First call: wrong branch, second call: correct
+            if len([c for c in git_calls if "rev-parse" in " ".join(c)]) == 0:
+                return ("master\n", "", 0)
+            return ("fix/issue-42\n", "", 0)
+        if "checkout" in cmd_str:
+            return ("", "", 0)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'git', side_effect=mock_git):
+        result = _pipeline._verify_branch("fix/issue-42")
+        assert result is True
+        # Verify checkout was attempted
+        checkout_calls = [c for c in git_calls if "checkout" in " ".join(c)]
+        assert len(checkout_calls) >= 1, "Expected git checkout to be called"
+
+
+def test_verify_branch_empty_branch_raises(panel):
+    """Task 2: _verify_branch with empty branch name → ValueError."""
+    import pipeline as _pipeline
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        _pipeline._verify_branch("")
+
+
+def test_verify_branch_detached_head_refuses(panel):
+    """Task 2: _verify_branch in detached HEAD state → halts."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+    import pytest as _pytest
+
+    def mock_git(*args, **kwargs):
+        cmd_str = " ".join(args)
+        if "rev-parse" in cmd_str and "--abbrev-ref" in cmd_str:
+            return ("HEAD\n", "", 0)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'git', side_effect=mock_git):
+        with _pytest.raises(SystemExit):
+            _pipeline._verify_branch("fix/issue-42")
+
+
+def test_verify_branch_checkout_fails_returns_false(panel):
+    """Task 2: _verify_branch when checkout fails → returns False."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    def mock_git(*args, **kwargs):
+        cmd_str = " ".join(args)
+        if "rev-parse" in cmd_str and "--abbrev-ref" in cmd_str:
+            return ("master\n", "", 0)
+        if "checkout" in cmd_str:
+            return ("", "branch not found", 1)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'git', side_effect=mock_git):
+        result = _pipeline._verify_branch("fix/issue-42")
+        assert result is False
