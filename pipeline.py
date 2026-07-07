@@ -1856,14 +1856,13 @@ Report: what you fixed, commit hash."""
     return {"verdict": verdict, "tl_output": tl_output}
 
 
-def run_phase1_strategist(feature, user_answers_prefill):
-    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
-    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
-    global PROJECT_DIR, PROFILES, REAL_HOME
-    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+def _configure_strategist_reasoning(profiles):
+    """Configure strategist reasoning_effort from PANEL_REASONING env var.
+    Returns (orig_reasoning, orig_yaml, strat_config) triple."""
     _strat_reasoning = os.environ.get("PANEL_REASONING", "")
-    _strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
+    _strat_config = os.path.join(profiles, "strategist", "config.yaml")
     _orig_reasoning = None
+    _orig_yaml = None
     if _strat_reasoning and os.path.exists(_strat_config):
         with open(_strat_config) as f:
             _orig_yaml = f.read()
@@ -1876,13 +1875,18 @@ def run_phase1_strategist(feature, user_answers_prefill):
             with open(_strat_config, "w") as f:
                 f.write(_new_yaml)
             print(f"  PANEL_REASONING={_strat_reasoning} (override, was {_orig_reasoning})", flush=True)
+    return _orig_reasoning, _orig_yaml, _strat_config
 
+
+def _check_existing_spec(project_dir, feature):
+    """Check for pre-existing spec files and build refine note.
+    Returns refine_note string (empty if no spec found)."""
     # Check for existing spec at standard path BEFORE spawning strategist.
     # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
     # the strategist must validate and refine it, not replace it.
     _spec_slug = slugify(feature)
-    _standard_spec = os.path.join(PROJECT_DIR, "specs", f"{_spec_slug}-spec.md")
-    _subdir_spec = os.path.join(PROJECT_DIR, "specs", _spec_slug, "plan.md")
+    _standard_spec = os.path.join(project_dir, "specs", f"{_spec_slug}-spec.md")
+    _subdir_spec = os.path.join(project_dir, "specs", _spec_slug, "plan.md")
     _refine_note = ""
     # Check both conventions: specs/<slug>-spec.md (panel-generated) and specs/<slug>/plan.md (human-written)
     _found_spec = None
@@ -1915,21 +1919,20 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         authoritative context — you are enhancing it, not replacing it.
 
         """
+    return _refine_note
 
-    # Detect if this project documents an external system (e.g. docs site for the panel itself)
-    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
-    if _ref_context:
-        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
 
-    strat_prompt = f"""You are the Strategist for a software project at {PROJECT_DIR}.
-{_ref_context}
+def _build_strategist_prompt(project_dir, feature, user_answers_prefill, refine_note, ref_context):
+    """Assemble the full strategist prompt."""
+    strat_prompt = f"""You are the Strategist for a software project at {project_dir}.
+{ref_context}
 {_make_map_hint(PROJECT_DIR)}
-    {_refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
+    {refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
     0. Read specs/codebase-map.md FIRST — it contains the Domain Map (files grouped by purpose), Impact Map (dependency arrows), Test Map, and commands. Use it to understand the codebase without reading every file.
     1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
-    2. Read AGENTS.md at {PROJECT_DIR}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
+    2. Read AGENTS.md at {project_dir}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
     3. If .specify/ exists, read .specify/memory/constitution.md and .specify/specs/baseline/spec.md. Otherwise skip.
-    3b. If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
+    3b. If {project_dir}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
     4. Run `git log --oneline -20` and `git log origin/{DEFAULT_BRANCH}..HEAD` — recent work and unmerged changes.
     5. Search for relevant code: rg on patterns related to "{feature}" — find existing abstractions and conventions.
     6. Read the key files — understand the architecture before designing.
@@ -2021,12 +2024,11 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     CRITICAL: You are a DESIGNER, not a coder. Write NO implementation code. Describe WHAT and WHY — the coder decides HOW.
 
     OUTPUT FORMAT: Output the complete spec in your message. Do NOT use write_file to save it to a file — the panel extracts your message as the spec. Do NOT summarize — every section must be present in full."""
+    return strat_prompt
 
-    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
-    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
 
-    # ── DAG format enforcement ──
-    orig_strat_output = strat_output  # save in case re-prompt produces garbage
+def _handle_dag_reprompt(strat_output, feature, project_dir):
+    """Check DAG format and re-prompt if needed. May sys.exit(1)."""
     # Check DAG on extracted agent messages, not raw output (which has <thinking> blocks)
     agent_text_for_dag = extract_agent_messages(strat_output)
     _dag_on_fallback = "[strategist:fallback]" in strat_output or "[fallback]" in strat_output
@@ -2042,7 +2044,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         dag_correction = (
             f"── FORMAT CORRECTION REQUIRED ──\n"
             f"Feature: {feature}\n"
-            f"Project: {PROJECT_DIR}\n\n"
+            f"Project: {project_dir}\n\n"
             f"Your spec is below. Keep ALL sections (Decision Table, Impact, What Changed,\n"
             f"Confidence, Impact markers, API/Interface, Security, Documentation) EXACTLY\n"
             f"as they are. Rewrite ONLY the task breakdown section as ### Task N: headers.\n\n"
@@ -2060,17 +2062,51 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             f"{truncated}"
         )
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
-                                   dag_correction, timeout=600, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+                                   dag_correction, timeout=600, cwd=project_dir, fallback_model=FALLBACK_MODELS.get("strategist"))
         print(f"  ✓ Strategist re-run finished ({len(strat_output)} chars)", flush=True)
         # Verify re-prompt output
         agent_text_recheck = extract_agent_messages(strat_output)
         if not re.search(r'^\s*(?:###\s*)?Task\s*\d+:', agent_text_recheck, re.MULTILINE):
             print("  ⚠ Re-prompt also lacks DAG format — proceeding with degraded (sequential) mode", flush=True)
+    return strat_output
 
-    if _orig_reasoning and os.path.exists(_strat_config):
-        with open(_strat_config, "w") as f:
-            f.write(_orig_yaml)
-        print(f"  Restored strategist reasoning_effort \u2192 {_orig_reasoning}", flush=True)
+
+def _restore_strategist_config(orig_reasoning, orig_yaml, strat_config):
+    """Restore original strategist config if it was modified."""
+    if orig_reasoning and os.path.exists(strat_config):
+        with open(strat_config, "w") as f:
+            f.write(orig_yaml)
+        print(f"  Restored strategist reasoning_effort \u2192 {orig_reasoning}", flush=True)
+
+
+def run_phase1_strategist(feature, user_answers_prefill):
+    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
+    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
+    global PROJECT_DIR, PROFILES, REAL_HOME
+    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+    _orig_reasoning, _orig_yaml, _strat_config = _configure_strategist_reasoning(PROFILES)
+
+    # Check for existing spec at standard path BEFORE spawning strategist.
+    # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
+    # the strategist must validate and refine it, not replace it.
+    _refine_note = _check_existing_spec(PROJECT_DIR, feature)
+
+    # Detect if this project documents an external system (e.g. docs site for the panel itself)
+    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
+    if _ref_context:
+        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
+
+    strat_prompt = _build_strategist_prompt(PROJECT_DIR, feature, user_answers_prefill, _refine_note, _ref_context)
+
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
+
+    # ── DAG format enforcement ──
+    orig_strat_output = strat_output  # save in case re-prompt produces garbage
+    strat_output = _handle_dag_reprompt(strat_output, feature, PROJECT_DIR)
+
+    _restore_strategist_config(_orig_reasoning, _orig_yaml, _strat_config)
+
 
     # ── Interview gate ──
     agent_text_pre = extract_agent_messages(strat_output)
