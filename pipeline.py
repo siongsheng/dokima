@@ -1006,10 +1006,34 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
     print("\n── Phase 3: vet (coder claimed clean — let's check) ──", flush=True)
 
     # F046: Branch guard — refuse to test on DEFAULT_BRANCH
-    if branch == DEFAULT_BRANCH or not _verify_branch(branch):
+    if branch == DEFAULT_BRANCH:
         print(f"  FATAL: vet phase must run on feature branch, not {DEFAULT_BRANCH}", flush=True)
         halt_and_revert(
-            f"vet: branch guard — expected '{branch}' but on DEFAULT_BRANCH",
+            f"vet: branch guard — expected feature branch, got {DEFAULT_BRANCH}",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    # F046: Verify branch — catch ValueError from _verify_branch (nm review R1)
+    try:
+        branch_ok = _verify_branch(branch)
+    except ValueError:
+        print(f"  FATAL: Invalid branch name — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — invalid branch name",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    if not branch_ok:
+        # _verify_branch failed for a non-default mismatch (checkout failure / detached HEAD)
+        print(f"  FATAL: Could not verify or checkout branch '{branch}' — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — cannot verify branch '{branch}'",
             "PHASE 3 (vet)", branch
         )
         return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
