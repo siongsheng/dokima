@@ -383,6 +383,20 @@ def run_fix_mode_issue(project_dir, issue_number):
     git("checkout", DEFAULT_BRANCH)
     git("checkout", "-b", branch)
 
+    # F046: Push fix branch to origin so coder can fetch it
+    push_out, push_err, push_rc = git("push", "-u", "origin", branch)
+    if push_rc != 0:
+        print(f"  ⚠ Warning: push -u origin {branch} failed: {push_err[:200]}", flush=True)
+        # Retry without -u (branch may already exist on origin)
+        push_out2, push_err2, push_rc2 = git("push", "origin", branch)
+        if push_rc2 != 0:
+            print(f"  ⚠ Warning: push origin {branch} also failed: {push_err2[:200]}", flush=True)
+            print(f"  → Coder will fail to fetch branch — proceeding anyway", flush=True)
+        else:
+            print(f"  Pushed {branch} to origin (existing branch)", flush=True)
+    else:
+        print(f"  Pushed {branch} to origin", flush=True)
+
     coder_result = run_phase2_coder(
         feature=feature,
         spec=coder_prompt,
@@ -720,11 +734,14 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 
         if mode == "fix" and spec:
             # Fix mode: spec IS the fix prompt (blockers + constraints inline)
+            # F046: Mandatory pre-flight branch verification
             coder_prompt = (
                 spec + "\n\n"
-                f"### Branch Setup\n"
-                f"FIRST: Switch to the existing branch — do NOT create a new one:\n"
-                f"  git checkout {branch} && git pull origin {branch}\n"
+                f"### Branch Setup — MANDATORY PRE-FLIGHT\n"
+                f"MANDATORY PRE-FLIGHT — Before writing ANY code, run:\n"
+                f"  git fetch origin {branch} && git checkout {branch} && echo 'BRANCH VERIFIED: {branch}'\n"
+                f"If the checkout fails, STOP immediately and report the error.\n"
+                f"Do NOT write any code until you confirm you are on branch '{branch}'.\n"
                 f"All fixes go on this branch. Do NOT create a new branch.\n"
             )
         else:
@@ -987,6 +1004,41 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
     verdict = None
 
     print("\n── Phase 3: vet (coder claimed clean — let's check) ──", flush=True)
+
+    # F046: Branch guard — refuse to test on DEFAULT_BRANCH
+    if branch == DEFAULT_BRANCH:
+        print(f"  FATAL: vet phase must run on feature branch, not {DEFAULT_BRANCH}", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — expected feature branch, got {DEFAULT_BRANCH}",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    # F046: Verify branch — catch ValueError from _verify_branch (nm review R1)
+    try:
+        branch_ok = _verify_branch(branch)
+    except ValueError:
+        print(f"  FATAL: Invalid branch name — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — invalid branch name",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    if not branch_ok:
+        # _verify_branch failed for a non-default mismatch (checkout failure / detached HEAD)
+        print(f"  FATAL: Could not verify or checkout branch '{branch}' — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — cannot verify branch '{branch}'",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
 
     # 1. Verify branch
     print("  ⏳ Checking out branch...", flush=True)
@@ -1411,6 +1463,65 @@ def _verify_test_imports_exist(project_dir):
             continue
 
     return missing
+
+
+def _verify_branch(branch):
+    """F046: Verify we are on the expected branch. Checks out if needed.
+
+    Returns True if on the correct branch, False if checkout fails.
+    Raises ValueError for empty branch name.
+    Calls halt_and_revert for detached HEAD.
+    """
+    if not branch or not branch.strip():
+        raise ValueError("_verify_branch: branch name must not be empty")
+
+    # Step 1: Get current branch
+    rev_out, rev_err, rev_rc = git("rev-parse", "--abbrev-ref", "HEAD")
+    current = (rev_out or "").strip()
+
+    # Empty output means we can't determine the branch (e.g., mocked environment)
+    # → skip the guard rather than false-positive halt
+    if not current:
+        return True
+
+    # Detached HEAD → git returns "HEAD"
+    if current == "HEAD":
+        print(f"  FATAL: Detached HEAD — cannot verify branch '{branch}'", flush=True)
+        halt_and_revert(
+            f"Detached HEAD — cannot verify branch '{branch}'",
+            "PHASE (branch verification)", branch
+        )
+        # halt_and_revert raises SystemExit, but just in case:
+        return False
+
+    # Step 2: Already on correct branch?
+    if current == branch:
+        return True
+
+    # Step 3: Attempt checkout
+    print(f"  ⚠ Expected branch '{branch}' but on '{current}' — checking out...", flush=True)
+    co_out, co_err, co_rc = git("checkout", branch)
+    if co_rc != 0:
+        print(f"  FATAL: Not on branch {branch} — refusing to proceed.", flush=True)
+        print(f"  Checkout failed: {co_err[:200]}", flush=True)
+        halt_and_revert(
+            f"nm: cannot checkout {branch} for verification",
+            "PHASE (branch verification)", branch
+        )
+        return False
+
+    # Step 4: Re-verify after checkout
+    rev_out2, rev_err2, rev_rc2 = git("rev-parse", "--abbrev-ref", "HEAD")
+    current2 = (rev_out2 or "").strip()
+    if current2 == branch:
+        return True
+
+    print(f"  FATAL: Checked out but still not on {branch} (got {current2}) — refusing to proceed.", flush=True)
+    halt_and_revert(
+        f"nm: checked out {branch} but rev-parse returned {current2}",
+        "PHASE (branch verification)", branch
+    )
+    return False
 
 
 def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
