@@ -12,8 +12,6 @@ import os
 import re
 
 # ── Abbreviation patterns that should NOT be treated as sentence boundaries ──
-_SENTENCE_END = re.compile(r'(?<=[.!?])\s+(?=[A-Z])')
-
 _ABBREVIATIONS = {
     'Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Capt', 'Col', 'Gen', 'Lt', 'Maj',
     'Sr', 'Jr', 'St', 'Inc', 'Ltd', 'Co', 'Corp',
