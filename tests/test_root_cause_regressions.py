@@ -265,23 +265,29 @@ class TestCoderPromptAntiCreep:
     def test_dag_check_uses_extracted_messages(self, panel):
         """DESIRED: DAG check at line ~3730 should call extract_agent_messages()
         BEFORE the re.search(r'### Task', ...) regex check. This prevents
-        false positives from <thinking> blocks in the raw output."""
+        false positives from <thinking> blocks in the raw output.
+
+        F043: DAG enforcement logic is decomposed into _handle_dag_reprompt.
+        The main function delegates; the ordering check must inspect the helper.
+        """
         import inspect
+        import pipeline
         source = inspect.getsource(panel.run_phase1_strategist)
 
-        # Find the DAG enforcement section specifically
+        # Find the DAG enforcement section specifically — must still exist as a marker
         dag_section_start = source.find("# ── DAG format enforcement ──")
         assert dag_section_start > 0, "DAG enforcement section not found"
 
-        # Within that section, extract_agent_messages must appear before re.search
-        dag_section = source[dag_section_start:]
-        extract_pos = dag_section.find("extract_agent_messages")
-        regex_pos = dag_section.find("re.search(r'^\\s*(?:###\\s*)?Task")
+        # F043: the actual extract_agent_messages → re.search ordering is now
+        # in _handle_dag_reprompt. Inspect the helper for the correct ordering.
+        dag_source = inspect.getsource(pipeline._handle_dag_reprompt)
+        extract_pos = dag_source.find("extract_agent_messages")
+        regex_pos = dag_source.find("re.search(r'^\\s*(?:###\\s*)?Task")
 
-        assert extract_pos > 0, "extract_agent_messages not found in DAG section"
-        assert regex_pos > 0, "DAG regex check not found in DAG section"
+        assert extract_pos > 0, "extract_agent_messages not found in DAG handler"
+        assert regex_pos > 0, "DAG regex check not found in DAG handler"
         assert extract_pos < regex_pos, (
-            "FAIL: In the DAG enforcement section, extract_agent_messages "
+            "FAIL: In the DAG handler, extract_agent_messages "
             f"appears at offset {extract_pos} but re.search is at offset {regex_pos}. "
             "The DAG check still runs against raw output with <thinking> blocks. "
             "Fix: call extract_agent_messages() before the DAG regex check."
@@ -521,14 +527,25 @@ class TestInterviewModeFalsePositive:
         )
 
     def test_production_code_interview_detection(self, panel):
-        """Verify actual production code uses anchored regex (line 3775)."""
+        """Verify actual production code uses anchored regex (line 3775).
+
+        F043: interview gate logic is decomposed into _handle_interview_gate.
+        The anchored CLARIFICATION regex now lives in the helper, not in
+        run_phase1_strategist directly.
+        """
         import inspect
+        import pipeline
         source = inspect.getsource(panel.run_phase1_strategist)
-        # The fixed code should have the anchored pattern
-        has_anchored = "r'^\\s*CLARIFICATION" in source
+        interview_source = inspect.getsource(pipeline._handle_interview_gate)
+        # Check both main function and helper for the anchored pattern
+        has_anchored = ("r'^\\s*CLARIFICATION" in source
+                        or "r'^\\s*CLARIFICATION" in interview_source)
         has_unanchored_only = (
             "r'CLARIFICATION\\s+\\d+:'" in source and
             "r'^\\s*CLARIFICATION" not in source
+        ) and (
+            "r'CLARIFICATION\\s+\\d+:'" in interview_source and
+            "r'^\\s*CLARIFICATION" not in interview_source
         )
         assert has_anchored, (
             "FAIL: Production code still uses unanchored CLARIFICATION regex. "
