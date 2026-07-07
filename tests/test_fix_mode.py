@@ -670,3 +670,53 @@ def test_extract_issue_sections_code_block_not_extracted(panel):
     result = extract_issue_sections(body)
     # The code block should be stripped from content
     assert "not_a_real_file.py" not in result["what"]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F046: Branch isolation — Task 1: Push fix/issue branch to origin
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_fix_mode_issue_pushes_branch_to_origin(panel):
+    """Task 1: run_fix_mode_issue() pushes fix/issue-N to origin after creation."""
+    from unittest.mock import patch
+    import json as _json
+    import pipeline as _pipeline
+
+    issue_body = _json.dumps({
+        "body": "### What\nFix something\n\n### Fix\nDo it\n",
+        "title": "Test issue"
+    })
+
+    git_calls = []
+
+    def mock_gh(*args, **kwargs):
+        if "view" in args and "--json" in args:
+            return (issue_body, "", 0)
+        return ("", "", 0)
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    with patch.object(_pipeline, 'gh', side_effect=mock_gh):
+        with patch.object(_pipeline, 'git', side_effect=mock_git):
+            with patch.object(_pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/99"}):
+                with patch.object(_pipeline, 'run_phase3_vet', return_value={"coder_failed": False}):
+                    with patch.object(_pipeline, 'run_phase4_nm', return_value={"nm_ok": True, "pr_url": "https://github.com/t/t/pull/99"}):
+                        with patch.object(_pipeline, '_set_gh_token'):
+                            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                                with patch('sys.stdout'):
+                                    _pipeline.run_fix_mode_issue("/tmp/test", 42)
+
+    # Verify git push -u origin fix/issue-42 was called
+    push_calls = [c for c in git_calls if "push" in c]
+    assert len(push_calls) >= 1, (
+        f"Expected git push -u origin to be called, git calls were: {git_calls}"
+    )
+    # Verify push was for the right branch
+    push_args = " ".join(str(a) for a in push_calls[0])
+    assert "fix/issue-42" in push_args, (
+        f"Expected push for fix/issue-42, got: {push_args}"
+    )
+    assert "origin" in push_args or "push" in push_args
