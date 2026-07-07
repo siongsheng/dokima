@@ -571,3 +571,14 @@ class TestMapEnrichments:
         assert "> MAP:" in hint
         assert "architecture patterns" in hint.lower() or "conventions" in hint.lower()
         assert "institutional knowledge" in hint.lower() or "future agents" in hint.lower()
+
+
+# ── Issue #121: dead import mangling __doc__ ────────────────────
+
+def test_generate_codebase_map_docstring(panel):
+    """Issue #121: __doc__ should return the actual docstring, not be mangled
+    by dead `import utils as _u` inserted before the docstring."""
+    doc = panel.generate_codebase_map.__doc__
+    assert doc is not None, "generate_codebase_map.__doc__ should not be None"
+    assert doc.startswith("Generate a deterministic domain-aware codebase map"), \
+        f"Unexpected __doc__: {doc!r}"
