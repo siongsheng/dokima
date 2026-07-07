@@ -182,11 +182,23 @@ def update_roadmap_status(roadmap_path: str, feature_id: str, new_status: str):
     with open(roadmap_path, "w") as f:
         f.write(new_content)
 
-def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str):
+def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str, pr_url: str = ""):
     """Commit a roadmap status change to the default branch.
     Also commits STATUS.md, codebase-map.md, .map-cache.json, and any untracked
     loose spec files in specs/ (F*-spec.md) — so the working tree is clean
-    before the next feature's PR creation."""
+    before the next feature's PR creation.
+
+    F045: When action is \"done\" and pr_url is provided, verifies the PR
+    contains real code changes (not just spec files) before marking Done."""
+    # F045: Verification gate for "done" action
+    if action == "done" and pr_url:
+        pr_num = pr_url.rstrip("/").split("/")[-1]
+        if not _has_code_changes(pr_num):
+            print(f"  Skipped {feature_id} — merged PR has no code changes (spec-only)")
+            return
+    elif action == "done" and not pr_url:
+        print(f"  WARNING: {feature_id} marked Done without PR verification — no pr_url provided")
+
     # Ensure we're on default branch
     rel_path = os.path.relpath(roadmap_path, PROJECT_DIR)
     _, stderr, rc = git("checkout", DEFAULT_BRANCH)
