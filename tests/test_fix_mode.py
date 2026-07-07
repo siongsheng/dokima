@@ -843,6 +843,65 @@ def test_vet_refuses_default_branch(panel):
     assert result.get("verdict") == "VET_FAILED"
 
 
+def test_vet_guard_catches_verify_branch_valueerror(panel):
+    """nm review R1: run_phase3_vet catches ValueError from _verify_branch (unhandled error fix)."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    # _verify_branch raises ValueError for empty branch — must not crash the vet phase
+    def mock_verify_branch(branch):
+        raise ValueError("_verify_branch: branch name must not be empty")
+
+    with patch.object(_pipeline, '_verify_branch', side_effect=mock_verify_branch):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                    with patch.object(_pipeline, 'git'):
+                        with patch('sys.stdout'):
+                            result = _pipeline.run_phase3_vet(
+                                feature="test", branch="fix/issue-42",
+                                pr_sections="", impact="MEDIUM",
+                                spec_path="", depth="full", confidence="High"
+                            )
+    # Should return coder_failed=True when ValueError is caught — no crash
+    assert result.get("coder_failed") is True
+    assert result.get("verdict") == "VET_FAILED"
+
+
+def test_vet_guard_message_for_checkout_failure_not_default_branch(panel):
+    """nm review R2: vet guard prints correct message when _verify_branch fails for checkout failure,
+    not assuming DEFAULT_BRANCH. The halts_and_reverts trace has the real reason."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    halt_reasons = []
+
+    def mock_halt(reason, phase, branch, task_ids=None, worktrees=None):
+        halt_reasons.append(reason)
+
+    # branch is NOT DEFAULT_BRANCH, but _verify_branch returns False (checkout failed)
+    with patch.object(_pipeline, '_verify_branch', return_value=False):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                    with patch.object(_pipeline, 'git'):
+                        with patch.object(_pipeline, 'halt_and_revert', side_effect=mock_halt):
+                            with patch('sys.stdout'):
+                                result = _pipeline.run_phase3_vet(
+                                    feature="test", branch="fix/issue-42",
+                                    pr_sections="", impact="MEDIUM",
+                                    spec_path="", depth="full", confidence="High"
+                                )
+    # Should return coder_failed=True when branch guard fires
+    assert result.get("coder_failed") is True
+    assert result.get("verdict") == "VET_FAILED"
+    # halt_and_revert should be called with the real reason (not DEFAULT_BRANCH assumption)
+    assert len(halt_reasons) >= 1, "Expected halt_and_revert to be called"
+    assert "branch guard" in halt_reasons[0], (
+        f"Expected halt reason to mention branch guard, got: {halt_reasons[0]}"
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════
 # F046: Branch isolation — Task 4: Harden coder prompt
 # ═══════════════════════════════════════════════════════════════════
