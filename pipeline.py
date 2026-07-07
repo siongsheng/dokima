@@ -1926,7 +1926,7 @@ def _build_strategist_prompt(project_dir, feature, user_answers_prefill, refine_
     """Assemble the full strategist prompt."""
     strat_prompt = f"""You are the Strategist for a software project at {project_dir}.
 {ref_context}
-{_make_map_hint(PROJECT_DIR)}
+{_make_map_hint(project_dir)}
     {refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
     0. Read specs/codebase-map.md FIRST — it contains the Domain Map (files grouped by purpose), Impact Map (dependency arrows), Test Map, and commands. Use it to understand the codebase without reading every file.
     1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
@@ -2117,7 +2117,7 @@ def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_pre
                         clarification_blocks.append(stripped)
             interview_state = {
                 "feature": feature,
-                "project_dir": PROJECT_DIR,
+                "project_dir": project_dir,
                 "interview_mode": interview_mode,
                 "questions": clarification_blocks,
                 "prompt": strat_prompt
@@ -2186,8 +2186,8 @@ def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_pre
                 for c, a in zip(clarification_lines, user_answers)
             )
             strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
-                                       strat_prompt + f"\n\nUSER CLARIFICATIONS:\n{clarif_context}\n\nTHEN \u2014 design the feature:",
-                                       timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+                                       strat_prompt + f"\n\nUSER CLARIFICATIONS:\n{clarif_context}\n\nTHEN — design the feature:",
+                                       timeout=300, cwd=project_dir, fallback_model=FALLBACK_MODELS.get("strategist"))
             print(f"\n\u2713 Refined spec finished ({len(strat_output)} chars)", flush=True)
         else:
             print("\n  \u2713 No answers provided \u2014 proceeding with assumptions as-is.", flush=True)
@@ -2196,7 +2196,7 @@ def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_pre
                 print("  The spec below is based on UNVERIFIED ASSUMPTIONS. Review carefully before proceeding.", flush=True)
                 print("  To answer later: re-run the panel with the same feature description.", flush=True)
                 print("\n  \u26a1 Running strategist with defaults (no user answers)...", flush=True)
-                strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+                strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=project_dir, fallback_model=FALLBACK_MODELS.get("strategist"))
                 print(f"\n\u2713 Default spec finished ({len(strat_output)} chars)", flush=True)
     return strat_output
 
@@ -2304,7 +2304,7 @@ def _detect_spec_garbage(spec, strat_output, orig_strat_output):
 
 def _save_spec_and_extract_tasks(spec, feature, strat_output, project_dir):
     """Extracted from run_phase1_strategist."""
-    spec_dir = os.path.join(PROJECT_DIR, "specs")
+    spec_dir = os.path.join(project_dir, "specs")
     os.makedirs(spec_dir, exist_ok=True)
     spec_name = slugify(feature)[:50]
     spec_path = os.path.join(spec_dir, f"{spec_name}-spec.md")
@@ -2316,7 +2316,7 @@ def _save_spec_and_extract_tasks(spec, feature, strat_output, project_dir):
     try:
         map_entries = extract_map_enrichments(strat_output, feature)
         if map_entries:
-            save_map_enrichments(PROJECT_DIR, feature, map_entries)
+            save_map_enrichments(project_dir, feature, map_entries)
             print(f"  \U0001f4dd Map enriched: {len(map_entries)} guidance entr"
                   f"ies", flush=True)
     except Exception as e:
@@ -2430,7 +2430,7 @@ def _compute_depth_and_orchestrator_gate(spec, feature, project_dir):
 
     # Update live status
     _status_update(branch=branch, depth=depth, risk=impact, mode=mode,
-                   feature=feature, project=PROJECT_DIR, log_path=OUTPUT_LOG)
+                   feature=feature, project=project_dir, log_path=OUTPUT_LOG)
     return confidence, impact, depth, mode, branch
 
 
@@ -2500,8 +2500,8 @@ def _run_human_gate(feature, depth, confidence, impact, branch, spec_path, tasks
 def _create_adr(feature, spec_path, spec, project_dir, real_home):
     """Extracted from run_phase1_strategist."""
     # ADR creation
-    adr_dir = os.path.join(PROJECT_DIR, "docs", "adr")
-    adr_bin = os.path.join(REAL_HOME, "adr-tools", "src")
+    adr_dir = os.path.join(project_dir, "docs", "adr")
+    adr_bin = os.path.join(real_home, "adr-tools", "src")
     adr_binary = os.path.join(adr_bin, "adr")
     if os.path.isdir(adr_dir) and os.path.exists(adr_binary):
         try:
@@ -2517,7 +2517,7 @@ def _create_adr(feature, spec_path, spec, project_dir, real_home):
             result = subprocess.run(
                 [os.path.join(adr_bin, "adr"), "new", f"ADR for: {title}"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                universal_newlines=True, timeout=30, cwd=PROJECT_DIR,
+                universal_newlines=True, timeout=30, cwd=project_dir,
                 env={**os.environ, "PATH": f"{adr_bin}:{os.environ.get('PATH', '')}"})
             if result.returncode == 0:
                 adr_output = result.stdout.strip()
@@ -2525,7 +2525,7 @@ def _create_adr(feature, spec_path, spec, project_dir, real_home):
                 adr_file_match = re.search(r'(docs/adr/\d+-.+\.md)', adr_output)
                 if adr_file_match:
                     adr_rel_path = adr_file_match.group(1)
-                    adr_full_path = os.path.join(PROJECT_DIR, adr_rel_path)
+                    adr_full_path = os.path.join(project_dir, adr_rel_path)
                     try:
                         with open(adr_full_path, "a") as af:
                             af.write(f"\n## Source\n\nSpec: {spec_path}\n")

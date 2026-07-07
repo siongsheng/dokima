@@ -589,14 +589,14 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 def _detect_project_state(project_dir):
     """Extracted from run_init."""
-    agents_path = os.path.join(PROJECT_DIR, "AGENTS.md")
+    agents_path = os.path.join(project_dir, "AGENTS.md")
     is_greenfield = not os.path.exists(agents_path)
 
     # Check git
-    has_git = os.path.isdir(os.path.join(PROJECT_DIR, ".git"))
+    has_git = os.path.isdir(os.path.join(project_dir, ".git"))
     if not has_git:
         try:
-            subprocess.run(["git", "-C", PROJECT_DIR, "init"],
+            subprocess.run(["git", "-C", project_dir, "init"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
             has_git = True
             print("  git init", flush=True)
@@ -771,7 +771,7 @@ def _run_interview_loop(interview_preamble, init_skills, interview_state, curren
             init_skills,
             prompt,
             timeout=600,  # 10 min per interview round
-            cwd=PROJECT_DIR,
+            cwd=project_dir,
             fallback_model=FALLBACK_MODELS.get("strategist")
         )
 
@@ -889,7 +889,7 @@ def _run_final_doc_production(current_round, MAX_INTERVIEW_ROUNDS, interview_pre
             init_skills,
             final_prompt,
             timeout=1200,  # 20 min for doc writing
-            cwd=PROJECT_DIR,
+            cwd=project_dir,
             fallback_model=FALLBACK_MODELS.get("strategist")
         )
     else:
