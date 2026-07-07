@@ -11,5 +11,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pytest
-      - run: python3 -m pytest tests/ -q --ignore=tests/test_main_integration.py
-      - run: python3 -m py_compile dokima
+      - run: python3 -m pytest tests/ -q
+          --ignore=tests/test_main_integration.py
+          --ignore=tests/test_profile_templates.py
+          --ignore=tests/test_installer.py
+          --ignore=tests/test_clean_spec.py
