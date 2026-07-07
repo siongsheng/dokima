@@ -814,3 +814,30 @@ def test_verify_branch_checkout_fails_returns_false(panel):
     with patch.object(_pipeline, 'git', side_effect=mock_git):
         result = _pipeline._verify_branch("fix/issue-42")
         assert result is False
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F046: Branch isolation — Task 3: Vet phase branch guard
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_vet_refuses_default_branch(panel):
+    """Task 3: run_phase3_vet refuses to test on DEFAULT_BRANCH (main/master)."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    # Mock _verify_branch to simulate being on DEFAULT_BRANCH
+    with patch.object(_pipeline, '_verify_branch', return_value=False):
+        with patch.object(_pipeline, '_set_gh_token'):
+            with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                    with patch.object(_pipeline, 'git'):
+                        with patch('sys.stdout'):
+                            result = _pipeline.run_phase3_vet(
+                                feature="test", branch="fix/issue-42",
+                                pr_sections="", impact="MEDIUM",
+                                spec_path="", depth="full", confidence="High"
+                            )
+    # Should return coder_failed=True when branch guard fires
+    assert result.get("coder_failed") is True
+    assert result.get("verdict") == "VET_FAILED"
