@@ -159,6 +159,58 @@ def _filter_impact_product_only(text: str) -> str:
     return result
 
 
+def _strip_nm_noise(text: str) -> str:
+    """Strip noise from nm (adversarial review) output.
+
+    Removes:
+    - Shell command blocks (triple-backtick fenced code blocks, $ command lines)
+    - Reasoning noise lines (Let me think, I should, Looking at, etc.)
+    - Terminal output (ANSI escape sequences, checkmark/x-mark lines)
+    - Mid-text boilerplate markers (You are running, STAGE N)
+    """
+    if not text:
+        return text
+
+    result = text
+
+    # ── Remove triple-backtick fenced code blocks (shell commands) ──
+    result = re.sub(r'```[a-z]*\n.*?```', '', result, flags=re.DOTALL)
+
+    # ── Remove lines starting with $ (shell commands) ──
+    result = re.sub(r'^\$\s+.+$', '', result, flags=re.MULTILINE)
+
+    # ── Remove reasoning noise lines ──
+    reasoning_patterns = [
+        r'Let me think[^\n]*',
+        r'I should[^\n]*',
+        r'Looking at[^\n]*',
+        r'Let me check[^\n]*',
+        r'The code looks[^\n]*',
+        r'I can see[^\n]*',
+        r'This is because[^\n]*',
+        r'First, let me[^\n]*',
+        r'Now I need to[^\n]*',
+    ]
+    for pat in reasoning_patterns:
+        result = re.sub(rf'^{pat}$', '', result, flags=re.MULTILINE | re.IGNORECASE)
+
+    # ── Remove ANSI escape sequences ──
+    result = re.sub(r'\x1b\[[0-9;]*m', '', result)
+
+    # ── Remove terminal checkmark/x-mark output lines ──
+    result = re.sub(r'^\s*[✓✗√].*$', '', result, flags=re.MULTILINE)
+
+    # ── Remove mid-text boilerplate markers (not just line-start) ──
+    result = re.sub(r'You are running[^\n]*\n?', '', result, flags=re.IGNORECASE)
+    result = re.sub(r'STAGE\s+\d[^\n]*\n?', '', result, flags=re.IGNORECASE)
+
+    # ── Collapse multiple blank lines ──
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    result = result.strip()
+
+    return result
+
+
 def extract_pr_sections(spec_text: str, feature: str) -> str:
     """Extract Why, Impact, and What Changed from the strategist's spec.
     Returns markdown sections: ## Why, ## Impact, ## What Changed.
@@ -622,6 +674,9 @@ def _extract_nm_summary(nm_stdout):
             break
 
     key_findings = "\n".join(key_findings_parts).strip()
+
+    # F044: strip nm noise — shell commands, reasoning, terminal output
+    key_findings = _strip_nm_noise(key_findings)
 
     # ── Extract SHOULD FIX items (delegate) ──
     try:
