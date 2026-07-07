@@ -1556,10 +1556,11 @@ def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
         dimension = item.get("dimension", "")
         location = item.get("location", "")
 
+        desc = location if location else detail
         if dimension:
-            title = f"SHOULD FIX [nm] [{dimension}]: {detail[:80]}"
+            title = f"SHOULD FIX [nm] [{dimension}]: {desc[:80]}"
         else:
-            title = f"SHOULD FIX [nm]: {detail[:80]}"
+            title = f"SHOULD FIX [nm]: {desc[:80]}"
 
         what_lines = [detail]
         if location:
