@@ -120,3 +120,145 @@ def test_auto_repair_status_empty(panel, tmpdir_path):
         f.write("# Roadmap\n")
     result = panel.auto_repair_status([], roadmap_path)
     assert result == 0
+
+
+# ── F045: Verification gate tests ──
+
+def test_commit_roadmap_update_skips_spec_only_pr(panel, tmpdir_path):
+    """F045: commit_roadmap_update skips Done when PR has only spec changes."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    _roadmap.PROJECT_DIR = str(tmpdir_path)
+    _roadmap.DEFAULT_BRANCH = "main"
+    _roadmap.REPO = "test-owner/test-repo"
+
+    roadmap_path = os.path.join(str(tmpdir_path), "roadmap.md")
+    with open(roadmap_path, "w") as f:
+        f.write("### F045: Test\n**Priority:** P0\n**Dependencies:** None\n**Status:** [~] In Progress\n**User Story:** T.\n")
+
+    git_calls = []
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    def mock_gh(*args, **kwargs):
+        if args[0] == "pr" and args[1] == "diff":
+            return ("specs/roadmap.md | 2 +-\nspecs/STATUS.md | 1 +", "", 0)
+        return ("", "", 0)
+
+    with patch.object(_roadmap, "git", side_effect=mock_git):
+        with patch.object(_roadmap, "gh", side_effect=mock_gh):
+            _roadmap.commit_roadmap_update(roadmap_path, "F045", "done",
+                                           pr_url="https://github.com/x/y/pull/99")
+
+    # Should NOT have committed — spec-only PR
+    commit_calls = [c for c in git_calls if c[0] == "commit"]
+    assert len(commit_calls) == 0, (
+        "F045 regression: commit_roadmap_update committed Done for spec-only PR. "
+        "Must skip when PR has no code changes."
+    )
+
+
+def test_commit_roadmap_update_allows_code_change_pr(panel, tmpdir_path):
+    """F045: commit_roadmap_update allows Done when PR has code changes."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    _roadmap.PROJECT_DIR = str(tmpdir_path)
+    _roadmap.DEFAULT_BRANCH = "main"
+    _roadmap.REPO = "test-owner/test-repo"
+
+    roadmap_path = os.path.join(str(tmpdir_path), "roadmap.md")
+    with open(roadmap_path, "w") as f:
+        f.write("### F045: Test\n**Priority:** P0\n**Dependencies:** None\n**Status:** [~] In Progress\n**User Story:** T.\n")
+
+    git_calls = []
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    def mock_gh(*args, **kwargs):
+        if args[0] == "pr" and args[1] == "diff":
+            return ("pipeline.py | 5 +++--\nroadmap.py | 1 +", "", 0)
+        return ("", "", 0)
+
+    with patch.object(_roadmap, "git", side_effect=mock_git):
+        with patch.object(_roadmap, "gh", side_effect=mock_gh):
+            _roadmap.commit_roadmap_update(roadmap_path, "F045", "done",
+                                           pr_url="https://github.com/x/y/pull/99")
+
+    # Should have committed — PR has code changes
+    commit_calls = [c for c in git_calls if c[0] == "commit"]
+    assert len(commit_calls) >= 1, (
+        "F045 regression: commit_roadmap_update did NOT commit Done for PR with code changes."
+    )
+
+
+def test_commit_roadmap_update_done_without_pr_url_warns(panel, tmpdir_path):
+    """F045: commit_roadmap_update with action='done' but no pr_url proceeds (backward compat)."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    _roadmap.PROJECT_DIR = str(tmpdir_path)
+    _roadmap.DEFAULT_BRANCH = "main"
+    _roadmap.REPO = "test-owner/test-repo"
+
+    roadmap_path = os.path.join(str(tmpdir_path), "roadmap.md")
+    with open(roadmap_path, "w") as f:
+        f.write("### F045: Test\n**Priority:** P0\n**Dependencies:** None\n**Status:** [~] In Progress\n**User Story:** T.\n")
+
+    git_calls = []
+
+    def mock_git(*args, **kwargs):
+        git_calls.append(args)
+        return ("", "", 0)
+
+    def mock_gh(*args, **kwargs):
+        return ("", "", 0)
+
+    with patch.object(_roadmap, "git", side_effect=mock_git):
+        with patch.object(_roadmap, "gh", side_effect=mock_gh):
+            _roadmap.commit_roadmap_update(roadmap_path, "F045", "done")
+
+    # Should have committed — backward-compat fallback
+    commit_calls = [c for c in git_calls if c[0] == "commit"]
+    assert len(commit_calls) >= 1, (
+        "F045 regression: commit_roadmap_update blocked Done when no pr_url provided. "
+        "Must proceed for backward compatibility."
+    )
+
+
+def test_has_code_changes_spec_only():
+    """F045: _has_code_changes returns False for spec-only diffs."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    with patch.object(_roadmap, "gh", return_value=("specs/roadmap.md | 1 +\nspecs/x-spec.md | 1 +", "", 0)):
+        assert _roadmap._has_code_changes("99") is False
+
+    with patch.object(_roadmap, "gh", return_value=("specs/a.md | 1 +\n .../b.py | 2 ++", "", 0)):
+        assert _roadmap._has_code_changes("99") is False
+
+
+def test_has_code_changes_with_code():
+    """F045: _has_code_changes returns True for diffs with non-spec files."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    with patch.object(_roadmap, "gh", return_value=("pipeline.py | 5 +++--", "", 0)):
+        assert _roadmap._has_code_changes("99") is True
+
+    with patch.object(_roadmap, "gh", return_value=("specs/a.md | 1 +\nmain.py | 3 +++", "", 0)):
+        assert _roadmap._has_code_changes("99") is True
+
+
+def test_has_code_changes_empty_diff():
+    """F045: _has_code_changes returns False for empty diff."""
+    import roadmap as _roadmap
+    from unittest.mock import patch
+
+    with patch.object(_roadmap, "gh", return_value=("", "", 0)):
+        assert _roadmap._has_code_changes("99") is False

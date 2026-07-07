@@ -182,11 +182,23 @@ def update_roadmap_status(roadmap_path: str, feature_id: str, new_status: str):
     with open(roadmap_path, "w") as f:
         f.write(new_content)
 
-def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str):
+def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str, pr_url: str = ""):
     """Commit a roadmap status change to the default branch.
     Also commits STATUS.md, codebase-map.md, .map-cache.json, and any untracked
     loose spec files in specs/ (F*-spec.md) — so the working tree is clean
-    before the next feature's PR creation."""
+    before the next feature's PR creation.
+
+    F045: When action is \"done\" and pr_url is provided, verifies the PR
+    contains real code changes (not just spec files) before marking Done."""
+    # F045: Verification gate for "done" action
+    if action == "done" and pr_url:
+        pr_num = pr_url.rstrip("/").split("/")[-1]
+        if not _has_code_changes(pr_num):
+            print(f"  Skipped {feature_id} — merged PR has no code changes (spec-only)")
+            return
+    elif action == "done" and not pr_url:
+        print(f"  WARNING: {feature_id} marked Done without PR verification — no pr_url provided")
+
     # Ensure we're on default branch
     rel_path = os.path.relpath(roadmap_path, PROJECT_DIR)
     _, stderr, rc = git("checkout", DEFAULT_BRANCH)
@@ -222,6 +234,18 @@ def commit_roadmap_update(roadmap_path: str, feature_id: str, action: str):
     git("push", "origin", DEFAULT_BRANCH)
     print(f"  Roadmap updated: {feature_id} → {action}")
 
+def _has_code_changes(pr_num: str) -> bool:
+    """Check if a PR contains actual source code changes (not just spec files).
+    Calls gh pr diff --stat and filters out specs/ paths.
+    Returns True if at least one non-specs/ file was changed."""
+    diff_out, _, drc = gh("pr", "diff", pr_num, "--repo", REPO, "--stat")
+    code_files = [l for l in (diff_out or "").split("\n")
+                  if l.strip() and not l.startswith("specs/")
+                  and not l.startswith(" .../") and "file changed" not in l
+                  and l.strip()]
+    return len(code_files) > 0
+
+
 def auto_repair_status(features: list, roadmap_path: str) -> int:
     """Check for features not marked done that have merged PRs → auto-mark [x].
        Returns count of repaired features."""
@@ -250,15 +274,9 @@ def auto_repair_status(features: list, roadmap_path: str) -> int:
                 continue
 
             # Guard: only auto-repair if the PR had real code changes (not just specs)
-            if pr_num:
-                diff_out, _, drc = gh("pr", "diff", str(pr_num), "--repo", REPO, "--stat")
-                code_files = [l for l in (diff_out or "").split("\n")
-                              if l.strip() and not l.startswith("specs/")
-                              and not l.startswith(" .../") and "file changed" not in l
-                              and l.strip()]
-                if not code_files:
-                    print(f"  Auto-repair: SKIPPED {f.id} — merged PR #{pr_num} has no code changes (spec-only)")
-                    continue
+            if pr_num and not _has_code_changes(str(pr_num)):
+                print(f"  Auto-repair: SKIPPED {f.id} — merged PR #{pr_num} has no code changes (spec-only)")
+                continue
 
             update_roadmap_status(roadmap_path, f.id, "done")
             print(f"  Auto-repair: {f.id} → [x] Done (merged PR: {pr_url})")

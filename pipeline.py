@@ -176,7 +176,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
                     status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
-                    commit_roadmap_update(roadmap_path, fid, "done")
+                    commit_roadmap_update(roadmap_path, fid, "done", pr_url=pr_url or "")
         else:
             # --next (non-continuous): only mark done if APPROVED
             if verdict == "APPROVED":
@@ -185,7 +185,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
                     status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
-                    commit_roadmap_update(roadmap_path, fid, "done")
+                    commit_roadmap_update(roadmap_path, fid, "done", pr_url=pr_url or "")
             else:
                 print(f"  ⚠ PR {fid} has verdict: {verdict} — not marking as done. Will retry on next run.")
 
