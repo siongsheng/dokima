@@ -569,39 +569,8 @@ from utils import _PROFILE_CONFIGS, _PROFILE_ORDER, ensure_profiles, deploy_prof
 
 
 
-def run_init(description, project_dir, answers_path=None):
-    """Discovery & constitution phase. Strategist produces spec-kit docs.
-
-    F031: Implements a back-and-forth interview loop. The strategist identifies
-    gaps in the project description, asks CLARIFICATION questions, the user
-    answers, and the loop continues until High confidence or max 3 rounds.
-    Only then are constitution docs produced.
-
-    Args:
-        description: User's project description.
-        project_dir: Absolute path to the project.
-        answers_path: Optional path to saved interview state JSON for resume.
-    """
-    global API_KEY, PROJECT_DIR, REPO
-
-    PROJECT_DIR = project_dir
-
-    if not description:
-        print("ERROR: init requires a project description.")
-        print("  dokima init 'trading dashboard for SGX options' [project_dir]")
-        sys.exit(1)
-
-    # Load API key (needed for strategist)
-    API_KEY = load_key()
-    if not API_KEY:
-        print("ERROR: Could not read API_SERVER_KEY from .env")
-        sys.exit(1)
-
-    gh_token = load_github_token()
-    if gh_token:
-        os.environ["GH_TOKEN"] = gh_token
-
-    # ── Detect project state ──
+def _detect_project_state(project_dir):
+    """Extracted from run_init."""
     agents_path = os.path.join(PROJECT_DIR, "AGENTS.md")
     is_greenfield = not os.path.exists(agents_path)
 
@@ -624,17 +593,11 @@ def run_init(description, project_dir, answers_path=None):
     has_remote = bool(repo)
     if has_remote:
         REPO = repo
+    return is_greenfield, has_git, has_remote, repo, agents_path
 
-    print("═" * 55)
-    print("  DOKIMA — init (Discovery & Constitution)")
-    print("═" * 55)
-    print(f"\nDescription: {description}")
-    print(f"Project:    {PROJECT_DIR}")
-    print(f"Mode:       {'greenfield' if is_greenfield else 'existing codebase'}")
-    print(f"Git:        {'initialized' if has_git else 'not found'}")
-    print(f"GitHub:     {repo if has_remote else 'not configured'}")
-    print()
 
+def _setup_init_profiles():
+    """Extracted from run_init."""
     # ── Ensure profiles and skills are set up (F012) ──
     try:
         ensure_profiles()
@@ -646,6 +609,9 @@ def run_init(description, project_dir, answers_path=None):
     except Exception as e:
         print(f"  WARNING: Skill deployment failed: {e}", flush=True)
 
+
+def _bump_max_turns_for_init(profiles):
+    """Extracted from run_init."""
     # ── Bump max_turns for init ──
     strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
     orig_yaml = None
@@ -662,7 +628,11 @@ def run_init(description, project_dir, answers_path=None):
             with open(strat_config, "w") as f:
                 f.write(new_yaml)
             print(f"  max_turns: {orig_max_turns} -> 300 (init needs deeper exploration)", flush=True)
+    return orig_yaml, orig_max_turns, strat_config
 
+
+def _build_init_interview_prompt(project_dir, description, is_greenfield):
+    """Extracted from run_init."""
     # ── Build interview-capable strategist prompt ──
     audit_section = ""
     if not is_greenfield:
@@ -759,58 +729,11 @@ CRITICAL RULES:
 - Do NOT write implementation code. Do NOT create feature specs.
 - For existing projects with AGENTS.md: read it, respect it, do NOT overwrite it.
 - Exit message: summary of what was created + recommended next steps."""
+    return interview_preamble
 
-    # ── F031: Interview loop ──
-    os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
 
-    init_skills = ["spec-strategist-lite", "saas-ideation"]
-    missing_skills = []
-    for skill in init_skills:
-        skill_found = False
-        for base in [os.path.join(PROFILES, "strategist", "skills"),
-                     os.path.join(HERMES, "skills")]:
-            for root, dirs, files in os.walk(base):
-                if os.path.basename(root) == skill:
-                    skill_found = True
-                    break
-            if skill_found:
-                break
-        if not skill_found:
-            missing_skills.append(skill)
-    if missing_skills:
-        print(f"  WARNING: Skills not found: {', '.join(missing_skills)}")
-        print(f"  Run the setup script first: scripts/setup-linux.sh (or setup-windows.ps1)")
-        print(f"  Or deploy manually to ~/.hermes/skills/software-development/")
-
-    MAX_INTERVIEW_ROUNDS = 3
-    current_round = 1
-    accumulated_answers = []
-    interview_state = {
-        "feature": description,
-        "project_dir": PROJECT_DIR,
-        "round": current_round,
-        "max_rounds": MAX_INTERVIEW_ROUNDS,
-        "confidence": "Low",
-        "questions": [],
-        "answers": [],
-        "original_prompt": interview_preamble,
-        "timestamp": "",
-    }
-
-    # ── Resume from saved state if --answers provided ──
-    if answers_path:
-        saved_state = load_init_interview_state(answers_path)
-        if saved_state:
-            current_round = saved_state.get("round", 1)
-            accumulated_answers = saved_state.get("answers", [])
-            interview_state = saved_state
-            interview_state["original_prompt"] = interview_preamble
-            print(f"  Resumed from {answers_path} (round {current_round})", flush=True)
-        else:
-            print(f"  WARNING: Could not load state from {answers_path} — starting fresh", flush=True)
-
-    print("-- Phase: Strategist (init interview) --", flush=True)
-
+def _run_interview_loop(interview_preamble, init_skills, interview_state, current_round, accumulated_answers, MAX_INTERVIEW_ROUNDS, project_dir, strat_config, orig_yaml, orig_max_turns, answers_path):
+    """Extracted from run_init."""
     # ── Interview loop ──
     while current_round <= MAX_INTERVIEW_ROUNDS:
         # Build the prompt with accumulated Q&A context
@@ -921,15 +844,11 @@ CRITICAL RULES:
             # No CLARIFICATION triggers — strategist produced docs (or something else)
             print(f"  [Round {current_round}] No CLARIFICATION triggers — strategist produced docs.", flush=True)
             break
+    return current_round, accumulated_answers, interview_state, strat_output
 
-    # ── Max rounds check ──
-    if current_round > MAX_INTERVIEW_ROUNDS:
-        print(f"\n  WARNING: Max interview rounds ({MAX_INTERVIEW_ROUNDS}) reached.", flush=True)
-        print("  Confidence may not be High — producing constitution docs with best available information.", flush=True)
-        interview_state["round"] = current_round - 1
-        interview_state["answers"] = accumulated_answers
-        interview_state["timestamp"] = datetime.datetime.now().isoformat()
 
+def _run_final_doc_production(current_round, MAX_INTERVIEW_ROUNDS, interview_preamble, accumulated_answers, init_skills, project_dir, strat_output):
+    """Extracted from run_init."""
     # ── Final strategist invocation for doc production ──
     if current_round > 1:
         # We've been through interview rounds — do a final doc production run
@@ -958,21 +877,11 @@ CRITICAL RULES:
     else:
         # First-round High confidence — strat_output already has the docs
         pass
+    return strat_output
 
-    # ── Restore config ──
-    if orig_yaml and os.path.exists(strat_config):
-        with open(strat_config, "w") as f:
-            f.write(orig_yaml)
-        if orig_max_turns:
-            print(f"  max_turns restored -> {orig_max_turns}", flush=True)
 
-    # ── Clean up interview state file on success ──
-    if os.path.exists(INTERVIEW_SAVE_PATH):
-        try:
-            os.unlink(INTERVIEW_SAVE_PATH)
-        except OSError:
-            pass
-
+def _post_init_setup(is_greenfield, agents_path, description, has_remote, project_dir):
+    """Extracted from run_init."""
     # ── Post-init: greenfield setup ──
     if is_greenfield:
         # Create AGENTS.md if strategist didn't
@@ -1012,9 +921,136 @@ CRITICAL RULES:
             sf.write("## Archived\n\n")
         print("  STATUS.md initialized", flush=True)
 
+
+def run_init(description, project_dir, answers_path=None):
+    """Discovery & constitution phase. Strategist produces spec-kit docs.
+
+    F031: Implements a back-and-forth interview loop. The strategist identifies
+    gaps in the project description, asks CLARIFICATION questions, the user
+    answers, and the loop continues until High confidence or max 3 rounds.
+    Only then are constitution docs produced.
+
+    Args:
+        description: User's project description.
+        project_dir: Absolute path to the project.
+        answers_path: Optional path to saved interview state JSON for resume.
+    """
+    global API_KEY, PROJECT_DIR, REPO
+
+    PROJECT_DIR = project_dir
+
+
+    # ── Detect project state ──
+    is_greenfield, has_git, has_remote, repo, agents_path = _detect_project_state(PROJECT_DIR)
+    if has_remote:
+        REPO = repo
+
+    print("═" * 55)
+    print("  DOKIMA — init (Discovery & Constitution)")
+    print("═" * 55)
+    print(f"\nDescription: {description}")
+    print(f"Project:    {PROJECT_DIR}")
+    print(f"Mode:       {'greenfield' if is_greenfield else 'existing codebase'}")
+    print(f"Git:        {'initialized' if has_git else 'not found'}")
+    print(f"GitHub:     {repo if has_remote else 'not configured'}")
+    print()
+
+    # ── Ensure profiles and skills are set up (F012) ──
+    _setup_init_profiles()
+
+    # ── Bump max_turns for init ──
+    orig_yaml, orig_max_turns, strat_config = _bump_max_turns_for_init(PROFILES)
+
+    # ── Build interview-capable strategist prompt ──
+    interview_preamble = _build_init_interview_prompt(PROJECT_DIR, description, is_greenfield)
+
+    # ── F031: Interview loop setup ──
+    os.makedirs(os.path.join(PROJECT_DIR, "specs"), exist_ok=True)
+
+    init_skills = ["spec-strategist-lite", "saas-ideation"]
+    missing_skills = []
+    for skill in init_skills:
+        skill_found = False
+        for base in [os.path.join(PROFILES, "strategist", "skills"),
+                     os.path.join(HERMES, "skills")]:
+            for root, dirs, files in os.walk(base):
+                if os.path.basename(root) == skill:
+                    skill_found = True
+                    break
+            if skill_found:
+                break
+        if not skill_found:
+            missing_skills.append(skill)
+    if missing_skills:
+        print(f"  WARNING: Skills not found: {', '.join(missing_skills)}")
+        print(f"  Run the setup script first: scripts/setup-linux.sh (or setup-windows.ps1)")
+        print(f"  Or deploy manually to ~/.hermes/skills/software-development/")
+
+    MAX_INTERVIEW_ROUNDS = 3
+    current_round = 1
+    accumulated_answers = []
+    interview_state = {
+        "feature": description,
+        "project_dir": PROJECT_DIR,
+        "round": current_round,
+        "max_rounds": MAX_INTERVIEW_ROUNDS,
+        "confidence": "Low",
+        "questions": [],
+        "answers": [],
+        "original_prompt": interview_preamble,
+        "timestamp": "",
+    }
+
+    # ── Resume from saved state if --answers provided ──
+    if answers_path:
+        saved_state = load_init_interview_state(answers_path)
+        if saved_state:
+            current_round = saved_state.get("round", 1)
+            accumulated_answers = saved_state.get("answers", [])
+            interview_state = saved_state
+            interview_state["original_prompt"] = interview_preamble
+            print(f"  Resumed from {answers_path} (round {current_round})", flush=True)
+        else:
+            print(f"  WARNING: Could not load state from {answers_path} — starting fresh", flush=True)
+
+    print("-- Phase: Strategist (init interview) --", flush=True)
+
+    # ── Interview loop ──
+    current_round, accumulated_answers, interview_state, strat_output = _run_interview_loop(
+        interview_preamble, init_skills, interview_state, current_round, accumulated_answers,
+        MAX_INTERVIEW_ROUNDS, PROJECT_DIR, strat_config, orig_yaml, orig_max_turns, answers_path)
+
+    # ── Max rounds check ──
+    if current_round > MAX_INTERVIEW_ROUNDS:
+        print(f"\n  WARNING: Max interview rounds ({MAX_INTERVIEW_ROUNDS}) reached.", flush=True)
+        print("  Confidence may not be High — producing constitution docs with best available information.", flush=True)
+        interview_state["round"] = current_round - 1
+        interview_state["answers"] = accumulated_answers
+        interview_state["timestamp"] = datetime.datetime.now().isoformat()
+
+    # ── Final strategist invocation for doc production ──
+    strat_output = _run_final_doc_production(current_round, MAX_INTERVIEW_ROUNDS, interview_preamble, accumulated_answers, init_skills, PROJECT_DIR, strat_output)
+
+    # ── Restore config ──
+    if orig_yaml and os.path.exists(strat_config):
+        with open(strat_config, "w") as f:
+            f.write(orig_yaml)
+        if orig_max_turns:
+            print(f"  max_turns restored -> {orig_max_turns}", flush=True)
+
+    # ── Clean up interview state file on success ──
+    if os.path.exists(INTERVIEW_SAVE_PATH):
+        try:
+            os.unlink(INTERVIEW_SAVE_PATH)
+        except OSError:
+            pass
+
+    # ── Post-init: greenfield setup ──
+    _post_init_setup(is_greenfield, agents_path, description, has_remote, PROJECT_DIR)
+
     # ── Done ──
     print("\n--- init complete ---")
-    print(f"\n  Created in {PROJECT_DIR}/specs/:")
+    print(f"\n  Created in {PROJECT_DIR}/specs/")
     for fname in ["mission.md", "tech-stack.md", "roadmap.md", "conventions.md"]:
         fp = os.path.join(PROJECT_DIR, "specs", fname)
         if os.path.exists(fp):
@@ -1025,8 +1061,6 @@ CRITICAL RULES:
     print("  Next: review the constitution, then:")
     print(f"    dokima 'F001: first feature' {PROJECT_DIR}")
     print(f"    or develop manually using the roadmap as your guide.")
-
-
 # ── extracted phase functions ─────────────────────
 
 
