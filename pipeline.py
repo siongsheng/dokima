@@ -784,7 +784,7 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 ⚠️ Do NOT write spec files or planning documents. The spec already exists. Your output must be working Python code — .py source files and test files only.
 
 {file_hints}{code_context}
-Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT guess, do NOT write a spec. Read ONLY the files listed above. Do NOT read any other files.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
   git fetch origin {branch} && git checkout {branch} && git pull origin {branch}
 
 Implement ALL tasks from the spec, ONE AT A TIME. Before each: check if another task remains. Do not stop until ALL tasks done — including trivial ones (docs, imports, config).
