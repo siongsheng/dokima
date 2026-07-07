@@ -295,3 +295,9 @@
 **Dependencies:** F039
 **Status:** [~] In Progress
 **User Story:** As a developer, I trust that [x] Done in the roadmap means the feature was actually implemented — not that an unrelated merge touched the file.
+
+### F046: Fix mode branch isolation — `dokima fix --issue` coder commits directly to main instead of the fix branch. The coder prompt says "switch to branch fix/issue-N" but the coder ignores it or the pipeline doesn't enforce it. Fix: verify coder is on the correct branch before vet phase, or make the branch checkout mandatory in the prompt.
+**Priority:** P1
+**Dependencies:** None
+**Status:** [ ] Pending
+**User Story:** As a developer, `dokima fix --issue N` creates a proper fix branch with isolated changes, never commits to main directly.
