@@ -28,7 +28,7 @@
     "desc": "continue"
   },
   "control_panel.py": {
-    "hash": "315545ea32222063836712e0f3591979",
+    "hash": "3079493d69441a325d1a1fd12f64e471",
     "desc": ""
   },
   "git_ops.py": {
@@ -40,11 +40,11 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "670faf42ad585f4bbb34d9cb9bc36a97",
+    "hash": "b244367d82085942514a977f2597f293",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "cecdb3d426d58439ed24606a58edb0ca",
+    "hash": "b8461a85985e20cfe083d86eac12b800",
     "desc": "Exports: parse_roadmap"
   },
   "spec_extract.py": {
@@ -368,7 +368,7 @@
     "desc": "Exports: test_pending_to_in_progress, test_in_progress_to_done, test_done_to_pending_revert, test_feature_not_found_no_change, test_file_not_found_no_crash"
   },
   "tests/test_root_cause_regressions.py": {
-    "hash": "a932434ef4c2b061edf7856110401acc",
+    "hash": "04ccfc281da6e76ee76c5beb8ab47c17",
     "desc": "Exports: TestSpecPathDetection"
   },
   "tests/test_safe_run.py": {
@@ -388,12 +388,16 @@
     "desc": "Exports: TestSpecExtractModule"
   },
   "tests/test_spec_quality_gates.py": {
-    "hash": "dd8a9d5a4c10724380a4e9bfa6dca805",
+    "hash": "5a32ad0d40db8c4a60b62bbd69ad97ac",
     "desc": "Sample well-formed spec with all required sections"
   },
   "tests/test_status_md.py": {
     "hash": "5cab1041379af41b43f058eb2d314d47",
     "desc": "Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated"
+  },
+  "tests/test_t1_phase1_helpers.py": {
+    "hash": "33eebfbc19ff634227fff92200e13d6b",
+    "desc": "Exports: test_configure_strategist_reasoning_no_env, test_check_existing_spec_no_spec, test_restore_strategist_config_noop, test_helpers_importable"
   },
   "tests/test_task6_profiles.py": {
     "hash": "aa819a5e53263e07d504ce9948aec137",
