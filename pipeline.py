@@ -383,6 +383,20 @@ def run_fix_mode_issue(project_dir, issue_number):
     git("checkout", DEFAULT_BRANCH)
     git("checkout", "-b", branch)
 
+    # F046: Push fix branch to origin so coder can fetch it
+    push_out, push_err, push_rc = git("push", "-u", "origin", branch)
+    if push_rc != 0:
+        print(f"  ⚠ Warning: push -u origin {branch} failed: {push_err[:200]}", flush=True)
+        # Retry without -u (branch may already exist on origin)
+        push_out2, push_err2, push_rc2 = git("push", "origin", branch)
+        if push_rc2 != 0:
+            print(f"  ⚠ Warning: push origin {branch} also failed: {push_err2[:200]}", flush=True)
+            print(f"  → Coder will fail to fetch branch — proceeding anyway", flush=True)
+        else:
+            print(f"  Pushed {branch} to origin (existing branch)", flush=True)
+    else:
+        print(f"  Pushed {branch} to origin", flush=True)
+
     coder_result = run_phase2_coder(
         feature=feature,
         spec=coder_prompt,
