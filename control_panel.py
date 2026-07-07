@@ -117,8 +117,8 @@ CLI_METADATA = {
 
 
 def handle_status(project_dir):
-    import utils as _u
     """--status handler. Shows live dashboard if pipeline is running."""
+    import utils as _u
     # Try live dashboard first (F025)
     try:
         from status import load_status, render
@@ -168,8 +168,8 @@ def handle_status(project_dir):
     sys.exit(0)
 
 def handle_stop(project_dir):
-    import utils as _u
     """--stop handler."""
+    import utils as _u
     running, pid, _ = _get_lock_state(project_dir)
     sp = _u._stop_path(project_dir)
     if not running:
@@ -185,8 +185,8 @@ def handle_stop(project_dir):
     sys.exit(0)
 
 def handle_kill(project_dir):
-    import utils as _u
     """--kill handler."""
+    import utils as _u
     running, pid, _ = _get_lock_state(project_dir)
     if not running:
         print(f"No pipeline running for {os.path.basename(os.path.abspath(project_dir))}.")
