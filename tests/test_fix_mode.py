@@ -841,3 +841,49 @@ def test_vet_refuses_default_branch(panel):
     # Should return coder_failed=True when branch guard fires
     assert result.get("coder_failed") is True
     assert result.get("verdict") == "VET_FAILED"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F046: Branch isolation — Task 4: Harden coder prompt
+# ═══════════════════════════════════════════════════════════════════
+
+
+def test_coder_prompt_has_mandatory_pre_flight(panel):
+    """Task 4: Fix-mode coder prompt contains MANDATORY PRE-FLIGHT with branch."""
+    from unittest.mock import patch
+    import pipeline as _pipeline
+
+    prompt_sent = []
+
+    def mock_spawn(profile, skills, prompt, **kwargs):
+        prompt_sent.append(prompt)
+        return "coder done — pushed to fix/issue-99"
+
+    with patch.object(_pipeline, 'spawn_agent', side_effect=mock_spawn):
+        with patch.object(_pipeline, 'git', return_value=("", "", 0)):
+            with patch.object(_pipeline, 'gh', return_value=("", "", 0)):
+                with patch.object(_pipeline, '_set_gh_token'):
+                    with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
+                        with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
+                            with patch('sys.stdout'):
+                                _pipeline.run_phase2_coder(
+                                    feature="test fix", spec="### What\nTest\n\n### Fix\nFix it",
+                                    spec_path="", tasks_extract_path="",
+                                    pr_sections="", branch="fix/issue-99",
+                                    depth="full", mode="fix", is_next=False
+                                )
+
+    assert len(prompt_sent) >= 1, "Expected spawn_agent to be called"
+    full_prompt = prompt_sent[0]
+    assert "MANDATORY PRE-FLIGHT" in full_prompt, (
+        f"Expected MANDATORY PRE-FLIGHT in coder prompt, got: {full_prompt[:500]}"
+    )
+    assert "fix/issue-99" in full_prompt, (
+        f"Expected branch 'fix/issue-99' in coder prompt"
+    )
+    assert "BRANCH VERIFIED" in full_prompt, (
+        f"Expected BRANCH VERIFIED echo in coder prompt"
+    )
+    assert "STOP immediately" in full_prompt, (
+        f"Expected STOP instruction in coder prompt"
+    )
