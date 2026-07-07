@@ -152,7 +152,6 @@ def _build_impact_map(py_files, project_dir):
 
 
 def generate_codebase_map(project_dir, full=False):
-    import utils as _u
     """Generate a deterministic domain-aware codebase map for agents to read at session start.
     Uses file hashes to skip unchanged files (incremental mode).
     Output: specs/codebase-map.md with 4 sections: Start Here, Domain Map, Impact Map, Test Map.
