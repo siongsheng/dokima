@@ -448,12 +448,19 @@ class TestQualityGateRepromptIntegration:
 
         Regression guard: if a refactor removes or renames the quality
         gate re-prompt, this test fails.
+
+        F043: quality gate logic is decomposed into _check_spec_quality_gate.
+        Inspect both the main function and the helper for patterns.
         """
         import inspect
+        import pipeline
         source = inspect.getsource(panel.run_phase1_strategist)
 
-        # Must call verify_spec_quality (quality check)
-        assert "verify_spec_quality" in source, (
+        # Must call verify_spec_quality (quality check) — check both
+        # run_phase1_strategist (delegates) and _check_spec_quality_gate (actual check)
+        qg_source = inspect.getsource(pipeline._check_spec_quality_gate)
+        has_verify = "verify_spec_quality" in source or "verify_spec_quality" in qg_source
+        assert has_verify, (
             "verify_spec_quality call not found in strategist phase"
         )
 
@@ -470,14 +477,19 @@ class TestQualityGateRepromptIntegration:
         quality_section = source[quality_section_start:quality_end] if quality_end > 0 \
             else source[quality_section_start:]
 
+        # F043: quality gate re-prompt logic lives in _check_spec_quality_gate.
+        # The main function delegates to it; inspect the helper for spawn_agent.
+        combined_section = quality_section + "\n" + qg_source
+
         # The quality gate section must include a spawn_agent call for re-prompt
-        assert "spawn_agent" in quality_section, (
+        assert "spawn_agent" in combined_section, (
             "spawn_agent re-prompt not found in quality gate section. "
             "The quality gate should re-prompt the strategist on failure."
         )
 
         # The re-prompt message must include the failure details
-        assert "quality" in quality_section.lower() and "re-prompt" in quality_section.lower(), (
+        assert ("quality" in combined_section.lower()
+                and "re-prompt" in combined_section.lower()), (
             "Expected 're-prompt' or 'quality correction' message in quality gate section."
         )
 
@@ -486,8 +498,12 @@ class TestQualityGateRepromptIntegration:
 
         If re-prompt still produces a failing spec, the pipeline should
         print a warning and continue — it must not exit or abort.
+
+        F043: quality gate logic is decomposed into _check_spec_quality_gate.
+        Inspect the helper for verify_spec_quality calls and warn messages.
         """
         import inspect
+        import pipeline
         source = inspect.getsource(panel.run_phase1_strategist)
 
         # Find quality gate section (before garbage detection)
@@ -499,12 +515,16 @@ class TestQualityGateRepromptIntegration:
         quality_section = source[quality_section_start:quality_end] if quality_end > 0 \
             else source[quality_section_start:]
 
+        # F043: the actual re-prompt + re-verify logic is in _check_spec_quality_gate.
+        qg_source = inspect.getsource(pipeline._check_spec_quality_gate)
+        combined_section = quality_section + "\n" + qg_source
+
         # Must have a SECOND quality check after re-prompt
         # Use a proper counting loop that stops at -1
         verify_count = 0
         idx = -1
         while True:
-            idx = quality_section.find("verify_spec_quality", idx + 1)
+            idx = combined_section.find("verify_spec_quality", idx + 1)
             if idx < 0:
                 break
             verify_count += 1
@@ -514,8 +534,8 @@ class TestQualityGateRepromptIntegration:
         )
 
         # Must have a warn-and-continue message for 2nd failure
-        has_warning = "proceeding with" in quality_section.lower() and \
-                      "degraded" in quality_section.lower()
+        has_warning = ("proceeding with" in combined_section.lower()
+                       and "degraded" in combined_section.lower())
         assert has_warning, (
             "No warn-and-proceed message found in quality gate section. "
             "After re-prompt failure, the code should print a warning and continue."
@@ -526,11 +546,16 @@ class TestQualityGateRepromptIntegration:
 
         The quality gate should attempt exactly one re-prompt, not multiple.
         After one re-prompt it should always proceed (warn-and-proceed).
+
+        F043: quality gate logic is decomposed into _check_spec_quality_gate.
+        The spawn_agent call for re-prompt lives in the helper, not in
+        run_phase1_strategist directly. Count spawn_agent in the helper.
         """
         import inspect
+        import pipeline
         source = inspect.getsource(panel.run_phase1_strategist)
 
-        # Find quality gate section
+        # Find quality gate section in main function (the delegation point)
         quality_section_start = source.find("# Quality gate:")
         assert quality_section_start >= 0
         quality_end = source.find("# Garbage detection:", quality_section_start)
@@ -539,8 +564,12 @@ class TestQualityGateRepromptIntegration:
         quality_section = source[quality_section_start:quality_end] if quality_end > 0 \
             else source[quality_section_start:]
 
+        # F043: the spawn_agent for re-prompt is now in _check_spec_quality_gate.
+        qg_source = inspect.getsource(pipeline._check_spec_quality_gate)
+        combined_section = quality_section + "\n" + qg_source
+
         # Count spawn_agent calls in the quality section (should be exactly 1)
-        spawn_count = quality_section.count("spawn_agent")
+        spawn_count = combined_section.count("spawn_agent")
         assert spawn_count == 1, (
             f"Expected exactly 1 spawn_agent call in quality gate section, "
             f"found {spawn_count}. The re-prompt should fire at most once."
