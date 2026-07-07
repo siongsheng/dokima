@@ -382,5 +382,6 @@ This is the impact section.
         assert "$ npm test" not in kf
         assert "Let me think" not in kf
         assert "I should" not in kf
-        assert "RISK: MEDIUM" in kf
+        # RISK captured in risk field, intentionally excluded from key_findings
+        assert summary["risk"] == "MEDIUM"
         assert "Missing null check in handler.py:88" in kf
