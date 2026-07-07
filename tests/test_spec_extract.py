@@ -335,3 +335,52 @@ This is the impact section.
         assert "improves PR body quality" in result
         assert "Here is the COMPLETE corrected spec" not in result
         assert "Do you want me to" not in result
+
+    # ── F044: _strip_nm_noise tests ──
+
+    def test_strip_nm_noise_shell_commands(self):
+        """_strip_nm_noise removes shell command blocks."""
+        import spec_extract
+        text = "Running tests.\n```bash\n$ npm test\n$ cargo build\n```\n\nResult: all pass."
+        result = spec_extract._strip_nm_noise(text)
+        assert "$ npm test" not in result
+        assert "```bash" not in result
+        assert "Result: all pass." in result
+
+    def test_strip_nm_noise_reasoning(self):
+        """_strip_nm_noise removes reasoning noise lines."""
+        import spec_extract
+        text = "Let me think about this approach.\nI should check the file first.\n\nRISK: HIGH - possible race condition."
+        result = spec_extract._strip_nm_noise(text)
+        assert "Let me think" not in result
+        assert "I should" not in result
+        assert "RISK: HIGH" in result
+
+    def test_strip_nm_noise_preserves_findings(self):
+        """_strip_nm_noise preserves risk findings and file references."""
+        import spec_extract
+        text = "RISK: HIGH\n\nMissing error handling in utils.py:42\n\nLet me check the code.\n"
+        result = spec_extract._strip_nm_noise(text)
+        assert "RISK: HIGH" in result
+        assert "Missing error handling in utils.py:42" in result
+        assert "Let me check" not in result
+
+    def test_extract_nm_summary_noise_stripped(self):
+        """_extract_nm_summary key_findings is free of noise after filtering."""
+        import spec_extract
+        nm_output = (
+            "You are running adversarial review.\n"
+            "STAGE 1: Analyzing code...\n"
+            "$ npm test\n"
+            "Let me think about the results.\n"
+            "RISK: MEDIUM\n"
+            "Missing null check in handler.py:88\n"
+            "I should verify the fix.\n"
+        )
+        summary = spec_extract._extract_nm_summary(nm_output)
+        kf = summary["key_findings"]
+        assert "$ npm test" not in kf
+        assert "Let me think" not in kf
+        assert "I should" not in kf
+        assert "RISK: MEDIUM" in kf
+        assert "Missing null check in handler.py:88" in kf
