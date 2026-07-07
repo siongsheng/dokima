@@ -86,3 +86,21 @@ def test_handle_list_crons_no_cron(panel):
     with pytest.raises(SystemExit) as exc:
         panel.handle_list_crons()
     assert exc.value.code == 0
+
+
+def test_handle_status_docstring(panel):
+    """Issue #122: import before docstring makes __doc__ return None."""
+    assert panel.handle_status.__doc__ is not None
+    assert "--status" in panel.handle_status.__doc__
+
+
+def test_handle_stop_docstring(panel):
+    """Issue #122: import before docstring makes __doc__ return None."""
+    assert panel.handle_stop.__doc__ is not None
+    assert "--stop" in panel.handle_stop.__doc__
+
+
+def test_handle_kill_docstring(panel):
+    """Issue #122: import before docstring makes __doc__ return None."""
+    assert panel.handle_kill.__doc__ is not None
+    assert "--kill" in panel.handle_kill.__doc__
