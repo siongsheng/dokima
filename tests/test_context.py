@@ -347,6 +347,30 @@ class TestPipelineFunctionContracts:
         assert params[0] == "ctx"
 
 
+class TestUtilsContextIntegration:
+    """Verify utils.py has PipelineContext support (spec 10.17-10.18)."""
+
+    def test_utils_has_set_pipeline_context(self):
+        """utils.set_pipeline_context exists and accepts PipelineContext."""
+        import utils
+        assert hasattr(utils, "set_pipeline_context")
+        assert callable(utils.set_pipeline_context)
+
+    def test_utils_has_get_pipeline_context(self):
+        """utils.get_pipeline_context returns stored context or None."""
+        import utils
+        assert hasattr(utils, "get_pipeline_context")
+        assert callable(utils.get_pipeline_context)
+
+    def test_set_and_get_pipeline_context(self):
+        """Round-trip: set context then get it back."""
+        from context import PipelineContext
+        import utils
+        ctx = PipelineContext(project_dir="/tmp/test", repo="t/r")
+        utils.set_pipeline_context(ctx)
+        assert utils.get_pipeline_context() is ctx
+
+
 class TestPipelineContextFailures:
     """Failure mode tests."""
 
