@@ -141,6 +141,13 @@
 **Status:** [x] Done
 **User Story:** As a user, I can fix should fix issue creation: extract from pr review text (not just nm_stdout), handle table-format findings (r1 | reliability | ... | should fix). add tests for all extraction formats.
 
+
+### F047: F048: Move nm and TL review from PR body injection to PR comments. Reviews become standalone comments instead of being regex-injected into the PR description. Fixes injection fragility, PR body clutter, and overwrite races. SHOULD FIX extraction parses PR comments instead of body.
+**Priority:** P2
+**Dependencies:** F039, F044
+**Status:** [ ] Pending
+**User Story:** As a user, I can f048: move nm and tl review from pr body injection to pr comments. reviews become standalone comments instead of being regex-injected into the pr description. fixes injection fragility, pr body clutter, and overwrite races. should fix extraction parses pr comments instead of body.
+
 ### F037: Blocker Resolution Tracking — cross-reference fix PRs to the original blocker PR they resolve. After `dokima fix` completes and TL approves, auto-update the original PR's `### Blockers` section with strikethrough + link to the resolution PR. Optionally create GitHub issues from blockers (matching SHOULD FIX pattern) and auto-close them when the fix PR merges.
 **Priority:** P2
 **Dependencies:** F034
@@ -172,6 +179,13 @@
 **Dependencies:** F032
 **Status:** [x] Done
 **User Story:** As a user, I can dokima fix --issue n: pull github issue body, extract file/line/fix/verify from structured format, spawn coder to implement. also upgrade should fix issue creation to include what/fix/verify sections for coder-readability.
+
+
+### F048: Thermo-nuclear code quality review: upgrade TL with file size gates (500-line Python threshold), spaghetti detection, code-judo, abstraction quality, layer discipline, type boundaries, atomicity. New --quality flag (thermo-nuclear/standard/relaxed). Pure TL prompt enhancement injected into run_phase5_tech_lead.
+**Priority:** P2
+**Dependencies:** F047, F039, F044
+**Status:** [ ] Pending
+**User Story:** As a user, I can thermo-nuclear code quality review: upgrade tl with file size gates (500-line python threshold), spaghetti detection, code-judo, abstraction quality, layer discipline, type boundaries, atomicity. new --quality flag (thermo-nuclear/standard/relaxed). pure tl prompt enhancement injected into run_phase5_tech_lead.
 
 ### F029: Auto-generate CLI reference page from cli-help.json during Vercel build instead of hand-written MDX. New flags and commands appear in docs automatically on every release.
 **Priority:** P2
