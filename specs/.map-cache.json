@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "aba71b03179d72cc482deb169fbb55c8",
+    "hash": "8c3326133601a7713965404e9f9f24fd",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -40,16 +40,16 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "b244367d82085942514a977f2597f293",
+    "hash": "7bc383868d108c25d257719c51d3b1d9",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "b8461a85985e20cfe083d86eac12b800",
+    "hash": "335ad8bd9e57e333affcf26d989dbe4a",
     "desc": "Exports: parse_roadmap"
   },
   "spec_extract.py": {
-    "hash": "c2dadbec8d4f9a0bbe6619034e83a4cd",
-    "desc": "Exports: extract_pr_sections"
+    "hash": "19c5f115d0b78a3b88e95cfe3679fb70",
+    "desc": "Exports: _trim_to_sentences"
   },
   "status.py": {
     "hash": "bed92ed77b605d764ae28f4a94a2c07b",
@@ -228,7 +228,7 @@
     "desc": "Ensure the project root is on the path so we can import utils"
   },
   "tests/test_f025_dashboard.py": {
-    "hash": "0a2035004d5dfca30a5d4ba0dd47f449",
+    "hash": "e8402fae58191309bf296dd5acc692b7",
     "desc": "Exports: TestPipelineStatus, TestSaveLoad"
   },
   "tests/test_f030_cli_metadata.py": {
@@ -300,7 +300,7 @@
     "desc": "Exports: _setup"
   },
   "tests/test_fix_mode.py": {
-    "hash": "8ca54e4471d098653f949f4810d6ef10",
+    "hash": "868018598ed1b91cb715c8900ee181b7",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
   "tests/test_functions_unit.py": {
@@ -316,7 +316,7 @@
     "desc": "Exports: test_help_text_documents_panel_max_parallel"
   },
   "tests/test_helpers.py": {
-    "hash": "53fc3d02dceabb0838516f826d9851a1",
+    "hash": "6dbbf886343aa971b634940edc99bf32",
     "desc": "Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_commit_roadmap_update_aborts_on_checkout_failure"
   },
   "tests/test_installer.py": {
@@ -364,7 +364,7 @@
     "desc": "Exports: test_file_not_found, test_empty_file, test_single_feature_all_fields"
   },
   "tests/test_roadmap_update.py": {
-    "hash": "367a5d950dddedc4a64a7b51ee16db55",
+    "hash": "c2cb078eba52a6b5eaba5658ff27af97",
     "desc": "Exports: test_pending_to_in_progress, test_in_progress_to_done, test_done_to_pending_revert, test_feature_not_found_no_change, test_file_not_found_no_crash"
   },
   "tests/test_root_cause_regressions.py": {
@@ -384,7 +384,7 @@
     "desc": "Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash"
   },
   "tests/test_spec_extract.py": {
-    "hash": "0876f2cc2ca332676f08fb97c89e6437",
+    "hash": "89c1b9db749996c1867c43663009c61a",
     "desc": "Exports: TestSpecExtractModule"
   },
   "tests/test_spec_quality_gates.py": {

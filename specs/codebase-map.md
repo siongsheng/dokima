@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-07 11:50:44 (incremental | 111 files)
+## Generated: 2026-07-08 08:15:34 (incremental | 111 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -135,7 +135,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - codebase_map.py  — continue
 - control_panel.py
 - git_ops.py  — Exports: git, gh
-- spec_extract.py  — Exports: extract_pr_sections
+- spec_extract.py  — Exports: _trim_to_sentences
 - vcs.py  — Exports: detect_vcs_backend
 
 ## Impact Map

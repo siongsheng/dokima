@@ -110,6 +110,14 @@ def _status_update(**kwargs):
         s = load_status(PROJECT_DIR)
         if s is None:
             s = PipelineStatus()
+        # Feature change guard: reset tracking when switching features (issues #131, #136)
+        if 'feature' in kwargs and s.feature and kwargs['feature'] != s.feature:
+            import datetime
+            s.started_at = datetime.datetime.now().isoformat()
+            s.current_phase = "init"
+            s.task_total = 0
+            s.task_completed = 0
+            s.verdict = ""
         for k, v in kwargs.items():
             if hasattr(s, k):
                 setattr(s, k, v)
@@ -2433,9 +2441,6 @@ def _save_spec_and_extract_tasks(spec, feature, strat_output, project_dir):
                   f"ies", flush=True)
     except Exception as e:
         print(f"  \u26a0 Map enrichment failed (non-blocking): {e}", flush=True)
-
-    pr_sections = extract_pr_sections(spec, feature)
-    print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
 
     tasks_extract_path = os.path.join(spec_dir, f"{spec_name}-tasks.md")
     try:

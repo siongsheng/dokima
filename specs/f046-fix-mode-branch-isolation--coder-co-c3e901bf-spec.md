@@ -1,6 +1,4 @@
 # F046: Fix mode branch isolation — coder commits directly to main instead of the fix branch. The coder prompt says "switch to branch fix/issue-N" but the coder ignores it or the pipeline doesn't enforce it. Fix: verify coder is on the correct branch before vet phase, or make the branch checkout mandatory in the prompt.
-
-I have all the context. Let me now produce the corrected complete spec.
     
     
     
