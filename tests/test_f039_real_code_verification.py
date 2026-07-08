@@ -589,3 +589,206 @@ class TestVerifyImportsScript:
                 f"Expected exit 2, got {result.returncode}\nstdout: {result.stdout}"
             )
             assert "nonexistent_func" in result.stdout
+
+
+# ── Task 5: vet/real_code_check.py unit tests ──
+
+
+class TestExtractTargets:
+    """Unit tests for extract_targets() in vet/real_code_check.py."""
+
+    def _make_test_file(self, tmpdir, filename, content):
+        """Helper: write a test file and return its full path."""
+        os.makedirs(os.path.join(tmpdir, "tests"), exist_ok=True)
+        path = os.path.join(tmpdir, "tests", filename)
+        with open(path, "w") as f:
+            f.write(content)
+        return path
+
+    def test_patch_decorator_single_quote(self):
+        """@patch('module.func') -> one target extracted."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_single.py",
+                "from unittest.mock import patch\n"
+                "@patch('utils.slugify')\n"
+                "def test_foo(m): pass\n")
+            targets = extract_targets(fpath)
+            assert len(targets) == 1, f"Expected 1, got {targets}"
+            assert targets[0]["module"] == "utils"
+            assert targets[0]["func"] == "slugify"
+
+    def test_patch_decorator_double_quote(self):
+        """@patch(\"module.func\") double quotes -> one target extracted."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_double.py",
+                'from unittest.mock import patch\n'
+                '@patch("pipeline.run_pipeline")\n'
+                'def test_bar(m): pass\n')
+            targets = extract_targets(fpath)
+            assert len(targets) == 1
+            assert targets[0]["module"] == "pipeline"
+            assert targets[0]["func"] == "run_pipeline"
+
+    def test_mock_patch_decorator(self):
+        """@mock.patch('a.b.c') -> module='a.b', func='c'."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_mock_deco.py",
+                'from unittest import mock\n'
+                '@mock.patch("pkg.sub.mod.func")\n'
+                'def test_thing(m): pass\n')
+            targets = extract_targets(fpath)
+            assert len(targets) == 1
+            assert targets[0]["module"] == "pkg.sub.mod"
+            assert targets[0]["func"] == "func"
+
+    def test_mocker_patch_call(self):
+        """mocker.patch('a.b') call -> target extracted."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_mocker.py",
+                'def test_stuff():\n'
+                '    mocker = object()\n'
+                "    mocker.patch('utils.slugify')\n")
+            targets = extract_targets(fpath)
+            assert len(targets) >= 1, f"Expected >=1 from mocker.patch, got {targets}"
+            assert any(t["func"] == "slugify" for t in targets)
+
+    def test_with_mock_patch_context(self):
+        """with mock.patch('a.b'): -> target extracted."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_with.py",
+                'from unittest import mock\n'
+                'def test_ctx():\n'
+                "    with mock.patch('pipeline.run_pipeline'):\n"
+                '        pass\n')
+            targets = extract_targets(fpath)
+            assert len(targets) >= 1, f"Expected >=1 from with mock.patch, got {targets}"
+            assert any(t["func"] == "run_pipeline" for t in targets)
+
+    def test_multiple_targets(self):
+        """Multiple patch calls -> all extracted."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_multi.py",
+                'from unittest.mock import patch\n'
+                "@patch('utils.slugify')\n"
+                "@patch('pipeline.run_pipeline')\n"
+                'def test_multi(m1, m2): pass\n')
+            targets = extract_targets(fpath)
+            assert len(targets) == 2
+
+    def test_target_without_dot_skipped(self):
+        """patch('simple') — no dot in target — skipped."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_nodot.py",
+                "from unittest.mock import patch\n"
+                "@patch('simple')\n"
+                'def test_s(m): pass\n')
+            targets = extract_targets(fpath)
+            assert targets == []
+
+    def test_no_patch_returns_empty(self):
+        """File with no patch/mock.patch -> empty list."""
+        from vet.real_code_check import extract_targets
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = self._make_test_file(tmp, "test_nopatch.py",
+                'def test_plain(): assert True\n')
+            targets = extract_targets(fpath)
+            assert targets == []
+
+    def test_unreadable_file_returns_empty(self):
+        """Non-existent file -> empty list, no crash."""
+        from vet.real_code_check import extract_targets
+        targets = extract_targets("/nonexistent/path/test.py")
+        assert targets == []
+
+
+class TestVerifyTarget:
+    """Unit tests for verify_target() in vet/real_code_check.py."""
+
+    def test_existing_function_returns_true(self):
+        """json.loads exists -> (True, None)."""
+        from vet.real_code_check import verify_target
+        ok, error = verify_target("json", "loads", "")
+        assert ok is True
+        assert error is None
+
+    def test_missing_function_returns_false(self):
+        """json.nonexistent_func -> (False, AttributeError)."""
+        from vet.real_code_check import verify_target
+        ok, error = verify_target("json", "nonexistent_func_xyz", "")
+        assert ok is False
+        assert error is not None
+        assert "AttributeError" in error
+
+    def test_missing_module_returns_false(self):
+        """Non-existent module -> (False, ModuleNotFoundError)."""
+        from vet.real_code_check import verify_target
+        ok, error = verify_target("nonexistent_module_xyz_12345", "foo", "")
+        assert ok is False
+        assert error is not None
+        assert "ModuleNotFoundError" in error
+
+    def test_src_dir_added_to_path(self):
+        """src_dir is added to sys.path for import resolution."""
+        import sys
+        from vet.real_code_check import verify_target
+        original_path = list(sys.path)
+        try:
+            # Use a temp dir as src_dir
+            with tempfile.TemporaryDirectory() as src_dir:
+                ok, _ = verify_target("json", "loads", src_dir)
+                assert ok is True
+                # src_dir should be at the front of sys.path
+                assert src_dir in sys.path
+        finally:
+            # Restore sys.path to avoid test pollution
+            sys.path[:] = original_path
+
+
+class TestFindTestFiles:
+    """Unit tests for find_test_files() in vet/real_code_check.py."""
+
+    def test_finds_py_files_in_directory(self):
+        """Recursively finds .py files in test dir."""
+        from vet.real_code_check import find_test_files
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "subdir"), exist_ok=True)
+            open(os.path.join(tmp, "test_a.py"), "w").close()
+            open(os.path.join(tmp, "test_b.py"), "w").close()
+            open(os.path.join(tmp, "subdir", "test_c.py"), "w").close()
+            open(os.path.join(tmp, "not_a_test.txt"), "w").close()
+
+            files = find_test_files(tmp)
+            # Only .py files, sorted
+            assert len(files) == 3
+            assert all(f.endswith(".py") for f in files)
+            assert files == sorted(files)
+
+    def test_non_existent_directory_returns_empty(self):
+        """Non-existent dir -> empty list."""
+        from vet.real_code_check import find_test_files
+        files = find_test_files("/nonexistent/test/dir")
+        assert files == []
+
+    def test_empty_directory_returns_empty(self):
+        """Empty directory -> empty list."""
+        from vet.real_code_check import find_test_files
+        with tempfile.TemporaryDirectory() as tmp:
+            files = find_test_files(tmp)
+            assert files == []
+
+    def test_returns_sorted_list(self):
+        """Result is sorted alphabetically."""
+        from vet.real_code_check import find_test_files
+        with tempfile.TemporaryDirectory() as tmp:
+            open(os.path.join(tmp, "z_test.py"), "w").close()
+            open(os.path.join(tmp, "a_test.py"), "w").close()
+            open(os.path.join(tmp, "m_test.py"), "w").close()
+            files = find_test_files(tmp)
+            assert files == sorted(files)
