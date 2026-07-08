@@ -275,7 +275,7 @@
 ### F040: PipelineContext dataclass — replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, etc.) with a single PipelineContext dataclass passed to each phase function. Eliminates conftest __setattr__ override hack. Makes testing trivial — create a context, pass it in. All 1,029 tests protect this refactor.
 **Priority:** P1
 **Dependencies:** None
-**Status:** [~] In Progress Progress Progress Progress Progress Progress
+**Status:** [x] Done Progress Progress Progress Progress Progress Progress
 **User Story:** As a contributor, I can write a test by creating a PipelineContext instead of monkey-patching 20+ module globals through conftest.
 
 ### F041: Split utils.py into domain modules — git_ops.py (git, gh wrappers), spec_extract.py (extract_pr_sections, extract_issue_sections, clean_spec_content), codebase_map.py (generate_codebase_map, _build_domain_map, _build_impact_map), control_panel.py (handle_status, handle_stop, handle_kill). 3,351 lines → ~4 × 800-line modules.
@@ -298,10 +298,10 @@
 **Status:** [x] Done
 **User Story:** As a contributor, I can understand and modify a phase function without tracing 125 branching paths.
 
-### F044: PR body quality — `extract_pr_sections()` currently dumps the strategist's full spec into Why/Impact instead of extracting concise summaries. Fix: trim Why to first 2 sentences (max 200 chars), Impact to product-value-only (strip meta-commentary and internal thinking), strip nm Review of shell commands and reasoning noise.
+### F044: PR body quality
 **Priority:** P1
 **Dependencies:** F038
-**Status:** [~] In Progress
+**Status:** [x] Done
 **User Story:** As a reviewer, I open a PR and immediately understand what changed and why — no walls of strategist text, no shell commands in review sections.
 
 ### F045: Roadmap auto-update verification — `commit_roadmap_update()` marks features Done without verifying implementation exists. When a pipeline merges, it updates ALL feature statuses in roadmap.md — including unrelated ones. Fix: only update the specific feature that was built, and verify source changes exist before marking Done.
