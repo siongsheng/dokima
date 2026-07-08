@@ -196,6 +196,91 @@ class TestVerifyTestImportsExist:
         assert "pipeline.nonexistent_pipeline_func" in result[0]
         assert "test_has_missing.py" in result[0]
 
+    # ── Task 2: Edge case tests ──
+
+    def test_dynamic_import_not_flagged(self, panel, temp_project):
+        """Dynamic importlib.import_module() -> NOT flagged (out of scope for static analysis)."""
+        test_file = os.path.join(temp_project, "tests", "test_dynamic.py")
+        with open(test_file, "w") as f:
+            f.write("import importlib\n")
+            f.write("\n")
+            f.write("def test_dynamic():\n")
+            f.write("    mod = importlib.import_module('utils')\n")
+            f.write("    assert mod.slugify('x') is not None\n")
+            f.write("    # Also reference real function via static import in same file\n")
+            f.write("    from utils import slugify\n")
+            f.write("    assert slugify('x') is not None\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # Dynamic importlib.import_module is out of scope — no false positive
+        # But the static 'from utils import slugify' should pass (slugify exists)
+        assert isinstance(result, list)
+        # No violations expected — slugify is real, dynamic import is skipped
+        assert not any("slugify" in r for r in result), \
+            f"slugify should NOT be flagged in dynamic import test: {result}"
+
+    def test_create_true_mock_missing_flagged(self, panel, temp_project):
+        """mocker.patch('pipeline.nonexistent_func', create=True) -> flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_create_true.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest import mock\n")
+            f.write("\n")
+            f.write("def test_missing_with_create():\n")
+            f.write("    mocker = mock.MagicMock()\n")
+            f.write("    with mocker.patch('pipeline.nonexistent_func', create=True):\n")
+            f.write("        pass\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # create=True should not mask the missing function
+        assert len(result) >= 1, f"Expected missing func flagged with create=True, got: {result}"
+        assert any("pipeline.nonexistent_func" in r for r in result), \
+            f"nonexistent_func should be flagged even with create=True: {result}"
+
+    def test_create_true_mock_existing_not_flagged(self, panel, temp_project):
+        """mocker.patch('utils.slugify', create=True) where slugify exists -> NOT flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_create_true_existing.py")
+        with open(test_file, "w") as f:
+            f.write("from unittest import mock\n")
+            f.write("\n")
+            f.write("def test_existing_with_create():\n")
+            f.write("    mocker = mock.MagicMock()\n")
+            f.write("    with mocker.patch('utils.slugify', create=True):\n")
+            f.write("        pass\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        assert result == [], \
+            f"slugify exists — should NOT be flagged even with create=True: {result}"
+
+    def test_stdlib_import_not_flagged(self, panel, temp_project):
+        """from os import path -> NOT flagged (stdlib module not in source_names)."""
+        test_file = os.path.join(temp_project, "tests", "test_stdlib.py")
+        with open(test_file, "w") as f:
+            f.write("from os import path\n")
+            f.write("from sys import argv\n")
+            f.write("\n")
+            f.write("def test_stdlib():\n")
+            f.write("    assert path.exists('/tmp')\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # os, sys are stdlib — not in project source_names, should be skipped
+        assert result == [], \
+            f"Stdlib imports should NOT be flagged: {result}"
+
+    def test_testfile_local_function_not_flagged(self, panel, temp_project):
+        """Function defined in test file itself -> NOT flagged."""
+        test_file = os.path.join(temp_project, "tests", "test_local.py")
+        with open(test_file, "w") as f:
+            f.write("def helper():\n")
+            f.write("    return 42\n")
+            f.write("\n")
+            f.write("def test_uses_local_helper():\n")
+            f.write("    assert helper() == 42\n")
+
+        result = panel._pipeline._verify_test_imports_exist(temp_project)
+        # Local function in test file — no import, no mock reference, should not flag
+        assert result == [], \
+            f"Test-file-local function should NOT be flagged: {result}"
+
 
 # ── Task 1: verify_source_function_exists tests ──
 
