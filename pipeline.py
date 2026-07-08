@@ -110,6 +110,10 @@ def _status_update(**kwargs):
         s = load_status(PROJECT_DIR)
         if s is None:
             s = PipelineStatus()
+        # Feature change guard: reset started_at when switching features (issue #131)
+        if 'feature' in kwargs and s.feature and kwargs['feature'] != s.feature:
+            import datetime
+            s.started_at = datetime.datetime.now().isoformat()
         for k, v in kwargs.items():
             if hasattr(s, k):
                 setattr(s, k, v)
