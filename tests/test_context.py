@@ -244,6 +244,93 @@ class TestPipelineContextEntryScriptWiring:
         }
 
 
+# ── Pipeline function contract (spec 10.3, 10.16) ──
+
+
+class TestPipelineFunctionContracts:
+    """Verify phase functions accept PipelineContext as first parameter."""
+
+    def _import_pipeline_safely(self):
+        """Import pipeline module with mock safeguards."""
+        import sys
+        # Prevent side effects during import
+        if "pipeline" not in sys.modules:
+            import pipeline
+        return sys.modules["pipeline"]
+
+    def test_run_pipeline_accepts_ctx(self):
+        """Spec 10.16: run_pipeline first param is ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_pipeline)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx", f"Expected 'ctx' as first param, got {params}"
+
+    def test_run_phase1_strategist_accepts_ctx(self):
+        """run_phase1_strategist accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_phase1_strategist)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_phase2_coder_accepts_ctx(self):
+        """run_phase2_coder accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_phase2_coder)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_phase3_vet_accepts_ctx(self):
+        """run_phase3_vet accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_phase3_vet)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_phase4_nm_accepts_ctx(self):
+        """run_phase4_nm accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_phase4_nm)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_phase5_tech_lead_accepts_ctx(self):
+        """run_phase5_tech_lead accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_phase5_tech_lead)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_post_pipeline_accepts_ctx(self):
+        """run_post_pipeline accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_post_pipeline)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_fix_mode_accepts_ctx(self):
+        """run_fix_mode accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_fix_mode)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_run_fix_mode_issue_accepts_ctx(self):
+        """run_fix_mode_issue accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run_fix_mode_issue)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+
 class TestPipelineContextFailures:
     """Failure mode tests."""
 
