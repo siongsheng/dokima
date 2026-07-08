@@ -1348,7 +1348,7 @@ def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
             f"**Fix PR:** {pr_url}  \n"
         )
         updated_body = current_body + "\n" + cross_ref + resolution_section
-        _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body)
+        _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body, repo=ctx.repo)
         return rc == 0
     except Exception:
         return False
@@ -1404,7 +1404,7 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
         if "### nm Review" in current_body:
             current_body = re.sub(r'\n*### nm Review.*$', '', current_body, flags=re.DOTALL)
         updated_body = current_body.rstrip() + "\n\n" + nm_section
-        _, _, rc = vcs.vcs_pr_update_body(pr_num_match.group(1), updated_body)
+        _, _, rc = vcs.vcs_pr_update_body(pr_num_match.group(1), updated_body, repo=ctx.repo)
         return rc == 0
     except Exception:
         return False

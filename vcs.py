@@ -16,7 +16,6 @@ import subprocess
 
 VCS_BACKEND = "github"   # "github" | "gitlab"
 VCS_TOKEN_ENV = "GH_TOKEN"  # "GH_TOKEN" | "GLAB_TOKEN" | "GITLAB_TOKEN"
-REPO = ""
 
 
 # ── Detection ───────────────────────────────────────────────────────
@@ -27,7 +26,7 @@ def detect_vcs_backend(project_dir):
     Returns "github" or "gitlab", or None for unknown/error.
     Sets module-level VCS_BACKEND, VCS_TOKEN_ENV, and REPO.
     """
-    global VCS_BACKEND, VCS_TOKEN_ENV, REPO
+    global VCS_BACKEND, VCS_TOKEN_ENV
 
     try:
         result = subprocess.run(
@@ -50,7 +49,6 @@ def detect_vcs_backend(project_dir):
     if m:
         VCS_BACKEND = "github"
         VCS_TOKEN_ENV = "GH_TOKEN"
-        REPO = m.group(1)
         return "github"
 
     # GitLab: gitlab.*[:/]namespace/project(.git)?
@@ -63,7 +61,6 @@ def detect_vcs_backend(project_dir):
             VCS_TOKEN_ENV = "GITLAB_TOKEN"
         else:
             VCS_TOKEN_ENV = "GLAB_TOKEN"
-        REPO = m.group(1)
         return "gitlab"
 
     print("WARNING: Unsupported VCS — only GitHub and GitLab are supported. "
@@ -236,7 +233,7 @@ def vcs_release_create(tag, title, target, generate_notes=True):
         return _run_vcs(*args)
 
 
-def vcs_pr_update_body(pr_num, new_body):
+def vcs_pr_update_body(pr_num, new_body, repo=""):
     """Update the body/description of a PR (GitHub) or MR (GitLab).
 
     Args:
@@ -250,7 +247,7 @@ def vcs_pr_update_body(pr_num, new_body):
                         "--description", new_body)
     else:
         return _run_vcs("gh", "api",
-                        f"repos/{REPO}/pulls/{pr_num}",
+                        f"repos/{repo}/pulls/{pr_num}",
                         "--method", "PATCH",
                         "-f", f"body={new_body}")
 
