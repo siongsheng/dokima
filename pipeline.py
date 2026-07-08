@@ -213,7 +213,8 @@ def discover_blocked_pr(ctx):
     dokima_mod = _IMPORTING_PANEL
     if dokima_mod is not None:
         override = getattr(dokima_mod, 'discover_blocked_pr', None)
-        if override is not None and override is not discover_blocked_pr:
+        if override is not None and override is not discover_blocked_pr \
+           and not getattr(override, '_is_bridge', False):
             return override()
 
     stdout, _, rc = gh("pr", "list", "--state", "open",

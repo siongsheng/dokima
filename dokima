@@ -54,7 +54,7 @@ from roadmap import (parse_roadmap, pick_next_feature, update_roadmap_status,
                      run_add_to_roadmap, run_next_setup, run_init)
 from pipeline import (run_pipeline, run_phase1_strategist, run_phase2_coder,
                       run_phase3_vet, run_phase4_nm, run_phase5_tech_lead,
-                      run_fix_mode, run_post_pipeline,
+                      run_fix_mode, run_fix_mode_issue, run_post_pipeline,
                       discover_blocked_pr, extract_blockers_from_pr,
                       _verify_pr_impact_alignment,
                       _MAP_ENRICHMENT_HINT)
@@ -681,9 +681,9 @@ def main():
     if is_fix:
         # Use _pipeline reference so test patches on pipeline module take effect
         if issue_number is not None:
-            _pipeline.run_fix_mode_issue(project_dir=PROJECT_DIR, issue_number=issue_number)
+            _pipeline.run_fix_mode_issue(ctx, PROJECT_DIR, issue_number)
         else:
-            _pipeline.run_fix_mode(project_dir=PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate, create_blocker_issues=create_blocker_issues)
+            _pipeline.run_fix_mode(ctx, PROJECT_DIR, fix_all=fix_all, skip_human_gate=skip_human_gate)
         _cleanup_lock()
         return
 
@@ -744,7 +744,7 @@ def main():
             print(f"  CONTINUOUS — Feature {iteration}")
             print(f"{'═'*60}\n")
 
-            run_pipeline(feature, is_next, True, user_answers_prefill, resume=RESUME)
+            run_pipeline(ctx, feature, is_next, True, user_answers_prefill, resume=RESUME)
 
             # Check stop file
             if os.path.exists(_stop_path()):
@@ -767,7 +767,7 @@ def main():
                 print("\n── Continuous: all features complete")
                 break
             feature = f"{next_feat.id}: {next_feat.title}"
-            PANEL_FEATURE = feature
+            ctx.panel_feature = feature
             update_roadmap_status(roadmap_path, next_feat.id, "in_progress")
             commit_roadmap_update(roadmap_path, next_feat.id, "start")
             status_path_c = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
