@@ -138,6 +138,10 @@ def _run_agent(profile, skills, prompt, timeout, cwd, model):
     """Core logic for spawning and running a single Hermes agent subprocess.
     Returns (output_string, returncode). Extracted for reuse with fallback."""
     cmd = [HERMES_BIN, "--profile", profile, "--yolo"]
+    if not cmd[0] or not os.path.isfile(cmd[0]):
+        cmd[0] = os.path.join(os.path.expanduser("~"), ".hermes", "hermes-agent", "venv", "bin", "hermes")
+    if not os.path.isfile(cmd[0]):
+        raise FileNotFoundError(f"hermes binary not found at {cmd[0]} (HERMES_BIN was {HERMES_BIN!r})")
     if model:
         if "/" in model:
             provider, model_name = model.split("/", 1)
