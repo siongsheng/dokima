@@ -11,6 +11,7 @@ def test_explicit_project_dir_stop(panel):
 
 def test_implicit_from_global(panel):
     panel.PROJECT_DIR = "/home/user/foo"
+    panel._utils.PROJECT_DIR = "/home/user/foo"  # F040: also sync to utils
     result = panel._lock_path()
     assert result == "/tmp/dokima-foo.lock"
 

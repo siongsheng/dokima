@@ -217,6 +217,7 @@ class TestDetectCommands:
         with open(os.path.join(project_dir, "AGENTS.md"), "w") as f:
             f.write("## Commands\n- Test: `pytest`\n- Build: `make build`\n- Lint: `flake8`\n")
         panel.PROJECT_DIR = project_dir
+        panel._utils.PROJECT_DIR = project_dir  # F040: sync
         t, b, l = panel.detect_commands()
         assert t == "pytest"
         assert b == "make build"
@@ -229,6 +230,7 @@ class TestDetectCommands:
         with open(os.path.join(project_dir, "AGENTS.md"), "w") as f:
             f.write("## Commands\n- Test: `npm test`\n")
         panel.PROJECT_DIR = project_dir
+        panel._utils.PROJECT_DIR = project_dir  # F040: sync
         t, b, l = panel.detect_commands()
         assert t == "npm test"
         assert b == "npm run build"  # default

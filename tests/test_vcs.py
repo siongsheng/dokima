@@ -20,7 +20,7 @@ class TestDetectVcsBackend:
             )
             backend = vcs.detect_vcs_backend("/tmp/test")
             assert backend == "github"
-            assert vcs.REPO == "owner/repo"
+            # F040: REPO moved to PipelineContext — vcs no longer stores it
 
     def test_github_https(self):
         """https://github.com/owner/repo.git → 'github', 'owner/repo'"""
@@ -41,7 +41,7 @@ class TestDetectVcsBackend:
             )
             backend = vcs.detect_vcs_backend("/tmp/test")
             assert backend == "gitlab"
-            assert vcs.REPO == "group/project"
+            # F040: REPO moved to PipelineContext — vcs no longer stores it
 
     def test_gitlab_https(self):
         """https://gitlab.com/group/project.git → 'gitlab'"""
@@ -62,7 +62,7 @@ class TestDetectVcsBackend:
             )
             backend = vcs.detect_vcs_backend("/tmp/test")
             assert backend == "gitlab"
-            assert vcs.REPO == "group/subgroup/project"
+            # F040: REPO moved to PipelineContext — vcs no longer stores it
 
     def test_no_git_suffix(self):
         """Trailing .git absent → still matches"""

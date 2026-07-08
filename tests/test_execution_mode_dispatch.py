@@ -27,13 +27,13 @@ def _reset_called():
     _captured_depth = None
 
 
-def _mock_run_phase2_coder(feature, spec, spec_path, tasks_extract_path,
+def _mock_run_phase2_coder(ctx, feature, spec, spec_path, tasks_extract_path,
                             pr_sections, branch, depth, mode, is_next):
     _called["phase2_coder"] = True
     return {"coder_failed": False, "pr_url": "http://pr/2", "verdict": "APPROVED"}
 
 
-def _mock_run_phase2_coder_capture(feature, spec, spec_path, tasks_extract_path,
+def _mock_run_phase2_coder_capture(ctx, feature, spec, spec_path, tasks_extract_path,
                                     pr_sections, branch, depth, mode, is_next):
     global _captured_depth
     _captured_depth = depth

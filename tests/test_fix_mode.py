@@ -562,7 +562,7 @@ def test_run_fix_mode_issue_happy_path(panel):
                         with patch.object(_pipeline, '_set_gh_token'):
                             with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                                 with patch('sys.stdout'):
-                                    _pipeline.run_fix_mode_issue("/tmp/test", 42)
+                                    panel.run_fix_mode_issue("/tmp/test", 42)
 
     # Verify gh issue view was called with issue 42
     view_calls = [c for c in gh_calls if "view" in c and "42" in map(str, c)]
@@ -588,7 +588,7 @@ def test_run_fix_mode_issue_nonexistent(panel):
             with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                 with patch('sys.stdout'):
                     # Should not raise — exits cleanly
-                    _pipeline.run_fix_mode_issue("/tmp/test", 999)
+                    panel.run_fix_mode_issue("/tmp/test", 999)
 
 
 def test_run_fix_mode_issue_no_sections(panel):
@@ -612,7 +612,7 @@ def test_run_fix_mode_issue_no_sections(panel):
             with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                 with patch('sys.stdout'):
                     # Should not raise — exits cleanly
-                    _pipeline.run_fix_mode_issue("/tmp/test", 77)
+                    panel.run_fix_mode_issue("/tmp/test", 77)
 
 
 def test_run_fix_mode_issue_branch_created(panel):
@@ -645,7 +645,7 @@ def test_run_fix_mode_issue_branch_created(panel):
                         with patch.object(_pipeline, '_set_gh_token'):
                             with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                                 with patch('sys.stdout'):
-                                    _pipeline.run_fix_mode_issue("/tmp/test", 55)
+                                    panel.run_fix_mode_issue("/tmp/test", 55)
 
     branch_names = []
     for call in git_calls:
@@ -707,7 +707,7 @@ def test_fix_mode_issue_pushes_branch_to_origin(panel):
                         with patch.object(_pipeline, '_set_gh_token'):
                             with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                                 with patch('sys.stdout'):
-                                    _pipeline.run_fix_mode_issue("/tmp/test", 42)
+                                    panel.run_fix_mode_issue("/tmp/test", 42)
 
     # Verify git push -u origin fix/issue-42 was called
     push_calls = [c for c in git_calls if "push" in c]
@@ -833,7 +833,7 @@ def test_vet_refuses_default_branch(panel):
                 with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
                     with patch.object(_pipeline, 'git'):
                         with patch('sys.stdout'):
-                            result = _pipeline.run_phase3_vet(
+                            result = panel.run_phase3_vet(
                                 feature="test", branch="fix/issue-42",
                                 pr_sections="", impact="MEDIUM",
                                 spec_path="", depth="full", confidence="High"
@@ -858,7 +858,7 @@ def test_vet_guard_catches_verify_branch_valueerror(panel):
                 with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
                     with patch.object(_pipeline, 'git'):
                         with patch('sys.stdout'):
-                            result = _pipeline.run_phase3_vet(
+                            result = panel.run_phase3_vet(
                                 feature="test", branch="fix/issue-42",
                                 pr_sections="", impact="MEDIUM",
                                 spec_path="", depth="full", confidence="High"
@@ -887,7 +887,7 @@ def test_vet_guard_message_for_checkout_failure_not_default_branch(panel):
                     with patch.object(_pipeline, 'git'):
                         with patch.object(_pipeline, 'halt_and_revert', side_effect=mock_halt):
                             with patch('sys.stdout'):
-                                result = _pipeline.run_phase3_vet(
+                                result = panel.run_phase3_vet(
                                     feature="test", branch="fix/issue-42",
                                     pr_sections="", impact="MEDIUM",
                                     spec_path="", depth="full", confidence="High"
@@ -925,7 +925,7 @@ def test_coder_prompt_has_mandatory_pre_flight(panel):
                     with patch.object(_pipeline, 'detect_repo', return_value="t/t"):
                         with patch.object(_pipeline, 'detect_commands', return_value=("echo test", "echo build", "echo lint")):
                             with patch('sys.stdout'):
-                                _pipeline.run_phase2_coder(
+                                panel.run_phase2_coder(
                                     feature="test fix", spec="### What\nTest\n\n### Fix\nFix it",
                                     spec_path="", tasks_extract_path="",
                                     pr_sections="", branch="fix/issue-99",

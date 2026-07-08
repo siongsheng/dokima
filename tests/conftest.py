@@ -101,6 +101,34 @@ def _load_panel():
     # Attach ctx to module for test access
     module._ctx = ctx
 
+    # F040: Bridge wrappers — auto-prepend ctx to pipeline functions
+    # so test code continues to work without explicitly passing ctx.
+    # Flagged with _is_bridge=True to prevent recursion through
+    # _IMPORTING_PANEL override detection.
+    from functools import wraps as _wraps
+
+    _PIPELINE_FUNCS = [
+        'discover_blocked_pr', 'extract_blockers_from_pr',
+        'run_phase2_coder', 'run_phase3_vet', 'run_phase4_nm',
+        'run_phase5_tech_lead', 'run_phase1_strategist',
+        'run_post_pipeline', 'run_fix_mode', 'run_fix_mode_issue',
+        'run_pipeline',
+    ]
+
+    for _fn_name in _PIPELINE_FUNCS:
+        _orig = getattr(module, _fn_name, None)
+        if _orig is None:
+            continue
+        @_wraps(_orig)
+        def _bridge(*args, _fn=_orig, **kwargs):
+            # Skip ctx prepend if first arg is already a PipelineContext
+            from context import PipelineContext as _PC
+            if args and isinstance(args[0], _PC):
+                return _fn(*args, **kwargs)
+            return _fn(module._ctx, *args, **kwargs)
+        _bridge._is_bridge = True
+        setattr(module, _fn_name, _bridge)
+
     return module
 
 
