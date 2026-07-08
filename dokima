@@ -673,6 +673,22 @@ def main():
         max_continuous=MAX_CONTINUOUS,
     )
 
+    # F040: Sync globals to sub-modules so functions that still read
+    # roadmap.PROJECT_DIR / utils.PROJECT_DIR / etc. get the correct values.
+    _sub_mod_sync_globals = {
+        'PROJECT_DIR': PROJECT_DIR,
+        'REPO': REPO,
+        'DEFAULT_BRANCH': DEFAULT_BRANCH,
+        'PANEL_FEATURE': PANEL_FEATURE,
+        'TEST_CMD': TEST_CMD,
+        'BUILD_CMD': BUILD_CMD,
+        'LINT_CMD': LINT_CMD,
+    }
+    for _gn, _gv in _sub_mod_sync_globals.items():
+        for _mod in (_utils, _pipeline, _roadmap, _tasks):
+            if hasattr(_mod, _gn):
+                setattr(_mod, _gn, _gv)
+
     # ── --answers interaction for --fix ──
     if is_fix and answers_path is not None:
         print("  ⚠ --fix mode ignores --answers (no strategist interview). Continuing...", flush=True)

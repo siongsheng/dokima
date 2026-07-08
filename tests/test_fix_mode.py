@@ -208,10 +208,11 @@ def test_fix_flag_dispatches_to_run_fix_mode(panel, tmpdir):
         sys.argv = ['dokima', 'fix', project_dir]
 
         def mock_run_fix(*args, **kwargs):
-            run_fix_args.append(kwargs.get('project_dir', ''))
+            # F040: first arg is ctx, second is project_dir
+            run_fix_args.append(args[1] if len(args) > 1 else kwargs.get('project_dir', ''))
 
         with patch.object(panel, 'acquire_lock', return_value=(None, None)):
-            with patch.object(panel, 'run_fix_mode', side_effect=mock_run_fix):
+            with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix):
                 with patch.object(panel, 'load_key', return_value="test-key"):
                     with patch.object(panel, 'detect_repo', return_value="t/t"):
                         with patch.object(panel, '_set_gh_token'):
@@ -411,15 +412,18 @@ def test_fix_with_issue_dispatches_to_run_fix_mode_issue(panel, tmpdir):
     try:
         sys.argv = ['dokima', 'fix', '--issue', '42', project_dir]
 
-        def mock_run_fix_mode_issue(**kwargs):
-            fix_mode_issue_args.append(kwargs)
+        def mock_run_fix_mode_issue(*args, **kwargs):
+            # F040: (ctx, project_dir, issue_number)
+            d = {'issue_number': args[2] if len(args) > 2 else kwargs.get('issue_number'),
+                 'project_dir': args[1] if len(args) > 1 else kwargs.get('project_dir')}
+            fix_mode_issue_args.append(d)
 
-        def mock_run_fix_mode(**kwargs):
+        def mock_run_fix_mode(*args, **kwargs):
             fix_mode_args.append(kwargs)
 
         with patch.object(panel, 'acquire_lock', return_value=(None, None)):
-            with patch.object(panel, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue, create=True):
-                with patch.object(panel, 'run_fix_mode', side_effect=mock_run_fix_mode):
+            with patch.object(panel._pipeline, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue):
+                with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix_mode):
                     with patch.object(panel, 'load_key', return_value="test-key"):
                         with patch.object(panel, 'detect_repo', return_value="t/t"):
                             with patch.object(panel, '_set_gh_token'):

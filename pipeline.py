@@ -1323,6 +1323,20 @@ def create_blocker_issues(blockers, pr_num, pr_url, feature, branch, spec_path,
     return urls
 
 
+def _get_repo():
+    """Get repo slug from importing panel or vcs, with fallback to empty string."""
+    import utils as _u
+    _panel = _u._IMPORTING_PANEL
+    if _panel is not None:
+        # Try ctx first (F040), then global
+        _ctx = getattr(_panel, '_ctx', None)
+        if _ctx is not None and _ctx.repo:
+            return _ctx.repo
+        if hasattr(_panel, 'REPO') and _panel.REPO:
+            return _panel.REPO
+    return _u.REPO or ""
+
+
 def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
                                spec_path, feature, create_issues=False):
     """Update original PR body after fix PR to show blocker resolution.
@@ -1349,7 +1363,9 @@ def _update_pr_body_after_fix(pr_num, pr_url, pr_branch, blockers, fix_verdict,
             f"**Fix PR:** {pr_url}  \n"
         )
         updated_body = current_body + "\n" + cross_ref + resolution_section
-        _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body, repo=ctx.repo)
+        # Get repo from importing panel if available
+        _repo = _get_repo()
+        _, _, rc = vcs.vcs_pr_update_body(pr_num, updated_body, repo=_repo)
         return rc == 0
     except Exception:
         return False
@@ -1405,7 +1421,9 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
         if "### nm Review" in current_body:
             current_body = re.sub(r'\n*### nm Review.*$', '', current_body, flags=re.DOTALL)
         updated_body = current_body.rstrip() + "\n\n" + nm_section
-        _, _, rc = vcs.vcs_pr_update_body(pr_num_match.group(1), updated_body, repo=ctx.repo)
+        # Get repo from importing panel if available
+        _repo = _get_repo()
+        _, _, rc = vcs.vcs_pr_update_body(pr_num_match.group(1), updated_body, repo=_repo)
         return rc == 0
     except Exception:
         return False
@@ -2106,6 +2124,9 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 """
     # PANEL_EXISTING_SPEC override (internal, from --fix mode)
     _existing_spec = os.environ.get("PANEL_EXISTING_SPEC", "")
+    # Resolve relative paths against project_dir to prevent env var leaks
+    if _existing_spec and not os.path.isabs(_existing_spec):
+        _existing_spec = os.path.join(project_dir, _existing_spec)
     if _existing_spec and os.path.exists(_existing_spec) and not _refine_note:
         _refine_note = f"""NOTE: A spec already exists at {_existing_spec}. This feature was previously designed.
         Read the existing spec FIRST. REFINE — do not start from scratch. Identify gaps vs the current

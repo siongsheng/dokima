@@ -195,7 +195,12 @@ def detect_commands():
     test_cmd = "npm test"
     build_cmd = "npm run build"
     lint_cmd = "npm run lint"
-    agents_path = os.path.join(_u.PROJECT_DIR, "AGENTS.md")
+    # Use panel's PROJECT_DIR override if available (tests set it on panel, not utils)
+    _project_dir = _u.PROJECT_DIR
+    _panel = _u._IMPORTING_PANEL
+    if _panel is not None and hasattr(_panel, 'PROJECT_DIR'):
+        _project_dir = _panel.PROJECT_DIR
+    agents_path = os.path.join(_project_dir, "AGENTS.md")
     if os.path.exists(agents_path):
         with open(agents_path) as f:
             agent_content = f.read()

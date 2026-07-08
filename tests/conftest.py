@@ -121,11 +121,40 @@ def _load_panel():
             continue
         @_wraps(_orig)
         def _bridge(*args, _fn=_orig, **kwargs):
+            # Sync panel globals to ctx before each bridged call.
+            # Tests set panel.PROJECT_DIR / panel.PANEL_FEATURE / etc.
+            # but pipeline functions read ctx.project_dir / ctx.panel_feature.
+            # This bridge keeps them in sync transparently.
+            _ctx = module._ctx
+            if hasattr(module, 'PROJECT_DIR'):
+                _ctx.project_dir = module.PROJECT_DIR
+            if hasattr(module, 'REPO'):
+                _ctx.repo = module.REPO
+            if hasattr(module, 'PANEL_FEATURE'):
+                _ctx.panel_feature = module.PANEL_FEATURE
+            if hasattr(module, 'DEFAULT_BRANCH'):
+                _ctx.default_branch = module.DEFAULT_BRANCH
+            if hasattr(module, 'TEST_CMD'):
+                _ctx.test_cmd = module.TEST_CMD
+            if hasattr(module, 'BUILD_CMD'):
+                _ctx.build_cmd = module.BUILD_CMD
+            if hasattr(module, 'LINT_CMD'):
+                _ctx.lint_cmd = module.LINT_CMD
+            # Also sync to sub-module globals for functions that still use them
+            for _sub_name in ('_utils', '_roadmap', '_pipeline', '_tasks', '_agent'):
+                _sub = getattr(module, _sub_name, None)
+                if _sub is not None:
+                    for _gn in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE', 'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
+                        if hasattr(module, _gn) and hasattr(_sub, _gn):
+                            try:
+                                setattr(_sub, _gn, getattr(module, _gn))
+                            except (AttributeError, TypeError):
+                                pass
             # Skip ctx prepend if first arg is already a PipelineContext
             from context import PipelineContext as _PC
             if args and isinstance(args[0], _PC):
                 return _fn(*args, **kwargs)
-            return _fn(module._ctx, *args, **kwargs)
+            return _fn(_ctx, *args, **kwargs)
         _bridge._is_bridge = True
         setattr(module, _fn_name, _bridge)
 
