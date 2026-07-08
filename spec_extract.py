@@ -467,10 +467,13 @@ def _check_pr_body_quality(spec_text: str, failures: list) -> None:
 def extract_should_fix_from_text(text):
     """Extract SHOULD FIX findings from any text source (TL output, PR review, nm stdout).
 
-    Handles three formats:
+    Handles four formats:
+    - Bracket: [RELIABILITY] Description — nm's primary output format
     - Table: | R1 | RELIABILITY | utils.py:42 | SHOULD FIX | Naming conventions |
     - Prose: SHOULD FIX — description or SHOULD FIX: description
     - Bullet: - SHOULD FIX: description or * SHOULD FIX — description
+
+    Filters out "SHOULD FIX: N" count lines (where N is just a number).
 
     Returns list[dict] with keys: id, dimension, location, detail.
     Deduplicates by normalized detail text (lowercase, punctuation-stripped).
@@ -482,11 +485,31 @@ def extract_should_fix_from_text(text):
     findings = []
 
     should_fix_pat = re.compile(r'SHOULD\s*FIX', re.IGNORECASE)
+    # Regex to detect bracket-format findings: [DIMENSION] description
+    bracket_pat = re.compile(r'^\[([A-Z][A-Z\s]*[A-Z])\]\s+(.+)$')
+    # Regex for numeric-only "findings" — SHOULD FIX: 8 count lines
+    _NUMBER_ONLY = re.compile(r'^\d{1,3}$')
 
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
+
+        # ── Bracket format: [DIMENSION] Description ──
+        # nm's primary output format for individual findings.
+        # Skip lines that start with SHOULD FIX (count lines like "SHOULD FIX: 8").
+        b_match = bracket_pat.match(stripped)
+        if b_match and not should_fix_pat.match(stripped):
+            dimension = b_match.group(1).strip()
+            detail = b_match.group(2).strip()
+            if detail:
+                findings.append({
+                    "id": "",
+                    "dimension": dimension,
+                    "location": "",
+                    "detail": detail,
+                })
+                continue
 
         # ── Table format: pipe-delimited row with SHOULD FIX in severity column ──
         if '|' in stripped and should_fix_pat.search(stripped):
@@ -559,7 +582,7 @@ def extract_should_fix_from_text(text):
         p_match = prose_re.match(stripped)
         if p_match:
             detail = p_match.group(2).strip()
-            if detail:
+            if detail and not _NUMBER_ONLY.match(detail):
                 findings.append({
                     "id": "",
                     "dimension": "",
@@ -576,7 +599,7 @@ def extract_should_fix_from_text(text):
         em_match = em_dash_re.match(stripped)
         if em_match:
             detail = em_match.group(1).strip()
-            if detail:
+            if detail and not _NUMBER_ONLY.match(detail):
                 findings.append({
                     "id": "",
                     "dimension": "",
