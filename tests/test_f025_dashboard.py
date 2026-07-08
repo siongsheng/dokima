@@ -146,3 +146,36 @@ class TestRender:
         out = render(s)
         assert "APPROVED" in out
         assert "github.com" in out
+
+
+class TestFeatureChangeResetsStartedAt:
+    """When pipeline switches to a new feature, started_at must reset."""
+
+    def test_started_at_resets_on_feature_change(self, panel, tmpdir_path):
+        """_status_update with new feature → started_at refreshed to now."""
+        import datetime
+        import time
+        from status import save_status, load_status, PipelineStatus
+
+        panel.PROJECT_DIR = tmpdir_path
+
+        # Seed: save a status with old feature + stale started_at
+        old_time = "2026-07-02T00:00:00"
+        s = PipelineStatus(feature="F032", started_at=old_time)
+        save_status(s, tmpdir_path)
+
+        # Ensure timestamps differ
+        time.sleep(0.01)
+
+        # Simulate new pipeline run with different feature
+        panel._pipeline._status_update(feature="F033", project=tmpdir_path)
+
+        # Verify
+        loaded = load_status(tmpdir_path)
+        assert loaded is not None
+        assert loaded.feature == "F033"
+        assert loaded.started_at != old_time, "started_at should reset on feature change"
+        # Should be recent
+        new_dt = datetime.datetime.fromisoformat(loaded.started_at)
+        delta = (datetime.datetime.now() - new_dt).total_seconds()
+        assert delta < 5, f"started_at should be recent, got {loaded.started_at}"
