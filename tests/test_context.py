@@ -371,6 +371,15 @@ class TestUtilsContextIntegration:
         assert utils.get_pipeline_context() is ctx
 
 
+class TestVcsRepoRemoval:
+    """Verify vcs.py no longer has module-level REPO (spec 10.18)."""
+
+    def test_vcs_no_module_level_repo(self):
+        """vcs.py should not have REPO as a module-level assignment."""
+        import vcs
+        assert not hasattr(vcs, "REPO") or vcs.REPO != vcs.REPO, \
+            "vcs.py should not have module-level REPO"
+
 class TestPipelineContextFailures:
     """Failure mode tests."""
 
