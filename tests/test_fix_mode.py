@@ -207,11 +207,11 @@ def test_fix_flag_dispatches_to_run_fix_mode(panel, tmpdir):
     try:
         sys.argv = ['dokima', 'fix', project_dir]
 
-        def mock_run_fix(**kwargs):
+        def mock_run_fix(*args, **kwargs):
             run_fix_args.append(kwargs.get('project_dir', ''))
 
         with patch.object(panel, 'acquire_lock', return_value=(None, None)):
-            with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix):
+            with patch.object(panel, 'run_fix_mode', side_effect=mock_run_fix):
                 with patch.object(panel, 'load_key', return_value="test-key"):
                     with patch.object(panel, 'detect_repo', return_value="t/t"):
                         with patch.object(panel, '_set_gh_token'):
@@ -298,7 +298,7 @@ def test_fix_answers_warning(panel):
 
 def test_run_fix_mode_discover_none(panel):
     """No BLOCKED PR → prints message, returns."""
-    with patch.object(panel, 'discover_blocked_pr', return_value=None):
+    with patch.object(panel._pipeline, 'discover_blocked_pr', return_value=None):
         with patch.object(panel, 'gh'):
             panel.run_fix_mode("/tmp/test")
             panel.gh.assert_not_called()
@@ -313,7 +313,7 @@ def test_run_fix_mode_extracts_blockers(panel):
         if "view" in args and "--json" in args:
             return ('{"state": "OPEN", "merged": false}', "", 0)
         return ("", "", 0)
-    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+    with patch.object(panel._pipeline, 'discover_blocked_pr', return_value=mock_pr):
         with patch.object(panel, 'gh', side_effect=mock_gh):
             with patch.object(panel, 'git'):
                 with patch.object(panel._pipeline, 'run_phase2_coder', return_value={"coder_failed": False, "pr_url": "https://github.com/t/t/pull/42"}):
@@ -333,7 +333,7 @@ def test_run_fix_mode_merged_pr(panel):
         if "view" in args and "--json" in args:
             return ('{"state": "OPEN", "merged": true}', "", 0)
         return ("", "", 0)
-    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+    with patch.object(panel._pipeline, 'discover_blocked_pr', return_value=mock_pr):
         with patch.object(panel, 'gh', side_effect=mock_gh):
             with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
                 with patch('sys.stdout'):
@@ -349,7 +349,7 @@ def test_run_fix_mode_no_blockers(panel):
         if "view" in args and "--json" in args:
             return ('{"state": "OPEN", "merged": false}', "", 0)
         return ("", "", 0)
-    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+    with patch.object(panel._pipeline, 'discover_blocked_pr', return_value=mock_pr):
         with patch.object(panel, 'gh', side_effect=mock_gh):
             with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
                 with patch('sys.stdout'):
@@ -367,7 +367,7 @@ def test_run_fix_mode_architectural_only(panel):
         if "view" in args and "--json" in args:
             return ('{"state": "OPEN", "merged": false}', "", 0)
         return ("", "", 0)
-    with patch.object(panel, 'discover_blocked_pr', return_value=mock_pr):
+    with patch.object(panel._pipeline, 'discover_blocked_pr', return_value=mock_pr):
         with patch.object(panel, 'gh', side_effect=mock_gh):
             with patch.dict(os.environ, {"PANEL_SKIP_HUMAN_GATE": "1"}):
                 with patch('sys.stdout'):
@@ -418,8 +418,8 @@ def test_fix_with_issue_dispatches_to_run_fix_mode_issue(panel, tmpdir):
             fix_mode_args.append(kwargs)
 
         with patch.object(panel, 'acquire_lock', return_value=(None, None)):
-            with patch.object(panel._pipeline, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue, create=True):
-                with patch.object(panel._pipeline, 'run_fix_mode', side_effect=mock_run_fix_mode):
+            with patch.object(panel, 'run_fix_mode_issue', side_effect=mock_run_fix_mode_issue, create=True):
+                with patch.object(panel, 'run_fix_mode', side_effect=mock_run_fix_mode):
                     with patch.object(panel, 'load_key', return_value="test-key"):
                         with patch.object(panel, 'detect_repo', return_value="t/t"):
                             with patch.object(panel, '_set_gh_token'):
