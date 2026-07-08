@@ -1,4 +1,8 @@
 {
+  ".pipeline-config.yaml": {
+    "hash": "36b24459ef5ff5b2580bb96f7d65ed50",
+    "desc": "Dokima Pipeline Configuration"
+  },
   ".pipeline-status.json": {
     "hash": "8c3326133601a7713965404e9f9f24fd",
     "desc": ""
@@ -8,11 +12,11 @@
     "desc": "Adversarial Review Report \u2014 Dokima Codebase"
   },
   "AGENTS.md": {
-    "hash": "b823924809ab5e230116bd1510baea50",
+    "hash": "6df5a268fcd4f69b3524811975b1464a",
     "desc": "Dokima \u2014 Multi-Agent Orchestration Engine"
   },
   "MAINTAINERS.md": {
-    "hash": "27aaa940ff7e5396f9234954a50b697d",
+    "hash": "ed8b890c85958cf6650c5d7ed398a0cc",
     "desc": "Dokima \u2014 Maintainer's Reference"
   },
   "README.md": {
@@ -40,11 +44,11 @@
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "7bc383868d108c25d257719c51d3b1d9",
+    "hash": "d0fdb5e644f0cc0320e85281de653a7a",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "335ad8bd9e57e333affcf26d989dbe4a",
+    "hash": "29b5a5ae652cbfef23b64aafe6ea11bb",
     "desc": "Exports: parse_roadmap"
   },
   "spec_extract.py": {
@@ -60,7 +64,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "0fda4a811ae9d5a4be10d60b94751726",
+    "hash": "f53090edd9afe12ff373e244c5ba383c",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "vcs.py": {
@@ -78,6 +82,10 @@
   "scripts/setup-linux.sh": {
     "hash": "3f15d47ade01635b482bf5ac7192f6e3",
     "desc": "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+  },
+  "scripts/verify_imports.py": {
+    "hash": "3c91fb55e8bf98f03859bbde51e65f46",
+    "desc": "Exports: discover_source_modules, load_source_module"
   },
   "skills/adversarial-review-lite/SKILL.md": {
     "hash": "d685ec85b479a416e53f4892a4be321e",
@@ -107,6 +115,14 @@
     "hash": "20dcfe6af2ada4d3fa14f8a34350a9bb",
     "desc": "Spec Strategist (Lite \u2014 Panel Edition)"
   },
+  "src/calculator.py": {
+    "hash": "a9b0859ed91bf98dd045b42dc5104c50",
+    "desc": "Exports: add, subtract"
+  },
+  "src/user_service.py": {
+    "hash": "9920c9df104288e6acb8da771976495e",
+    "desc": "Exports: get_user"
+  },
   "tests/conftest.py": {
     "hash": "f470a567f7353cfc5bbeaa3532e4a984",
     "desc": "Exports: _load_panel"
@@ -118,6 +134,10 @@
   "tests/test_add_to_roadmap.py": {
     "hash": "0164b46381f0f69b4f7be3102663ab4a",
     "desc": ""
+  },
+  "tests/test_calculator.py": {
+    "hash": "a6a743d004893974d394f4c257439537",
+    "desc": "Exports: test_add, test_subtract"
   },
   "tests/test_clean_spec.py": {
     "hash": "23f26d5a0782df242841ce3a1e650fcd",
@@ -148,7 +168,7 @@
     "desc": "Exports: test_first_acquisition_succeeds, test_second_acquisition_blocked, test_stale_lock_dead_pid"
   },
   "tests/test_edge_cases.py": {
-    "hash": "165d75ceca156a8f5e5230772bcaeaea",
+    "hash": "ffe4530856fbb9c9907252a8c5a57929",
     "desc": "Exports: _setup"
   },
   "tests/test_execution_mode_dispatch.py": {
@@ -228,7 +248,7 @@
     "desc": "Ensure the project root is on the path so we can import utils"
   },
   "tests/test_f025_dashboard.py": {
-    "hash": "e8402fae58191309bf296dd5acc692b7",
+    "hash": "0a2035004d5dfca30a5d4ba0dd47f449",
     "desc": "Exports: TestPipelineStatus, TestSaveLoad"
   },
   "tests/test_f030_cli_metadata.py": {
@@ -287,12 +307,16 @@
     "hash": "e05abaac82fad5969f1247cea18a8a23",
     "desc": "Exports: panel"
   },
+  "tests/test_f039_real_code_verification.py": {
+    "hash": "fa46400ef3834a3d5b9be98598693059",
+    "desc": "Exports: temp_project, TestVerifyTestImportsExist"
+  },
   "tests/test_f041_modules.py": {
     "hash": "6ab796152dcfa9c8fc8fef875df82078",
     "desc": "Exports: TestCodebaseMapModule"
   },
   "tests/test_final_coverage.py": {
-    "hash": "63bd93c57437b723a16f02ca7faee1ed",
+    "hash": "9ddde2352acadd15c7db5569d7060770",
     "desc": "Exports: _setup"
   },
   "tests/test_final_edge.py": {
@@ -304,8 +328,8 @@
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
   "tests/test_functions_unit.py": {
-    "hash": "30b28480519d8d1231041db04a67815a",
-    "desc": "Exports: TestSafeRun, TestGit"
+    "hash": "a7c069055c3a5746e7bed2a82ec23d2c",
+    "desc": "Exports: TestSafeRun, TestGit, TestHaltAndRevert"
   },
   "tests/test_git_ops.py": {
     "hash": "a55c3089acf013cec8ca6f5e129979ba",
@@ -423,6 +447,10 @@
     "hash": "a988df5e5f6772c94566671b42f73035",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
+  "tests/test_user_service.py": {
+    "hash": "54723dbd2adccb5e855cb38b7edc4f07",
+    "desc": "Exports: test_get_user, test_delete_user"
+  },
   "tests/test_vcs.py": {
     "hash": "cb6eb8b360d76487edbe0e60258c407d",
     "desc": "\u2500\u2500 detect_vcs_backend() \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
@@ -442,5 +470,9 @@
   "tests/htmlcov/style_cb_4667309f.css": {
     "hash": "d647f42e23626b7ad1182af8492f3de7",
     "desc": ""
+  },
+  "vet/real_code_check.py": {
+    "hash": "bae23a3aa3cdfa17d4b0b0157619c547",
+    "desc": "Exports: extract_targets"
   }
 }
