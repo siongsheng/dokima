@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
-import sys, os, json, re, subprocess, time, ast, importlib.util
+import sys, os, json, re, subprocess, time, ast, importlib.util, datetime, select
 import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
@@ -110,6 +110,13 @@ def _status_update(**kwargs):
         s = load_status(PROJECT_DIR)
         if s is None:
             s = PipelineStatus()
+        # Feature change guard: reset tracking when switching features (issues #131, #136)
+        if 'feature' in kwargs and s.feature and kwargs['feature'] != s.feature:
+            s.started_at = datetime.datetime.now().isoformat()
+            s.current_phase = "init"
+            s.task_total = 0
+            s.task_completed = 0
+            s.verdict = ""
         for k, v in kwargs.items():
             if hasattr(s, k):
                 setattr(s, k, v)
@@ -176,7 +183,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
                     status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
-                    commit_roadmap_update(roadmap_path, fid, "done")
+                    commit_roadmap_update(roadmap_path, fid, "done", pr_url=pr_url or "")
         else:
             # --next (non-continuous): only mark done if APPROVED
             if verdict == "APPROVED":
@@ -185,7 +192,7 @@ def run_post_pipeline(feature, is_next, is_continuous, continue_loop, pr_url, ve
                     status_path = os.path.join(PROJECT_DIR, "specs", "STATUS.md")
                     update_status_md(status_path, fid, title, "done",
                                      pr_url=pr_url or "", source="panel")
-                    commit_roadmap_update(roadmap_path, fid, "done")
+                    commit_roadmap_update(roadmap_path, fid, "done", pr_url=pr_url or "")
             else:
                 print(f"  ⚠ PR {fid} has verdict: {verdict} — not marking as done. Will retry on next run.")
 
@@ -296,10 +303,11 @@ def extract_blockers_from_pr(pr_body, pr_number=None):
         except Exception:
             print("  ⚠ Failed to fetch PR comments for blocker extraction", flush=True)
 
-    # Filter out ARCHITECTURAL blockers
-    filtered = [b for b in blockers if "ARCHITECTURAL" not in b.upper() and "ARCHITECTURE VIOLATION" not in b.upper()]
+    # Filter out ARCHITECTURAL blockers — removed.
+    # extract_blockers_from_pr now returns ALL blockers including architectural.
+    # Filtering is consolidated in run_fix_mode as the single filtering point (H1 fix).
 
-    return filtered
+    return blockers
 
 
 def run_fix_mode_issue(project_dir, issue_number):
@@ -381,6 +389,20 @@ def run_fix_mode_issue(project_dir, issue_number):
     # Step 4: Create branch and spawn coder
     git("checkout", DEFAULT_BRANCH)
     git("checkout", "-b", branch)
+
+    # F046: Push fix branch to origin so coder can fetch it
+    push_out, push_err, push_rc = git("push", "-u", "origin", branch)
+    if push_rc != 0:
+        print(f"  ⚠ Warning: push -u origin {branch} failed: {push_err[:200]}", flush=True)
+        # Retry without -u (branch may already exist on origin)
+        push_out2, push_err2, push_rc2 = git("push", "origin", branch)
+        if push_rc2 != 0:
+            print(f"  ⚠ Warning: push origin {branch} also failed: {push_err2[:200]}", flush=True)
+            print(f"  → Coder will fail to fetch branch — proceeding anyway", flush=True)
+        else:
+            print(f"  Pushed {branch} to origin (existing branch)", flush=True)
+    else:
+        print(f"  Pushed {branch} to origin", flush=True)
 
     coder_result = run_phase2_coder(
         feature=feature,
@@ -717,18 +739,17 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 
         spec_ref = f"{spec_path} for context" if spec_path else "the PR blocker descriptions above"
 
-        # Codebase map hint — coder reads this INSTEAD of exploring the full codebase
-        map_hint = _make_map_hint(PROJECT_DIR)
-
         if mode == "fix" and spec:
             # Fix mode: spec IS the fix prompt (blockers + constraints inline)
+            # F046: Mandatory pre-flight branch verification
             coder_prompt = (
                 spec + "\n\n"
-                f"### Branch Setup\n"
-                f"FIRST: Switch to the existing branch — do NOT create a new one:\n"
-                f"  git checkout {branch} && git pull origin {branch}\n"
+                f"### Branch Setup — MANDATORY PRE-FLIGHT\n"
+                f"MANDATORY PRE-FLIGHT — Before writing ANY code, run:\n"
+                f"  git fetch origin {branch} && git checkout {branch} && echo 'BRANCH VERIFIED: {branch}'\n"
+                f"If the checkout fails, STOP immediately and report the error.\n"
+                f"Do NOT write any code until you confirm you are on branch '{branch}'.\n"
                 f"All fixes go on this branch. Do NOT create a new branch.\n"
-                + map_hint
             )
         else:
             # Extract target file hints from task extract for faster codebase navigation
@@ -785,8 +806,8 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
 
-{map_hint}{file_hints}{code_context}
-Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT explore, do NOT guess, do NOT write a spec.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
+{file_hints}{code_context}
+Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT guess, do NOT write a spec. Read ONLY the files listed above. Do NOT read any other files.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
   git fetch origin {branch} && git checkout {branch} && git pull origin {branch}
 
 Implement ALL tasks from the spec, ONE AT A TIME. Before each: check if another task remains. Do not stop until ALL tasks done — including trivial ones (docs, imports, config).
@@ -860,7 +881,6 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
 
             user_answers = []
             try:
-                import select
                 for i in range(len(coder_clarify)):
                     print(f"\n  A{i+1}: ", end="", flush=True)
                     ready, _, _ = select.select([sys.stdin], [], [], 60.0)
@@ -990,6 +1010,41 @@ def run_phase3_vet(feature, branch, pr_sections, impact, spec_path, depth="vet",
 
     print("\n── Phase 3: vet (coder claimed clean — let's check) ──", flush=True)
 
+    # F046: Branch guard — refuse to test on DEFAULT_BRANCH
+    if branch == DEFAULT_BRANCH:
+        print(f"  FATAL: vet phase must run on feature branch, not {DEFAULT_BRANCH}", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — expected feature branch, got {DEFAULT_BRANCH}",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    # F046: Verify branch — catch ValueError from _verify_branch (nm review R1)
+    try:
+        branch_ok = _verify_branch(branch)
+    except ValueError:
+        print(f"  FATAL: Invalid branch name — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — invalid branch name",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
+    if not branch_ok:
+        # _verify_branch failed for a non-default mismatch (checkout failure / detached HEAD)
+        print(f"  FATAL: Could not verify or checkout branch '{branch}' — refusing to proceed.", flush=True)
+        halt_and_revert(
+            f"vet: branch guard — cannot verify branch '{branch}'",
+            "PHASE 3 (vet)", branch
+        )
+        return {"nm_output": "VET_FAILED: branch guard", "pr_url": None,
+                "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": False, "build_pass": False}
+
     # 1. Verify branch
     print("  ⏳ Checking out branch...", flush=True)
     co_out, co_err, co_rc = git("checkout", branch)
@@ -1102,7 +1157,7 @@ Report: what was broken, what you fixed, commit hash."""
     # 4. Verify coder produced actual code changes (not just spec/docs)
     print("  ⏳ Checking diff for code changes...", flush=True)
     diff_stat, _, _ = git("diff", "--stat=200", DEFAULT_BRANCH + "..." + branch)
-    source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go)\s*\|', diff_stat, re.MULTILINE)
+    source_files = re.findall(r'^\s*[\w/.-]+\.(?:py|sh|js|ts|rs|go|yml|yaml)\s*\|', diff_stat, re.MULTILINE)
     spec_only = re.findall(r'^\s*specs/[\w/.-]+\.(?:md)\s*\|', diff_stat, re.MULTILINE)
     if not source_files and (spec_only or not diff_stat.strip()):
         print(f"  🔴 BLOCKED — No source code changes detected in diff.", flush=True)
@@ -1501,6 +1556,65 @@ def _check_patch_call(node, source_names, fname):
     return []
 
 
+def _verify_branch(branch):
+    """F046: Verify we are on the expected branch. Checks out if needed.
+
+    Returns True if on the correct branch, False if checkout fails.
+    Raises ValueError for empty branch name.
+    Calls halt_and_revert for detached HEAD.
+    """
+    if not branch or not branch.strip():
+        raise ValueError("_verify_branch: branch name must not be empty")
+
+    # Step 1: Get current branch
+    rev_out, rev_err, rev_rc = git("rev-parse", "--abbrev-ref", "HEAD")
+    current = (rev_out or "").strip()
+
+    # Empty output means we can't determine the branch (e.g., mocked environment)
+    # → skip the guard rather than false-positive halt
+    if not current:
+        return True
+
+    # Detached HEAD → git returns "HEAD"
+    if current == "HEAD":
+        print(f"  FATAL: Detached HEAD — cannot verify branch '{branch}'", flush=True)
+        halt_and_revert(
+            f"Detached HEAD — cannot verify branch '{branch}'",
+            "PHASE (branch verification)", branch
+        )
+        # halt_and_revert raises SystemExit, but just in case:
+        return False
+
+    # Step 2: Already on correct branch?
+    if current == branch:
+        return True
+
+    # Step 3: Attempt checkout
+    print(f"  ⚠ Expected branch '{branch}' but on '{current}' — checking out...", flush=True)
+    co_out, co_err, co_rc = git("checkout", branch)
+    if co_rc != 0:
+        print(f"  FATAL: Not on branch {branch} — refusing to proceed.", flush=True)
+        print(f"  Checkout failed: {co_err[:200]}", flush=True)
+        halt_and_revert(
+            f"nm: cannot checkout {branch} for verification",
+            "PHASE (branch verification)", branch
+        )
+        return False
+
+    # Step 4: Re-verify after checkout
+    rev_out2, rev_err2, rev_rc2 = git("rev-parse", "--abbrev-ref", "HEAD")
+    current2 = (rev_out2 or "").strip()
+    if current2 == branch:
+        return True
+
+    print(f"  FATAL: Checked out but still not on {branch} (got {current2}) — refusing to proceed.", flush=True)
+    halt_and_revert(
+        f"nm: checked out {branch} but rev-parse returned {current2}",
+        "PHASE (branch verification)", branch
+    )
+    return False
+
+
 def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
     """Create GitHub issues for nm SHOULD FIX findings.
 
@@ -1533,10 +1647,11 @@ def _create_nm_should_fix_issues(nm_stdout, feature, branch, pr_url, spec_path):
         dimension = item.get("dimension", "")
         location = item.get("location", "")
 
+        desc = location if location else detail
         if dimension:
-            title = f"SHOULD FIX [nm] [{dimension}]: {detail[:80]}"
+            title = f"SHOULD FIX [nm] [{dimension}]: {desc[:80]}"
         else:
-            title = f"SHOULD FIX [nm]: {detail[:80]}"
+            title = f"SHOULD FIX [nm]: {desc[:80]}"
 
         what_lines = [detail]
         if location:
@@ -1944,14 +2059,13 @@ Report: what you fixed, commit hash."""
     return {"verdict": verdict, "tl_output": tl_output}
 
 
-def run_phase1_strategist(feature, user_answers_prefill):
-    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
-    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
-    global PROJECT_DIR, PROFILES, REAL_HOME
-    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+def _configure_strategist_reasoning(profiles):
+    """Configure strategist reasoning_effort from PANEL_REASONING env var.
+    Returns (orig_reasoning, orig_yaml, strat_config) triple."""
     _strat_reasoning = os.environ.get("PANEL_REASONING", "")
-    _strat_config = os.path.join(PROFILES, "strategist", "config.yaml")
+    _strat_config = os.path.join(profiles, "strategist", "config.yaml")
     _orig_reasoning = None
+    _orig_yaml = None
     if _strat_reasoning and os.path.exists(_strat_config):
         with open(_strat_config) as f:
             _orig_yaml = f.read()
@@ -1964,13 +2078,18 @@ def run_phase1_strategist(feature, user_answers_prefill):
             with open(_strat_config, "w") as f:
                 f.write(_new_yaml)
             print(f"  PANEL_REASONING={_strat_reasoning} (override, was {_orig_reasoning})", flush=True)
+    return _orig_reasoning, _orig_yaml, _strat_config
 
+
+def _check_existing_spec(project_dir, feature):
+    """Check for pre-existing spec files and build refine note.
+    Returns refine_note string (empty if no spec found)."""
     # Check for existing spec at standard path BEFORE spawning strategist.
     # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
     # the strategist must validate and refine it, not replace it.
     _spec_slug = slugify(feature)
-    _standard_spec = os.path.join(PROJECT_DIR, "specs", f"{_spec_slug}-spec.md")
-    _subdir_spec = os.path.join(PROJECT_DIR, "specs", _spec_slug, "plan.md")
+    _standard_spec = os.path.join(project_dir, "specs", f"{_spec_slug}-spec.md")
+    _subdir_spec = os.path.join(project_dir, "specs", _spec_slug, "plan.md")
     _refine_note = ""
     # Check both conventions: specs/<slug>-spec.md (panel-generated) and specs/<slug>/plan.md (human-written)
     _found_spec = None
@@ -2003,21 +2122,20 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         authoritative context — you are enhancing it, not replacing it.
 
         """
+    return _refine_note
 
-    # Detect if this project documents an external system (e.g. docs site for the panel itself)
-    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
-    if _ref_context:
-        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
 
-    strat_prompt = f"""You are the Strategist for a software project at {PROJECT_DIR}.
-{_ref_context}
+def _build_strategist_prompt(project_dir, feature, user_answers_prefill, refine_note, ref_context):
+    """Assemble the full strategist prompt."""
+    strat_prompt = f"""You are the Strategist for a software project at {project_dir}.
+{ref_context}
 {_make_map_hint(PROJECT_DIR)}
-    {_refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
+    {refine_note}FIRST — understand the project's PURPOSE, ARCHITECTURE, and RECENT HISTORY:
     0. Read specs/codebase-map.md FIRST — it contains the Domain Map (files grouped by purpose), Impact Map (dependency arrows), Test Map, and commands. Use it to understand the codebase without reading every file.
     1. Read specs/mission.md, specs/tech-stack.md, specs/roadmap.md, specs/conventions.md (if missing, work from AGENTS.md).
-    2. Read AGENTS.md at {PROJECT_DIR}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
+    2. Read AGENTS.md at {project_dir}/AGENTS.md — exact commands, non-standard tooling, permission boundaries.
     3. If .specify/ exists, read .specify/memory/constitution.md and .specify/specs/baseline/spec.md. Otherwise skip.
-    3b. If {PROJECT_DIR}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
+    3b. If {project_dir}/docs/adr/ exists, run `adr list` and read the most recent ADRs — they capture past architectural decisions. Respect them.
     4. Run `git log --oneline -20` and `git log origin/{DEFAULT_BRANCH}..HEAD` — recent work and unmerged changes.
     5. Search for relevant code: rg on patterns related to "{feature}" — find existing abstractions and conventions.
     6. Read the key files — understand the architecture before designing.
@@ -2067,28 +2185,39 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
     1. DECISION TABLE: For novel/complex features, compare ≥2 approaches. For features with an obvious pattern match (visual change, config, docs, standard CRUD), use "SINGLE APPROACH: <one sentence>" — skip the comparison table.
 
-    2. ## N. Impact — MANDATORY SECTION. You MUST start this line with "## " followed by a number, a dot, and the word "Impact". DO NOT write "3. Impact Assessment" without ##. DO NOT write "Impact: MEDIUM". Only "## N. Impact" is accepted. Example:
+    2. ## N. Impact — ONE SENTENCE. Answer "what does the user gain?" Not what code changed. Max 120 characters. NO implementation details, test files, LOC counts, or functions. Format EXACTLY:
        ## 3. Impact
 
-       Maintainers can release with one command. Auto-generated changelogs grouped by feat/fix/docs. No more manual tagging.
+       Maintainers can release with one command. Changelogs auto-generated.
 
-    3. ## N. What Changed — a section header with a bullet list of key files and what they do. Max 6 bullets. Example:
+       ⚠️ BAD (too long, implementation details):
+       ## 3. Impact
+       New tests in test_f038.py. _extract_nm_summary handles real nm output. Integration verifies PR body. 5 files, 501 LOC.
+
+
+    3. ## N. Why — ONE SENTENCE. Why this feature exists. Max 100 characters. Format EXACTLY:
+       ## 2. Why
+
+       Merged PRs aren't auto-deployed, causing drift between what's merged and what's live.
+
+
+    4. ## N. What Changed — bullet list of key files and what they do. Max 6 bullets. Example:
        ## 4. What Changed
 
        - `dokima`: Add --release flag and dispatch
        - `utils.py`: Add bump_version(), generate_changelog(), do_release()
 
-    4. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
+    5. CONFIDENCE + IMPACT markers (REQUIRED — inline metadata, separate from sections above):
        **Confidence:** (High)/(Medium)/(Low)
        **Impact:** (LOW)/(MEDIUM)/(HIGH)
 
-    5. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
+    6. API/INTERFACE PROPOSAL: Only if this feature adds/changes APIs, routes, or data structures. For visual-only, docs-only, config-only, or CSS-only changes, write EXACTLY: "N/A — visual/docs/config change only." No further text.
 
-    6. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
+    7. SECURITY CONSIDERATIONS: Only if this feature touches auth, permissions, data exposure, injection surfaces, or rate limiting. For visual/docs/config/CSS changes, write EXACTLY: "N/A — no attack surface change." No further text.
 
-    7. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
+    8. DOCUMENTATION IMPACT: "README: No change needed." or a single sentence stating what section changes.
 
-    8. TASK BREAKDOWN — DAG FORMAT MANDATORY:
+    9. TASK BREAKDOWN — DAG FORMAT MANDATORY:
     ### Task N: Brief description
     **Files:** path/to/file1, path/to/file2
     **Dependencies:** [none] or [Task N]
@@ -2109,12 +2238,11 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     CRITICAL: You are a DESIGNER, not a coder. Write NO implementation code. Describe WHAT and WHY — the coder decides HOW.
 
     OUTPUT FORMAT: Output the complete spec in your message. Do NOT use write_file to save it to a file — the panel extracts your message as the spec. Do NOT summarize — every section must be present in full."""
+    return strat_prompt
 
-    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
-    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
 
-    # ── DAG format enforcement ──
-    orig_strat_output = strat_output  # save in case re-prompt produces garbage
+def _handle_dag_reprompt(strat_output, feature, project_dir):
+    """Check DAG format and re-prompt if needed. May sys.exit(1)."""
     # Check DAG on extracted agent messages, not raw output (which has <thinking> blocks)
     agent_text_for_dag = extract_agent_messages(strat_output)
     _dag_on_fallback = "[strategist:fallback]" in strat_output or "[fallback]" in strat_output
@@ -2130,7 +2258,7 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         dag_correction = (
             f"── FORMAT CORRECTION REQUIRED ──\n"
             f"Feature: {feature}\n"
-            f"Project: {PROJECT_DIR}\n\n"
+            f"Project: {project_dir}\n\n"
             f"Your spec is below. Keep ALL sections (Decision Table, Impact, What Changed,\n"
             f"Confidence, Impact markers, API/Interface, Security, Documentation) EXACTLY\n"
             f"as they are. Rewrite ONLY the task breakdown section as ### Task N: headers.\n\n"
@@ -2148,18 +2276,25 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             f"{truncated}"
         )
         strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"],
-                                   dag_correction, timeout=600, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+                                   dag_correction, timeout=600, cwd=project_dir, fallback_model=FALLBACK_MODELS.get("strategist"))
         print(f"  ✓ Strategist re-run finished ({len(strat_output)} chars)", flush=True)
         # Verify re-prompt output
         agent_text_recheck = extract_agent_messages(strat_output)
         if not re.search(r'^\s*(?:###\s*)?Task\s*\d+:', agent_text_recheck, re.MULTILINE):
             print("  ⚠ Re-prompt also lacks DAG format — proceeding with degraded (sequential) mode", flush=True)
+    return strat_output
 
-    if _orig_reasoning and os.path.exists(_strat_config):
-        with open(_strat_config, "w") as f:
-            f.write(_orig_yaml)
-        print(f"  Restored strategist reasoning_effort \u2192 {_orig_reasoning}", flush=True)
 
+def _restore_strategist_config(orig_reasoning, orig_yaml, strat_config):
+    """Restore original strategist config if it was modified."""
+    if orig_reasoning and os.path.exists(strat_config):
+        with open(strat_config, "w") as f:
+            f.write(orig_yaml)
+        print(f"  Restored strategist reasoning_effort \u2192 {orig_reasoning}", flush=True)
+
+
+def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_prefill, project_dir):
+    """Extracted from run_phase1_strategist."""
     # ── Interview gate ──
     agent_text_pre = extract_agent_messages(strat_output)
     interview_mode = "DECISION: INTERVIEW MODE" in agent_text_pre
@@ -2234,7 +2369,6 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
         print("-" * 60, flush=True)
         user_answers = []
         try:
-            import select
             for i in range(len(clarification_lines)):
                 print(f"\n  A{i+1}: ", end="", flush=True)
                 ready, _, _ = select.select([sys.stdin], [], [], 60.0)
@@ -2266,17 +2400,19 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
                 print("\n  \u26a1 Running strategist with defaults (no user answers)...", flush=True)
                 strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
                 print(f"\n\u2713 Default spec finished ({len(strat_output)} chars)", flush=True)
+    return strat_output
 
+
+def _check_strategist_timeout(strat_output):
+    """Extracted from run_phase1_strategist."""
     # Strategist contingency
     if "[TIMEOUT:" in strat_output and len(strat_output) < 500:
         print("ERROR: Strategist timed out with insufficient output \u2014 aborting pipeline")
         sys.exit(1)
 
-    spec = extract_agent_messages(strat_output, last_only=True)
-    if len(spec) < 100 and len(strat_output) > 500:
-        spec = strat_output
-    spec = clean_spec_content(spec)
 
+def _check_spec_quality_gate(spec, strat_output, feature, project_dir):
+    """Validate spec quality, re-prompt on failure. Returns (spec, strat_output)."""
     # Quality gate: validate spec quality, re-prompt once on failure
     _qg_passed, _qg_failures = verify_spec_quality(spec)
     _on_fallback = "[strategist:fallback]" in strat_output or "[fallback]" in strat_output
@@ -2316,9 +2452,11 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
             print(f"  ⚠ Quality gate still has {len(_qg_failures2)} issue(s) after re-prompt — proceeding with degraded quality", flush=True)
             for _f in _qg_failures2:
                 print(f"     - {_f}", flush=True)
+    return spec, strat_output
 
-    print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
 
+def _detect_spec_garbage(spec, strat_output, orig_strat_output):
+    """Detect and recover from garbage spec output. Returns spec."""
     # Garbage detection: if spec looks like format-fix chatter, not a real spec
     _garbage_markers = [
         r'Done\.\s*Spec\s+saved\s+to', r'Format\s+fixes\s+applied',
@@ -2363,7 +2501,11 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
 
         if not recovered:
             print(f"  ⚠ Spec may be degraded — garbage markers detected", flush=True)
+    return spec
 
+
+def _save_spec_and_extract_tasks(spec, feature, strat_output, project_dir):
+    """Extracted from run_phase1_strategist."""
     spec_dir = os.path.join(PROJECT_DIR, "specs")
     os.makedirs(spec_dir, exist_ok=True)
     spec_name = slugify(feature)[:50]
@@ -2381,9 +2523,6 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
                   f"ies", flush=True)
     except Exception as e:
         print(f"  \u26a0 Map enrichment failed (non-blocking): {e}", flush=True)
-
-    pr_sections = extract_pr_sections(spec, feature)
-    print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
 
     tasks_extract_path = os.path.join(spec_dir, f"{spec_name}-tasks.md")
     try:
@@ -2406,7 +2545,11 @@ The existing spec is TRUTH unless it contradicts the current codebase state.
     except Exception as e:
         tasks_extract_path = ""
         print(f"  \u26a0 Task extraction failed: {e} \u2014 coder will read full spec", flush=True)
+    return spec_path, tasks_extract_path
 
+
+def _run_tech_lead_prereview(spec_path, project_dir):
+    """Extracted from run_phase1_strategist."""
     # Tech Lead spec pre-review
     if not os.environ.get("PANEL_SKIP_ORCHESTRATOR_REVIEW"):
         print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2500\u2500", flush=True)
@@ -2445,6 +2588,9 @@ Output NOTHING ELSE."""
     else:
         print("\n\u2500\u2500 Tech Lead \u2014 Spec Pre-Review \u2014 SKIPPED (PANEL_SKIP_ORCHESTRATOR_REVIEW=1) \u2500\u2500", flush=True)
 
+
+def _compute_depth_and_orchestrator_gate(spec, feature, project_dir):
+    """Compute confidence, impact, depth, mode, branch. Returns 6-tuple."""
     # Orchestra gate
     print("\n\u2500\u2500 Orchestrator Gate \u2500\u2500", flush=True)
     confidence = "Medium"
@@ -2484,7 +2630,11 @@ Output NOTHING ELSE."""
     # Update live status
     _status_update(branch=branch, depth=depth, risk=impact, mode=mode,
                    feature=feature, project=PROJECT_DIR, log_path=OUTPUT_LOG)
+    return confidence, impact, depth, mode, branch
 
+
+def _run_human_gate(feature, depth, confidence, impact, branch, spec_path, tasks_extract_path, spec, pr_sections, project_dir):
+    """Interactive/non-interactive human gate. Returns (spec, pr_sections, tasks_extract_path). May sys.exit(0)."""
     # Human gate
     if sys.stdin.isatty() and not SKIP_HUMAN_GATE:
         print(f"\n{'─' * 55}", flush=True)
@@ -2543,7 +2693,11 @@ Output NOTHING ELSE."""
         print("\n  ⚠ Human gate skipped (--skip-human-gate)", flush=True)
     else:
         print("\n  \u26a0 Human gate skipped (non-interactive \u2014 Telegram/cron mode)", flush=True)
+    return spec, pr_sections, tasks_extract_path
 
+
+def _create_adr(feature, spec_path, spec, project_dir, real_home):
+    """Extracted from run_phase1_strategist."""
     # ADR creation
     adr_dir = os.path.join(PROJECT_DIR, "docs", "adr")
     adr_bin = os.path.join(REAL_HOME, "adr-tools", "src")
@@ -2586,6 +2740,9 @@ Output NOTHING ELSE."""
     else:
         print(f"  \u2139 ADR dir not found ({adr_dir}) \u2014 skipping ADR creation. Run `adr init docs/adr` to enable.", flush=True)
 
+
+def _assemble_strategist_result(spec, spec_path, pr_sections, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output):
+    """Pack return dict with parallel_enabled flag."""
     # Parallel execution gate
     parallel_enabled = os.environ.get("PANEL_PARALLEL", "1") == "1"
     return {
@@ -2602,7 +2759,72 @@ Output NOTHING ELSE."""
         "parallel_enabled": parallel_enabled,
     }
 
+def run_phase1_strategist(feature, user_answers_prefill):
+    """Phase 1: Strategist — spawn strategist, parse output, save spec, handle interview mode, create ADR.
+    Returns dict with: spec, spec_path, pr_sections, tasks, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output."""
+    global PROJECT_DIR, PROFILES, REAL_HOME
+    print("\n── Phase 1: Strategist (full session) ──", flush=True)
+    _orig_reasoning, _orig_yaml, _strat_config = _configure_strategist_reasoning(PROFILES)
 
+    # Check for existing spec at standard path BEFORE spawning strategist.
+    # If a human or prior pipeline already wrote a spec, it is the AUTHORITATIVE SOURCE —
+    # the strategist must validate and refine it, not replace it.
+    _refine_note = _check_existing_spec(PROJECT_DIR, feature)
+
+    # Detect if this project documents an external system (e.g. docs site for the panel itself)
+    _ref_context = _detect_referenced_repo(os.path.join(PROJECT_DIR, "AGENTS.md"))
+    if _ref_context:
+        print(f"  Detected external reference — injecting {len(_ref_context)} chars of context", flush=True)
+
+    strat_prompt = _build_strategist_prompt(PROJECT_DIR, feature, user_answers_prefill, _refine_note, _ref_context)
+
+    strat_output = spawn_agent("strategist", ["spec-strategist-lite", "ponytail-guard"], strat_prompt, timeout=300, cwd=PROJECT_DIR, fallback_model=FALLBACK_MODELS.get("strategist"))
+    print(f"\n✓ Strategist finished ({len(strat_output)} chars)", flush=True)
+
+    # ── DAG format enforcement ──
+    orig_strat_output = strat_output  # save in case re-prompt produces garbage
+    strat_output = _handle_dag_reprompt(strat_output, feature, PROJECT_DIR)
+
+    _restore_strategist_config(_orig_reasoning, _orig_yaml, _strat_config)
+
+
+    # ── Interview gate ──
+    strat_output = _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_prefill, PROJECT_DIR)
+
+    # Strategist contingency
+    _check_strategist_timeout(strat_output)
+
+    spec = extract_agent_messages(strat_output, last_only=True)
+    if len(spec) < 100 and len(strat_output) > 500:
+        spec = strat_output
+    spec = clean_spec_content(spec)
+
+    # Quality gate: validate spec quality, re-prompt once on failure
+    spec, strat_output = _check_spec_quality_gate(spec, strat_output, feature, PROJECT_DIR)
+
+    print(f"  Spec extracted: {len(spec)} chars (from {len(strat_output)} raw)", flush=True)
+
+    # Garbage detection: if spec looks like format-fix chatter, not a real spec
+    spec = _detect_spec_garbage(spec, strat_output, orig_strat_output)
+
+    spec_path, tasks_extract_path = _save_spec_and_extract_tasks(spec, feature, strat_output, PROJECT_DIR)
+
+    pr_sections = extract_pr_sections(spec, feature)
+    print(f"  PR sections extracted: {len(pr_sections)} chars", flush=True)
+
+    # Tech Lead spec pre-review
+    _run_tech_lead_prereview(spec_path, PROJECT_DIR)
+
+    # Orchestra gate
+    confidence, impact, depth, mode, branch = _compute_depth_and_orchestrator_gate(spec, feature, PROJECT_DIR)
+
+    # Human gate
+    spec, pr_sections, tasks_extract_path = _run_human_gate(feature, depth, confidence, impact, branch, spec_path, tasks_extract_path, spec, pr_sections, PROJECT_DIR)
+
+    # ADR creation
+    _create_adr(feature, spec_path, spec, PROJECT_DIR, REAL_HOME)
+
+    return _assemble_strategist_result(spec, spec_path, pr_sections, tasks_extract_path, depth, branch, confidence, impact, mode, strat_output)
 def run_pipeline(feature, is_next, is_continuous, user_answers_prefill, resume=None):
     """Run one full pipeline iteration for a single feature. Returns exit code."""
     global PROJECT_DIR, REPO

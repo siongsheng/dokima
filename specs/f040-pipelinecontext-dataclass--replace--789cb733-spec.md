@@ -1,492 +1,444 @@
 # F040: PipelineContext dataclass — replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, etc.) with a single PipelineContext dataclass passed to each phase function. Eliminates conftest __setattr__ override hack. Makes testing trivial — create a context, pass it in. All 1,029 tests protect this refactor.
 
-Now I have complete understanding of the codebase. Here is the corrected, complete spec:
+I now have complete understanding of the codebase. Let me produce the corrected spec with all three missing sections + corrected Task N: headers.
     
     
     
-    F040: PipelineContext Dataclass — Replace Module-Level Globals
+    F040: PipelineContext dataclass — Implementation Spec
     
-    Version: 1.0.0
-    Status: Spec Complete — Ready for Panel
-    Confidence: High
+    Status: Ready for Review | Confidence: High | Date: 2026-07-06
     
     
     
     1. Executive Summary
     
-    Replace 17 module-level globals spread across 7 files (PROJECT_DIR, REPO, DEFAULT_BRANCH, API_KEY, PANEL_FEATURE, etc.) with a single PipelineContext dataclass. This eliminates the conftest setattr override hack (lines 42-53) and the initial sync loop (lines 67-78) — both fragile workarounds for propagating mutable globals across F022's modular architecture. All 1,033 tests continue to pass, and test setup shrinks from 15 lines of module-reload+global-assignment boilerplate to ctx = PipelineContext(PROJECT_DIR="/tmp/test"). Every function that currently reads these globals receives ctx as its first parameter. No behavior change — purely an internal refactor.
+    Replace 20+ module-level globals (PROJECT_DIR, REPO, DEFAULT_BRANCH, PANEL_FEATURE, API_KEY, OUTPUT_LOG, HERMES_BIN, FALLBACK_MODELS, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, RESUME, TEST_CMD, BUILD_CMD, LINT_CMD, PROFILES, PANEL_PORT, REAL_HOME, PANEL_DIR) spread across utils.py, vcs.py, and pipeline.py with a single PipelineContext dataclass. The context is constructed once in the dokima entry script and passed explicitly to every phase function. This eliminates the 50-line conftest setattr override hack (lines 42-53 of tests/conftest.py), the _sync_modules() propagation function (lines 758-772 of dokima), and 11 global statements in pipeline.py. Testing becomes trivial: ctx = PipelineContext(project_dir="/tmp/test", repo="t/t", ...); run_phase3_vet(ctx, ...). All 1,029 existing tests protect this refactor — they must pass identically post-merge.
     
     
     
     2. Constitution Check
     
-    Axiom: Solve user's own pain?
-    Assessment: Yes. The setattr hack is the #1 source of test fragility —
-      every test file must _load_panel(), every new global must be added to
-      the sync list in 3 places.
+    Axiom: Does it solve the user's own pain?
+    Assessment: Yes. Every test file needs _load_panel() with 8+
+      monkey-patches just to call a phase function. Every new test author hits
+      the setattr hack and wonders why.
     ────────────────────────────────────────
-    Axiom: Weekend-buildable?
-    Assessment: Yes. Pure refactor — no new logic, no API surface change.
-      9,349 lines touched but changes are mechanical.
+    Axiom: Is it weekend-buildable?
+    Assessment: Yes. Pure refactor with test safety net. 5-6 focused tasks,
+      ~350 LOC total.
     ────────────────────────────────────────
-    Axiom: Evidence people want?
-    Assessment: N/A (internal quality refactor)
+    Axiom: Is there evidence people will pay?
+    Assessment: N/A. Infrastructure quality for a FOSS tool.
     ────────────────────────────────────────
-    Axiom: Boring/proven tech stack?
-    Assessment: Yes. Python dataclasses — stdlib since 3.7, zero dependencies.
+    Axiom: Is the tech stack boring and proven?
+    Assessment: Yes. Python dataclasses.dataclass — stdlib since 3.7, zero
+      dependencies.
     ────────────────────────────────────────
-    Axiom: Avoid AI hype?
-    Assessment: Yes. No AI, no LLM, no vector DB.
+    Axiom: Does it avoid AI hype categories?
+    Assessment: Yes. Pure engineering refactor.
     
-    Verdict: All checks pass. This is the right refactor at the right time.
-    
-    
-    
-    3. What Changed
-    
-    This section documents the diff for humans reviewing the PR.
-    
-    Removed:
-    - 17 module-level globals across dokima, utils.py, agent.py, pipeline.py, roadmap.py, tasks.py, vcs.py
-    - 20 global statements across pipeline.py (12), utils.py (3), dokima (2), roadmap.py (2), vcs.py (1)
-    - setattr override hack in tests/conftest.py (lines 42-53) — the _sync_globals_on_setattr closure
-    - Initial sync loop in tests/conftest.py (lines 67-78) — the backward-compat sync of pre-setattr values
-    - _IMPORTING_PANEL hack in utils.py, agent.py — used for stale-module workaround
-    
-    Added:
-    - PipelineContext dataclass in context.py (~12 fields, frozen=False)
-    - ctx: PipelineContext parameter on every function that currently reads globals (phase functions, post-pipeline, fix mode, init, next-setup, all VCS ops via vcs.py)
-    - ctx fixture in tests/conftest.py — returns a default PipelineContext for test isolation
-    - ctx parameter on WorktreeManager.init and TaskDAG.init (currently read PROJECT_DIR from module level)
-    
-    Changed (behavior-preserving):
-    - test_repo fixture: sets ctx.PROJECT_DIR/ctx.REPO/ctx.DEFAULT_BRANCH instead of panel.PROJECT_DIR/panel.REPO/etc.
-    - mock_orchestrator fixture: patches ctx fields instead of panel globals
-    - All 21 test files that assign panel.GLOBAL = value → assign ctx.GLOBAL = value
-    - dokima main(): constructs PipelineContext from parsed args/env and passes it through the call chain
-    - vcs.py: detect_vcs_backend(ctx, project_dir) → populates ctx.REPO, ctx.VCS_BACKEND instead of module-level globals
-    
-    NOT changed:
-    - HELP_TEXT (constant — stays module-level)
-    - VERSION (computed constant — stays module-level)
-    - PANEL_PORT, PROFILES, REAL_HOME, HERMES, HERMES_BIN (derived from REAL_HOME which is stable per machine — stay module-level constants)
-    - _LOG_FILE_HANDLE, _LOCK_FD, _LOG_FILE, _STDOUT_ORIG, _GH_TOKEN_CACHE (process-level state, not pipeline config — stay module-level)
-    - _PROVIDER_FAILURE_PATTERNS, FALLBACK_MODEL_RE (compiled regex constants — stay module-level)
-    - MAX_CONTINUOUS (constant — stays module-level)
-    - _PROFILE_CONFIGS, _PROFILE_ORDER (constants — stay module-level)
+    Verdict: All axioms pass. Proceed.
     
     
     
-    4. Impact
+    3. Impact Section (Actual File Paths + LOC)
     
-    Files Modified (evidence from git grep / code inspection)
+    Based on git diff origin/main...HEAD analysis of affected files:
     
-    File: context.py
-    Current Lines: 0
-    Nature of Change: NEW — PipelineContext dataclass
-    Est. Lines Changed: +45
-    ────────────────────────────────────────
-    File: dokima
-    Current Lines: 775
-    Nature of Change: Construct ctx in main(), pass to all callees; remove
-      global declarations
-    Est. Lines Changed: +30/-60
+    File: pipeline.py
+    Type: Refactor: 11 global statements → ctx parameter in 9 functions
+    Estimated ΔLOC: +15 / -55
     ────────────────────────────────────────
     File: utils.py
-    Current Lines: 3,351
-    Nature of Change: Remove 17 module-level globals; add ctx param to
-      functions that reference globals
-    Est. Lines Changed: +60/-80
-    ────────────────────────────────────────
-    File: agent.py
-    Current Lines: 226
-    Nature of Change: Remove API_KEY, FALLBACK_MODELS, _IMPORTING_PANEL
-      globals; add ctx param to call_agent, spawn_agent
-    Est. Lines Changed: +8/-12
-    ────────────────────────────────────────
-    File: pipeline.py
-    Current Lines: 2,805
-    Nature of Change: Remove 12 global statements; add ctx param to all 7
-      phase/post-phase functions; replace direct global reads with ctx.
-      attribute access
-    Est. Lines Changed: +80/-40
-    ────────────────────────────────────────
-    File: roadmap.py
-    Current Lines: 1,026
-    Nature of Change: Remove 2 global statements; add ctx param to
-      run_next_setup, run_init
-    Est. Lines Changed: +12/-8
-    ────────────────────────────────────────
-    File: tasks.py
-    Current Lines: 667
-    Nature of Change: Remove PROJECT_DIR global; add ctx to WorktreeManager,
-      TaskDAG, parallel coder functions
-    Est. Lines Changed: +15/-5
+    Type: Remove 20+ module-level globals (lines 16-36); add PipelineContext
+      import
+    Estimated ΔLOC: +3 / -25
     ────────────────────────────────────────
     File: vcs.py
-    Current Lines: 268
-    Nature of Change: Remove REPO global; detect_vcs_backend populates ctx
-      instead; all ops receive ctx
-    Est. Lines Changed: +10/-14
+    Type: Remove module-level REPO (line 19)
+    Estimated ΔLOC: +0 / -1
+    ────────────────────────────────────────
+    File: dokima (entry script)
+    Type: Create ctx at startup, pass to run_pipeline; remove _sync_modules()
+    Estimated ΔLOC: +25 / -28
     ────────────────────────────────────────
     File: tests/conftest.py
-    Current Lines: 231
-    Nature of Change: Replace _load_panel() with ctx fixture; remove setattr
-      hack and sync loop; simplify test_repo, mock_orchestrator
-    Est. Lines Changed: +30/-120
+    Type: Remove setattr override (lines 31-78), replace with PipelineContext
+      factory
+    Estimated ΔLOC: +30 / -50
     ────────────────────────────────────────
-    File: 21 test files
-    Current Lines: ~3,500
-    Nature of Change: Replace panel.GLOBAL = value with ctx.GLOBAL = value
-    Est. Lines Changed: +100/-100
+    File: agent.py
+    Type: Drop _IMPORTING_PANEL and module globals (line 23 area); accept ctx
+      where needed
+    Estimated ΔLOC: +5 / -10
     ────────────────────────────────────────
-    File: TOTAL
-    Current Lines: ~9,349
-    Nature of Change:
-    Est. Lines Changed: +390 / -439
+    File: tasks.py
+    Type: Drop _IMPORTING_PANEL and module globals; accept ctx where needed
+    Estimated ΔLOC: +5 / -10
+    ────────────────────────────────────────
+    File: roadmap.py
+    Type: Drop _IMPORTING_PANEL; accept ctx where needed
+    Estimated ΔLOC: +3 / -5
+    ────────────────────────────────────────
+    File: status.py
+    Type: No change (already dataclass-based, no globals)
+    Estimated ΔLOC: +0
     
-    Dependency Impact
+    Total estimated ΔLOC: +86 / -184 (net -98 lines)
     
-    - Blocks No One. pipeline.py, roadmap.py, tasks.py, utils.py, agent.py, vcs.py are all consumers of the globals being replaced — but all changes are mechanical and same-session.
-    - Unblocks F041 (split utils.py into domain modules). F041 currently depends on F040 because utils.py's globals are the coupling point between future sub-modules. With ctx passed explicitly, the split becomes a pure file reorg.
-    - Unblocks F043 (phase function decomposition). Phase functions currently use global PROJECT_DIR, REPO, ... — eliminating globals makes function extraction trivial.
-    - Safe for parallel work. No other in-progress features touch these globals. F039 (real-code verification) is independent.
+    Downstream dependencies: F041 (utils split) depends on F040. F043 (phase decomposition) depends on F040.
+    
+    
+    
+    4. What Changed (PR Body Template)
+    
+    This section describes what the merged PR will contain — used by the coder for the PR body.
+    
+    - PipelineContext dataclass added at pipeline.py (or standalone context.py) with all 20+ fields
+    - Phase functions refactored: run_phase1_strategist(ctx, ...), run_phase2_coder(ctx, ...), run_phase3_vet(ctx, ...), run_phase4_nm(ctx, ...), run_phase5_tech_lead(ctx, ...), run_fix_mode(ctx, ...), run_fix_mode_issue(ctx, ...), run_post_pipeline(ctx, ...), run_pipeline(ctx, ...), discover_blocked_pr(ctx), extract_blockers_from_pr(ctx, ...)
+    - _sync_modules() removed from entry script (lines 758-772)
+    - conftest setattr hack removed — _load_panel() simplified to import + create ctx
+    - Module-level globals removed from utils.py (lines 16-36), vcs.py (line 19)
+    - Backward compatibility: _IMPORTING_PANEL references replaced with explicit ctx passing
+    - All 1,029 tests pass identically
     
     
     
     5. Feature Breakdown
     
+    Task 1: Create PipelineContext dataclass
+    - Files: pipeline.py (or new context.py)
+    - Dependencies: none
+    - Parallelizable: no (foundation — everything depends on it)
+    - Estimated LOC: ~50
+    - Description: Define @dataclass class PipelineContext with all fields: project_dir, repo, default_branch, panel_feature, api_key, output_log, hermes_bin, fallback_models, skip_autofix, force_full, skip_human_gate, max_parallel_override, resume, test_cmd, build_cmd, lint_cmd, profiles_dir, panel_port, real_home, panel_dir. Add __post_init__ to compute hermes_bin and real_home from env if not provided. Add @classmethod from_environ(cls, project_dir, **overrides) factory. If creating standalone context.py, update dokima entry to import and export it.
     
-    
-    Task 1: Create PipelineContext dataclass in context.py
-    - Files: context.py (NEW)
-    - Dependencies: None
-    - Parallelizable: yes
-    - Estimated LOC: ~45
-    - Description: Create PipelineContext dataclass with fields: project_dir, repo, default_branch, api_key, panel_feature, panel_dir, output_log, hermes_bin, fallback_models, skip_autofix, force_full, skip_human_gate, max_parallel_override, resume, test_cmd, build_cmd, lint_cmd. Add vcs_backend and vcs_token_env fields for vcs.py migration. All fields have sensible defaults (empty string, False, None, etc.). Include __post_init__ that validates project_dir exists if set. No imports beyond dataclasses and os.
-    
-    Task 2: Add ctx fixture to tests/conftest.py
-    - Files: tests/conftest.py
-    - Dependencies: [Task 1]
-    - Parallelizable: yes
-    - Estimated LOC: ~30
-    - Description: Create a ctx pytest fixture that returns a PipelineContext with test defaults (project_dir="/tmp/test-project", repo="test-owner/test-repo", api_key="test-key", default_branch="main", output_log="/dev/null", test_cmd="echo test", build_cmd="echo build", lint_cmd="echo lint"). Mark it autouse=False so tests opt in explicitly. This is the new way to create test contexts — no more _load_panel() for simple tests.
-    
-    Task 3: Migrate utils.py globals to ctx parameter
-    - Files: utils.py
-    - Dependencies: [Task 1]
-    - Parallelizable: yes
-    - Estimated LOC: ~140
-    - Description: Remove 17 module-level globals from utils.py (lines 16-36). Add ctx: PipelineContext parameter to every function in utils.py that currently reads these globals. Key functions: _validate_project_dir, detect_repo, detect_commands, _detect_referenced_repo, _detect_default_branch, _set_gh_token, acquire_lock, _cleanup_lock, save_checkpoint, load_checkpoint, delete_checkpoint, validate_checkpoint, _phase_should_skip, try_auto_merge, _supplement_pr_sections, halt_and_revert, archive_specs_for_feature, generate_codebase_map, _check_pr_body_quality, verify_spec_quality, extract_pr_sections, clean_spec_content, _write_log_line, _redact_secrets, handle_status, handle_stop, handle_kill, handle_list_crons. Keep constants (HELP_TEXT, VERSION, MAX_CONTINUOUS, REAL_HOME, HERMES, PROFILES, HERMES_BIN) and process-level state (_LOG_FILE_HANDLE, _LOCK_FD, etc.) at module level.
-    
-    Task 4: Migrate agent.py globals to ctx parameter
-    - Files: agent.py
-    - Dependencies: [Task 1, Task 3]
-    - Parallelizable: yes
-    - Estimated LOC: ~20
-    - Description: Remove API_KEY, FALLBACK_MODELS, _IMPORTING_PANEL, PANEL_PORT globals from agent.py (lines 13-14). Add ctx parameter to call_agent (reads API_KEY), spawn_agent (reads FALLBACK_MODELS, HERMES_BIN, OUTPUT_LOG), _run_agent (reads OUTPUT_LOG, HERMES_BIN), _detect_provider_failure (unchanged — no globals), _load_fallback_config (reads FALLBACK_MODELS). Keep _PROVIDER_FAILURE_PATTERNS and FALLBACK_MODEL_RE as module-level constants.
-    
-    Task 5: Migrate vcs.py globals to ctx parameter
-    - Files: vcs.py
-    - Dependencies: [Task 1]
-    - Parallelizable: yes
-    - Estimated LOC: ~24
-    - Description: Remove VCS_BACKEND, VCS_TOKEN_ENV, REPO globals from vcs.py (lines 17-19). detect_vcs_backend(ctx, project_dir) sets ctx.vcs_backend, ctx.vcs_token_env, ctx.repo directly. All VCS operation functions (vcs_pr_create, vcs_pr_merge, vcs_pr_view, vcs_pr_list, vcs_pr_diff, vcs_issue_create, vcs_issue_view, vcs_release_create, vcs_pr_update_body, vcs_repo_clone, _run_vcs) receive ctx instead of reading module-level REPO/VCS_BACKEND/VCS_TOKEN_ENV.
-    
-    Task 6: Migrate tasks.py globals to ctx parameter
-    - Files: tasks.py
-    - Dependencies: [Task 1, Task 3]
-    - Parallelizable: yes
-    - Estimated LOC: ~20
-    - Description: Remove PROJECT_DIR global from tasks.py (line 33). WorktreeManager.init receives ctx instead of project_root string (derives path from ctx.project_dir). TaskDAG.init receives ctx. run_parallel_coders, spawn_coder_in_worktree, merge_worktree_branches, _reap_completed, _poll_until_wave_done receive ctx. Remove imports of globals from utils (HERMES_BIN, DEFAULT_BRANCH, PANEL_FEATURE, TEST_CMD, BUILD_CMD, LINT_CMD, FALLBACK_MODELS, max_parallel_override, OUTPUT_LOG) — all now accessed via ctx.
-    
-    Task 7: Migrate pipeline.py globals to ctx parameter
-    - Files: pipeline.py
-    - Dependencies: [Task 1, Task 3, Task 4, Task 5, Task 6]
-    - Parallelizable: no (depends on all module migrations being done first)
-    - Estimated LOC: ~120
-    - Description: Remove all 12 global statements from pipeline.py. Add ctx: PipelineContext as first parameter to: run_phase1_strategist, run_phase2_coder, run_phase3_vet, run_phase4_nm, run_phase5_tech_lead, run_fix_mode, run_pipeline, run_post_pipeline, discover_blocked_pr, extract_blockers_from_pr, _verify_pr_impact_alignment. Replace every PROJECT_DIR, REPO, DEFAULT_BRANCH, TEST_CMD, BUILD_CMD, LINT_CMD, OUTPUT_LOG, PANEL_FEATURE, PROFILES, REAL_HOME direct reference with ctx. attribute access. This is the largest mechanical change — ~80 lines replaced.
-    
-    Task 8: Migrate roadmap.py globals to ctx parameter
-    - Files: roadmap.py
-    - Dependencies: [Task 1, Task 7]
-    - Parallelizable: no (depends on pipeline.py to avoid merge conflicts)
-    - Estimated LOC: ~20
-    - Description: Remove 2 global statements from roadmap.py. Add ctx parameter to run_next_setup (reads PROJECT_DIR, REPO, DEFAULT_BRANCH) and run_init (reads API_KEY, PROJECT_DIR, REPO). Replace direct global reads with ctx. attribute access.
-    
-    Task 9: Migrate dokima main() to construct and pass ctx
+    Task 2: Wire PipelineContext into entry script — remove _sync_modules()
     - Files: dokima
-    - Dependencies: [Task 7, Task 8]
-    - Parallelizable: no (top-level integration — must be last)
-    - Estimated LOC: ~90
-    - Description: In main(), construct PipelineContext(...) from parsed args and environment after argument parsing. Remove the global API_KEY, PROJECT_DIR, REPO, ... declaration. Pass ctx to every callee: run_pipeline(ctx, feature, ...), run_fix_mode(ctx, project_dir, ...), run_init(ctx, description, project_dir, ...), run_next_setup(ctx, ...), run_add_to_roadmap(ctx, ...), generate_codebase_map(ctx.project_dir). Remove module-level globals from dokima (lines 70-78): OUTPUT_LOG, DEFAULT_BRANCH, SKIP_AUTOFIX, FORCE_FULL, SKIP_HUMAN_GATE, max_parallel_override, FALLBACK_MODELS, RESUME, MAX_CONTINUOUS. Derive OUTPUT_LOG inside main() before constructing ctx (it uses datetime.datetime.now()).
-    
-    Task 10: Migrate test files from panel.GLOBAL to ctx.GLOBAL
-    - Files: tests/test_f023_self_healing.py, tests/test_triple_bug_fix.py, tests/test_final_edge.py, tests/test_final_coverage.py, tests/test_functions_unit.py, tests/test_acquire_lock.py, tests/test_detect_commands.py, tests/test_edge_cases.py, tests/test_f003_robustness.py, tests/test_f002_closure.py, tests/test_conftest_fixtures.py, tests/test_execution_mode_dispatch.py, tests/test_f022_pipeline.py, tests/test_f022_roadmap.py, tests/test_f022_tasks.py, tests/test_f022_utils.py, tests/test_f022_utils_complete.py, tests/test_f022_agent.py, tests/test_clean_spec.py, tests/test_codebase_map.py, tests/test_control_panel.py
-    - Dependencies: [Task 2, Task 9]
-    - Parallelizable: yes (all 21 test files are independent of each other)
-    - Estimated LOC: ~200
-    - Description: Replace all panel.PROJECT_DIR = ..., panel.REPO = ..., panel.DEFAULT_BRANCH = ..., panel.API_KEY = ..., panel.PANEL_FEATURE = ... assignments with ctx.PROJECT_DIR = ... etc. Update test_repo fixture to receive and modify ctx instead of panel. Update mock_orchestrator fixture to patch ctx fields. Replace _load_panel() calls with PipelineContext(...) in tests that bypass the panel fixture. Tests that need the full panel module for behavior verification continue using the panel fixture — only global-setting lines change.
-    
-    Task 11: Simplify conftest.py — remove setattr hack
-    - Files: tests/conftest.py
-    - Dependencies: [Task 10]
-    - Parallelizable: no (must run after all test migrations to ensure nothing breaks)
-    - Estimated LOC: ~50 (net -90)
-    - Description: Remove _sync_globals_on_setattr (lines 42-53) and the initial sync loop (lines 67-78). Remove _IMPORTING_PANEL linkage (lines 62-65). Simplify _load_panel() to no longer set module globals or install setattr — it becomes _load_panel(ctx: PipelineContext) that injects ctx into the module's namespace for backward compat during transition, or is removed entirely if all callers have migrated. The panel fixture remains but no longer needs the sys.modules save/restore dance since modules don't carry mutable globals.
-    
-    Task 12: Run full test suite and verify 100% pass rate
-    - Files: None (verification only)
-    - Dependencies: [Task 11]
+    - Dependencies: [Task 1]
     - Parallelizable: no
-    - Estimated LOC: 0
-    - Description: Run python3 -m pytest tests/ -q. Verify all 1,033 tests pass, 4 skipped (unchanged). Run python3 -m pytest tests/ -q --ignore=tests/test_main_integration.py for quick suite. Verify no global statements remain in production code. Verify setattr is not present in conftest.py. Run python3 -m py_compile on all modified files to catch syntax errors.
+    - Estimated LOC: ~50
+    - Description: In main(), construct PipelineContext after all CLI/env parsing completes (after _detect_default_branch, detect_commands, etc.). Pass ctx to run_pipeline(). Remove _sync_modules() function (lines 758-772). Remove all _utils.PROJECT_DIR = ... style assignments that currently happen at the end of main. The ctx is the single source of truth. Ensure --continuous loop updates ctx.panel_feature per iteration.
+    
+    Task 3: Refactor run_pipeline to accept ctx — cascade to all phase functions
+    - Files: pipeline.py
+    - Dependencies: [Task 1]
+    - Parallelizable: no
+    - Estimated LOC: ~80
+    - Description: Add ctx: PipelineContext as first parameter to run_pipeline(). Replace all global PROJECT_DIR, REPO and direct uses of module globals with ctx.project_dir, ctx.repo, etc. Cascade: pass ctx to run_phase1_strategist(ctx, ...), run_phase2_coder(ctx, ...), run_phase3_vet(ctx, ...), run_phase4_nm(ctx, ...), run_phase5_tech_lead(ctx, ...), run_post_pipeline(ctx, ...), run_fix_mode(ctx, ...), run_fix_mode_issue(ctx, ...). Each of these functions drops its global statement and uses ctx.field instead. Update all f-string references ({PROJECT_DIR} → {ctx.project_dir}, {REPO} → {ctx.repo}, etc.).
+    
+    Task 4: Refactor discover_blocked_pr and extract_blockers_from_pr
+    - Files: pipeline.py
+    - Dependencies: [Task 3]
+    - Parallelizable: no (same file as Task 3)
+    - Estimated LOC: ~20
+    - Description: discover_blocked_pr() has global REPO at line 213 — change to discover_blocked_pr(ctx). extract_blockers_from_pr() has global REPO at line 265 — change to extract_blockers_from_pr(ctx, ...). Replace all REPO references with ctx.repo. Update all call sites.
+    
+    Task 5: Remove module-level globals from utils.py — update tests
+    - Files: utils.py, tests/conftest.py, all test files that use panel.PROJECT_DIR
+    - Dependencies: [Task 3]
+    - Parallelizable: no (conftest depends on finalized ctx shape)
+    - Estimated LOC: ~60
+    - Description: Remove module-level globals from utils.py lines 16-36 (PROJECT_DIR, REPO, DEFAULT_BRANCH, API_KEY, OUTPUT_LOG, HERMES_BIN, etc.). Replace _IMPORTING_PANEL = None with import of PipelineContext. Update functions in utils.py that read these globals to either accept ctx as parameter OR read from a module-level ctx reference set at startup. In conftest.py: Rewrite _load_panel() to return a PipelineContext instance instead of a module with setattr override. Remove lines 31-78 (the setattr + _sync_globals_on_setattr hack). Tests that do panel.PROJECT_DIR = ... will now do ctx = PipelineContext(project_dir=..., ...). The panel fixture yields a PipelineContext, not a module.
+    
+    Task 6: Remove module-level REPO from vcs.py
+    - Files: vcs.py, pipeline.py (call sites), dokima
+    - Dependencies: [Task 1]
+    - Parallelizable: yes (isolated file, no overlap with Task 4-5)
+    - Estimated LOC: ~15
+    - Description: Remove module-level REPO = "" from vcs.py line 19. Functions that use REPO (vcs_pr_update_body at line 253 which references REPO in f-string) must accept it as a parameter or read from a passed context. The detect_vcs_backend() function currently sets REPO as a global — change it to return repo slug as part of its return value (or set it on the VCS module object). Update entry script to pass repo slug explicitly.
+    
+    Task 7: Update all test files to use PipelineContext
+    - Files: tests/conftest.py, tests/test_*.py (~50 test files)
+    - Dependencies: [Task 5]
+    - Parallelizable: no
+    - Estimated LOC: ~80
+    - Description: After conftest is rewritten, update the panel fixture to yield a PipelineContext (or a tuple of ctx + module). Update the test_repo fixture (lines 166-190) to create a PipelineContext instead of setting panel.PROJECT_DIR/panel.REPO. Update the mock_orchestrator fixture (lines 193-231) to work with ctx. Run full test suite and fix any test that references panel.PROJECT_DIR, panel.REPO, panel.DEFAULT_BRANCH, panel.TEST_CMD, etc. — these will now be ctx.project_dir, ctx.repo, etc. Tests that import utils.PROJECT_DIR directly must also be updated.
+    
+    Task 8: Run full test suite — verify 1,029 pass, 4 skip, 0 fail
+    - Files: all
+    - Dependencies: [Task 7]
+    - Parallelizable: no
+    - Estimated LOC: ~0 (validation only)
+    - Description: python3 -m pytest tests/ -q. All 1,029 tests must pass. Any failure must be traced to a missed reference and fixed. Run also: python3 -c "compile(open('dokima').read(), 'dokima', 'exec')" (build). Run python3 -m py_compile dokima (lint). All must succeed.
     
     
     
     6. Data Model
     
-    PipelineContext
-    
+    python
+    from dataclasses import dataclass, field
+    import os, pwd
+    from typing import Optional, Dict
     
     @dataclass
     class PipelineContext:
-        # Paths
-        project_dir: str = ""
-        panel_dir: str = ""
-        output_log: str = "/tmp/dokita-output.txt"
-        hermes_bin: str = ""  # derived from REAL_HOME, default set by main()
-    
-        # VCS
+        """Single source of truth for all pipeline configuration and runtime state."""
+        
+        # ── Required (set at construction) ──
+        project_dir: str
         repo: str = ""
+        
+        # ── Auto-detected (defaults from env, can be overridden) ──
         default_branch: str = "master"
-        vcs_backend: str = "github"
-        vcs_token_env: str = "GH_TOKEN"
-    
-        # Auth
-        api_key: str = ""
-    
-        # Feature
         panel_feature: str = ""
-    
-        # Commands (from AGENTS.md detection)
+        api_key: str = ""
+        output_log: str = "/tmp/dokima-output.txt"
+        
+        # ── Derived from filesystem (computed in __post_init__) ──
+        real_home: str = field(default_factory=lambda: pwd.getpwuid(os.getuid()).pw_dir)
+        hermes_bin: str = field(default="")
+        profiles_dir: str = field(default="")
+        panel_dir: str = ""
+        
+        # ── Commands (detected from AGENTS.md) ──
         test_cmd: str = "npm test"
         build_cmd: str = "npm run build"
         lint_cmd: str = "npm run lint"
-    
-        # Model fallback
-        fallback_models: dict = field(default_factory=dict)
-    
-        # Feature flags
+        
+        # ── Feature flags ──
         skip_autofix: bool = False
         force_full: bool = False
         skip_human_gate: bool = False
-        max_parallel_override: int | None = None
-        resume: bool | None = None
+        max_parallel_override: Optional[int] = None
+        resume: Optional[bool] = None
+        
+        # ── Model configuration ──
+        fallback_models: Dict[str, str] = field(default_factory=dict)
+        panel_port: Dict[str, int] = field(default_factory=lambda: {
+            "strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648
+        })
+        
+        # ── Transient (set during pipeline execution, NOT at construction) ──
+        max_continuous: int = 20
+        
+        def __post_init__(self):
+            """Compute derived paths from real_home."""
+            hermes_root = os.path.join(self.real_home, ".hermes")
+            if not self.hermes_bin:
+                self.hermes_bin = os.path.join(hermes_root, "hermes-agent/venv/bin/hermes")
+            if not self.profiles_dir:
+                self.profiles_dir = os.path.join(hermes_root, "profiles")
+        
+        @classmethod
+        def from_environ(cls, project_dir: str, **overrides) -> "PipelineContext":
+            """Factory: construct from environment variables + overrides."""
+            import os as _os
+            ctx = cls(
+                project_dir=project_dir,
+                skip_autofix=_os.environ.get("PANEL_SKIP_AUTOFIX") == "1",
+                force_full=_os.environ.get("PANEL_FORCE_FULL") == "1",
+                skip_human_gate=_os.environ.get("PANEL_SKIP_HUMAN_GATE") == "1",
+            )
+            mp = _os.environ.get("PANEL_MAX_PARALLEL")
+            if mp and mp.isdigit():
+                ctx.max_parallel_override = int(mp)
+            for k, v in overrides.items():
+                if hasattr(ctx, k):
+                    setattr(ctx, k, v)
+            return ctx
     
     
-    Frozen? No (frozen=False). The main() function mutates fields during startup (e.g., detect_vcs_backend sets ctx.repo, ctx.vcs_backend). Phase functions read-only. Tests mutate freely for setup.
+    What persists: Nothing. PipelineContext is in-memory only, constructed per pipeline run.
     
-    Storage: Transient — constructed in main(), garbage-collected at process exit. Not serialized.
-    
-    What stays module-level: HELP_TEXT, VERSION, MAX_CONTINUOUS, REAL_HOME, HERMES, PROFILES, HERMES_BIN (derived once at import time), PANEL_PORT, compiled regex patterns, _LOG_FILE_HANDLE, _LOCK_FD, _LOG_FILE, _STDOUT_ORIG, _GH_TOKEN_CACHE, _PROFILE_CONFIGS, _PROFILE_ORDER. These are either true constants, process-level handles, or derived-once-from-pwd values that never change during a process lifetime.
+    What's transient: Everything. Context is discarded when the pipeline exits.
     
     
     
     7. API Routes
     
-    Not applicable — this is an internal refactor. No external API surface changes. CLI behavior is identical. dokima add, dokima next, dokima fix, dokima init, dokima status, dokima stop, dokima kill all work exactly as before.
+    N/A — internal Python refactor with no HTTP surface.
     
     
     
     8. Component Tree
     
-    Not applicable — no UI/frontend. This is a Python CLI engine.
+    N/A — no frontend.
     
     
     
     9. COTS Build-vs-Buy
     
-    Component: PipelineContext
-    Decision: Build
-    Justification: 45-line dataclass. No library needed. Python stdlib
-      dataclasses is the COTS here.
+    Component: dataclasses.dataclass
+    Buy/Build: stdlib
+    Justification: Python 3.7+ built-in. Zero deps.
     ────────────────────────────────────────
-    Component: Dependency injection framework
-    Decision: Skip
-    Justification: pip install dependency-injector would be 10x the LOC of
-      just passing ctx. YAGNI.
-    ────────────────────────────────────────
-    Component: Pydantic/settings management
-    Decision: Skip
-    Justification: No validation beyond os.path.exists. pydantic would add a
-      dependency for zero benefit.
-    ────────────────────────────────────────
-    Component: contextvars (stdlib)
-    Decision: Skip
-    Justification: Would be implicit magic — same problem as globals. Explicit
-      ctx parameter is the point.
+    Component: @dataclass(frozen=True)
+    Buy/Build: Not used
+    Justification: Mutable context needed — panel_feature changes per
+      iteration in --continuous loop.
     
-    Verdict: Pure stdlib — zero new dependencies. dataclasses is the only import added, and it's been in stdlib since Python 3.7.
+    Total new dependencies: 0.
     
     
     
     10. Test Plan (MANDATORY)
     
     Happy Path
-    - Create a PipelineContext(PROJECT_DIR="/tmp/test", REPO="o/r"), pass to run_pipeline(ctx, "F001: test", False, False, None). Pipeline runs all 5 phases. All globals previously set as module-level are accessed via ctx. — no AttributeError, no NameError.
-    - run_phase1_strategist(ctx, "F001: test", None) returns a dict with spec, spec_path, pr_sections, etc. — same keys as before.
-    - run_fix_mode(ctx, "/tmp/test-project") discovers blocked PRs using ctx.repo instead of module-level REPO.
-    - detect_vcs_backend(ctx, "/tmp/test-project") sets ctx.vcs_backend, ctx.vcs_token_env, ctx.repo.
+    1. Construct PipelineContext: ctx = PipelineContext(project_dir="/tmp/test", repo="t/t") — all fields have defaults or computed values.
+    2. from_environ factory: Set PANEL_SKIP_AUTOFIX=1, call from_environ("/tmp/test") — ctx.skip_autofix is True.
+    3. Pass ctx to phase function: run_phase3_vet(ctx, feature="test", branch="feat/x", ...) — no crash, uses ctx.project_dir.
+    4. Conftest panel fixture yields ctx: Test uses def test_something(panel): ctx = panel; assert ctx.project_dir == "/tmp/test-project".
+    5. Existing test_repo fixture passes: After refactor, test_repo creates a ctx, sets ctx.project_dir, and pipeline tests use ctx.
     
     Edge Cases
-    - Empty context: PipelineContext() with all defaults. _validate_project_dir(ctx) should reject empty project_dir gracefully (existing behavior).
-    - None values: PipelineContext(max_parallel_override=None, resume=None). Phase functions must handle ctx.max_parallel_override is None correctly (existing behavior).
-    - Missing api_key: Phase 1 strategist receives ctx.api_key = "". Should fail with clear error (existing behavior — load_key() is called in main(), not affected).
-    - ctx mutation during pipeline: A phase function mutates ctx.panel_feature. Next phase sees the new value. This is acceptable (same as current global mutation pattern) but should be documented.
-    - Concurrent ctx access: Two parallel coders both read ctx.test_cmd. No mutation — safe. If one mutates ctx.skip_autofix, the other sees the change. This matches current global behavior — no regression.
+    6. Empty repo: ctx = PipelineContext(project_dir="/tmp/test", repo="") — all functions that use ctx.repo handle empty string gracefully (same behavior as current empty-string default).
+    7. custom hermes_bin: ctx = PipelineContext(project_dir="/tmp/test", hermes_bin="/usr/local/bin/hermes") — __post_init__ does NOT overwrite a user-provided value.
+    8. Concurrent continuous loop iterations: Each call to run_pipeline(ctx, ...) in the --continuous loop mutates ctx.panel_feature — verify no stale values bleed between iterations.
+    9. Missing home directory: pwd.getpwuid() raises on restricted containers — __post_init__ must handle gracefully (try/except, fall back to os.path.expanduser("~")).
+    10. Resume from checkpoint: Resume path in run_pipeline (lines 2527-2548) must still work when using ctx instead of module globals.
     
     Failure Modes
-    - Missing ctx parameter: A function in utils.py that wasn't updated still reads module-level PROJECT_DIR. It will read an empty string (the module-level default) instead of the test value. This should be caught by tests that set ctx.project_dir to a non-default value — the function will fail with "PROJECT_DIR not set" or produce wrong output.
-    - ctx passed to function that doesn't accept it: TypeError: unexpected keyword argument. Caught at import time by py_compile, at test time by pytest.
-    - ctx field name mismatch: ctx.project_dir vs ctx.PROJECT_DIR. Dataclass enforces correct field names — AttributeError at runtime.
-    - vcs.py _run_vcs reads ctx.repo that wasn't set: detect_vcs_backend sets it. If called without detection first, ctx.repo is empty string — VCS commands fail with clear error.
+    11. ctx not passed: Calling run_phase3_vet(feature=..., ...) without ctx as first param — TypeError with clear message.
+    12. None ctx: ctx = None; run_phase3_vet(ctx, ...) — AttributeError when accessing ctx.project_dir. Acceptable (Python's standard behavior for None attribute access).
+    13. Missing project_dir: PipelineContext(repo="t/t") — TypeError (dataclass enforces required field).
+    14. Network error in detect_repo: Entry script already handles this — ctx is constructed after detection, so missing repo is caught before ctx construction.
     
     Contract Invariants
-    - After main() constructs ctx, ctx.project_dir is a valid existing directory containing .git
-    - After detect_vcs_backend(ctx, project_dir), ctx.repo is non-empty if the remote was detected
-    - Phase functions never mutate ctx.project_dir, ctx.repo, ctx.default_branch, ctx.test_cmd, ctx.build_cmd, ctx.lint_cmd
-    - ctx.output_log is set once in main() and never changes
-    - _load_panel() in tests (if retained for backward compat) does NOT install setattr
+    15. Phase functions do not mutate ctx: A phase function must NEVER modify ctx.project_dir or ctx.repo. Only the entry script and run_pipeline may update ctx.panel_feature between iterations.
+    16. ctx is always the first parameter: All phase functions accept ctx: PipelineContext as their first positional parameter.
+    17. conftest creates ctx, not module: After refactor, conftest's _load_panel() returns a PipelineContext, not a types.ModuleType with setattr override.
+    18. Zero module-level globals post-refactor: Running grep -rn "PROJECT_DIR\|^REPO\b" utils.py vcs.py must return zero module-level assignment hits (imports/references through ctx OK).
     
     
     
     11. Panel Split
     
-    Wave 1 (parallel — no shared files):
-    - Task 1: context.py (NEW) — no dependencies
-    - Task 2: ctx fixture in conftest.py — depends on Task 1 but different file
-    - Task 3: utils.py migration — depends on Task 1, different file from Task 2
-    - Task 5: vcs.py migration — depends on Task 1, different file from all above
-    - Task 6: tasks.py migration — depends on Tasks 1, 3 (imports from utils), but different file from Task 5
+    This is a sequential refactor with limited parallelism:
     
-    Wave 2 (sequential — shares files or depends on Wave 1):
-    - Task 4: agent.py migration — depends on Tasks 1, 3
-    - Task 7: pipeline.py migration — depends on Tasks 1, 3, 4, 5, 6 (pipeline calls all modules)
-    - Task 8: roadmap.py migration — depends on Tasks 1, 7 (to avoid merge conflicts with pipeline.py bulk changes)
     
-    Wave 3 (sequential — integration layer):
-    - Task 9: dokima main() — depends on Tasks 7, 8
-    - Task 10: migrate test files — depends on Tasks 2, 9
+    Wave 1 (1 coder):
+      Task 1: Create PipelineContext dataclass
     
-    Wave 4 (cleanup):
-    - Task 11: simplify conftest.py — depends on Task 10
-    - Task 12: final test run — depends on Task 11
+    Wave 2 (1 coder):
+      Task 2: Wire into entry script
+      Task 6: Remove vcs.py REPO (parallelizable with Task 2 — separate files)
     
-    Coder count: 3 (Wave 1 fans out to 3 parallel coders; Waves 2-4 are sequential per file contention)
+    Wave 3 (1 coder):
+      Task 3: Refactor all phase functions
+      Task 4: Refactor discover_blocked_pr + extract_blockers_from_pr
+      (same file — must be sequential)
+    
+    Wave 4 (1 coder):
+      Task 5: Remove utils.py globals + rewrite conftest
+    
+    Wave 5 (1 coder):
+      Task 7: Update all test files
+    
+    Wave 6 (verification):
+      Task 8: Full test suite
+    
+    
+    Parallelism: Task 6 (vcs.py) can run in parallel with Task 2 (dokima entry) since they touch different files. All other tasks share files and must be sequential. 1 coder agent. Total: 6 waves.
     
     
     
     12. Build & Deploy
     
-    Build: python3 -c "compile(open('dokima').read(), 'dokima', 'exec')" + python3 -m py_compile context.py utils.py agent.py pipeline.py roadmap.py tasks.py vcs.py
-    
-    CI: python3 -m pytest tests/ -q (same as existing — no new CI steps)
-    
-    Deploy: No deploy — this is a Python script. dokima symlink doesn't change. install.sh doesn't change.
-    
-    Env vars: None added or removed. API_SERVER_KEY, GH_TOKEN, PANEL_FALLBACK_*, PANEL_SKIP_AUTOFIX, PANEL_FORCE_FULL, PANEL_SKIP_HUMAN_GATE, PANEL_RESUME are read in main() and stored in ctx — same behavior, different storage location.
+    - Build: python3 -c "compile(open('dokima').read(), 'dokima', 'exec')" — must succeed
+    - Lint: python3 -m py_compile dokima — must succeed
+    - Test: python3 -m pytest tests/ -q — must pass 1,029, skip 4, fail 0
+    - Deploy: This is the dokima repo itself — merge to main, chmod +x dokima if needed. No Vercel/cloud deployment.
+    - Env vars: No new env vars needed.
+    - CI: No CI exists yet (F042). Manual verification only.
     
     
     
     13. Risk Register
     
-    #: R1
-    Risk: Stale global statement missed — function reads empty module-level
-      default instead of ctx value
-    Severity: HIGH
-    Mitigation: Grep for ^\s*global\s after migration — zero matches required.
-      Tests that set non-default ctx values (e.g.,
-      ctx.project_dir="/tmp/test") will fail if a function reads the
-      module-level empty string.
-    Trigger: CI fails.
+    #: 1
+    Risk: Test breakage during refactor — a missed PROJECT_DIR reference in a
+      test causes cascade failure
+    Severity: High
+    Mitigation: 1,029 tests serve as safety net. Run full suite after every
+      task. Fix any failure before proceeding.
+    Trigger: Any test fails in Task 8
+    Column 6:
     ────────────────────────────────────────
-    #: R2
-    Risk: _IMPORTING_PANEL removal breaks F022b's stale-module workaround in
-      tests
-    Severity: MEDIUM
-    Mitigation: The workaround exists because of the global-sync problem. Once
-      globals are gone, there's nothing to sync. _isolate_panel_modules
-      fixture may become unnecessary — verify with a full test run. If some
-      tests still rely on it, keep the fixture but remove _IMPORTING_PANEL
-      linkage.
-    Trigger: Test isolation failures in CI.
+    #: 2
+    Risk: Hidden global readers — functions that read PROJECT_DIR/REPO without
+      global statement, accessed via from utils import PROJECT_DIR
+    Severity: Medium
+    Mitigation: grep -rn "PROJECT_DIR\
+    Trigger: REPO\b" utils.py vcs.py pipeline.py agent.py tasks.py roadmap.py
+      to find all references before cutting over.
+    Column 6: More than 20 unique reference points found
     ────────────────────────────────────────
-    #: R3
-    Risk: Test file that bypasses the panel fixture and directly sets module
-      globals breaks
-    Severity: MEDIUM
-    Mitigation: grep -r "_load_panel()" tests/ to find non-fixture callers.
-      These tests need explicit ctx construction. Most already go through the
-      panel fixture.
-    Trigger: Individual test failures — each is isolated.
+    #: 3
+    Risk: conftest panel fixture consumers — ~50 test files use
+      panel.PROJECT_DIR = ... pattern; rewriting all of them is tedious
+    Severity: Medium
+    Mitigation: Task 7 specifically covers this. The panel fixture emits a
+      PipelineContext; tests reference ctx.project_dir instead of
+      panel.PROJECT_DIR.
+    Trigger: More than 15 test files fail after Task 5
+    Column 6:
     ────────────────────────────────────────
-    #: R4
-    Risk: vcs.py functions called before detect_vcs_backend() — ctx.repo is
-      empty
-    Severity: LOW
-    Mitigation: detect_vcs_backend() is called in main() before any VCS
-      operation. The refactor preserves this ordering. Add assertion in
-      _run_vcs: assert ctx.repo, "ctx.repo not set — call detect_vcs_backend()
-      first".
-    Trigger: VCS command fails with assertion error.
+    #: 4
+    Risk: vcs.py REPO coupling — vcs_pr_update_body() at line 253 uses REPO in
+      an f-string; changing it requires cascade to all VCS callers
+    Severity: Low
+    Mitigation: Only 2 VCS functions reference REPO. Refactor
+      detect_vcs_backend() to return repo slug instead of mutating module
+      global.
+    Trigger: vcs.py functions break after REPO removal
+    Column 6:
     ────────────────────────────────────────
-    #: R5
-    Risk: HERMES_BIN duplicate definition — dokima and utils.py both define it
-    Severity: LOW
-    Mitigation: After migration, ctx.hermes_bin is set by main(). Remove both
-      module-level definitions. Functions use ctx.hermes_bin.
-    Trigger: AttributeError if ctx.hermes_bin is empty.
+    #: 5
+    Risk: Continuous loop ctx mutation — --continuous mode updates
+      PANEL_FEATURE per iteration; must update ctx.panel_feature instead
+    Severity: Low
+    Mitigation: Entry script loop at lines 717-751 already sets PANEL_FEATURE
+      = feature before each run_pipeline() call — trivial to assign
+      ctx.panel_feature = feature instead.
+    Trigger: Continuous mode picks wrong feature
+    Column 6:
     ────────────────────────────────────────
-    #: R6
-    Risk: OUTPUT_LOG with timestamp in name — constructed in main(), stored in
-      ctx
-    Severity: LOW
-    Mitigation: Move the datetime.datetime.now() call to main() before
-      constructing ctx. Update any code that read the module-level OUTPUT_LOG
-      to use ctx.output_log.
-    Trigger: Timestamp mismatch if referenced after midnight (unlikely in a
-      single pipeline run).
+    #: 6
+    Risk: _importing_panel pattern breakage — pipeline.py line 207-211 and
+      other places use _IMPORTING_PANEL for test patch detection
+    Severity: Medium
+    Mitigation: Replace with direct ctx parameter passing. Test patches will
+      mock run_phaseX functions directly rather than relying on module
+      override detection.
+    Trigger: Test test_f031_pipeline_refactor or similar override-detection
+      tests fail
+    Column 6:
     
     
     
     14. Anti-Creep
     
-    Features explicitly NOT in scope for F040:
-    
-    - Do NOT add type hints to functions that currently lack them. Adding ctx: PipelineContext is the only type annotation change.
-    - Do NOT refactor function bodies beyond replacing global X with ctx.X reads. No restructuring, no extraction.
-    - Do NOT add validation logic to PipelineContext.__post_init__ beyond the existing _validate_project_dir pattern.
-    - Do NOT convert PipelineContext to frozen=True — mutation is used intentionally in main() and tests.
-    - Do NOT introduce dependency injection frameworks — pip install nothing new.
-    - Do NOT change CLI behavior, help text, or output format.
-    - Do NOT touch nm or vet bash scripts — they don't use Python globals.
-    - Do NOT change the dokima shebang or install.sh.
-    - Do NOT add ctx to functions that don't read any global — e.g., slugify, _hash_output, _detect_truncation are pure functions with no global dependencies.
+    NOT in scope — the coder must NOT build:
+    - Immutable/frozen context (FrozenInstanceError breaks --continuous loop)
+    - Thread-safety / locking on PipelineContext (single-threaded pipeline, no concurrent ctx access)
+    - YAML/JSON serialization of PipelineContext (not needed — ctx is in-memory only)
+    - CLI flag to dump ctx (out of scope for this refactor)
+    - PipelineContext as a replacement for checkpoint data (checkpoints are already handled by load_checkpoint/save_checkpoint)
+    - Moving status.py's PipelineStatus into PipelineContext (separate concern — build state vs. pipeline config)
+    - Type annotations requiring Python 3.10+ (project targets Python 3.6+, use Optional[X] not X | None)
+    - Removing _IMPORTING_PANEL from sub-modules that don't use globals (out of scope — only pipeline/agent/tasks/roadmap)
     
     
     
     15. Sign-Off Checklist
     
-    - [ ] PipelineContext field list approved — all 17 globals captured, nothing missed
-    - [ ] Decision on HERMES_BIN duplication: set only in main(), removed from utils.py
-    - [ ] Decision on OUTPUT_LOG construction: moved to main(), stored in ctx
-    - [ ] Decision on PANEL_PORT and PROFILES: stay module-level constants (derived from REAL_HOME)
-    - [ ] Decision on _IMPORTING_PANEL removal: confirmed it only existed for global sync
-    - [ ] Task 1-12 ordering approved — Wave 1 parallelism validated (context.py, conftest, utils, vcs, tasks all different files)
-    - [ ] Test migration strategy approved: ctx fixture + mechanical panel.X → ctx.X replacement
-    - [ ] Anti-creep boundaries confirmed: no type hints beyond ctx, no function body refactors, no new deps
-    - [ ] 3-coder panel allocation for Wave 1 approved
-    - [ ] Acceptance criteria: grep "global " dokima utils.py agent.py pipeline.py roadmap.py tasks.py vcs.py returns 0 matches
-    - [ ] Acceptance criteria: grep "setattr" tests/conftest.py returns 0 matches
-    - [ ] Acceptance criteria: 1,033 tests pass, 4 skipped (unchanged)
+    - [ ] PipelineContext dataclass defined with all 20+ fields
+    - [ ] __post_init__ computes derived paths correctly
+    - [ ] from_environ() factory handles PANEL_SKIP_AUTOFIX, PANEL_FORCE_FULL, PANEL_SKIP_HUMAN_GATE, PANEL_MAX_PARALLEL
+    - [ ] Entry script constructs ctx once, passes to run_pipeline(ctx, ...)
+    - [ ] _sync_modules() removed from entry script
+    - [ ] All 9 phase/fix/pipeline functions accept ctx as first parameter
+    - [ ] All 11 global statements removed from pipeline.py
+    - [ ] conftest setattr override hack removed (lines 42-53)
+    - [ ] conftest _load_panel() returns PipelineContext, not module
+    - [ ] All test files updated to use ctx.field instead of panel.FIELD
+    - [ ] vcs.py REPO module-level global removed
+    - [ ] utils.py module-level globals removed (lines 16-36)
+    - [ ] Full test suite: 1,029 pass, 4 skip, 0 fail
+    - [ ] Build and lint pass
+    - [ ] grep -rn "PROJECT_DIR\s*=" utils.py pipeline.py returns zero module-level assignments (excluding ctx construction)
+    
+    
+    
+    Spec version: 1.0 | Author: Strategist (panel) | Next: Panel sign-off → coder implementation

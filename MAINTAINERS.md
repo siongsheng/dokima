@@ -21,7 +21,7 @@ Each phase spawns a separate `hermes --profile <role>` process via `spawn_agent(
 
 ## Key Functions by Phase
 
-### Phase 1: Strategist (`run_phase1_strategist`, line 4198)
+### Phase 1: Strategist (`run_phase1_strategist`, line 2680, decomposed into ~15 helpers by F043)
 - Spawns `hermes --profile strategist` with `spec-strategist-lite` skill
 - Produces a spec + task breakdown in DAG format
 - Quality gate: `verify_spec_quality()` checks for Impact, What Changed, Task headers
@@ -29,24 +29,24 @@ Each phase spawns a separate `hermes --profile <role>` process via `spawn_agent(
 - Interview mode: if `DECISION: INTERVIEW MODE`, saves `/tmp/dokima-interview.json`, exits 2
 - Output: `specs/<feature>-spec.md`, `specs/<feature>-tasks.md`
 
-### Phase 2: Coder (`run_phase2_coder`, line 3406)
+### Phase 2: Coder (`run_phase2_coder`, line 725, decomposed by F043)
 - Spawns `hermes --profile coder` with `ai-coding-best-practices-lite`
 - Constructs prompt with: codebase map, target file hints, line-range code context
 - Enforces TDD: RED commit (failing test) → GREEN commit (passing code)
 - Two execution paths: `single_session` (batch) or `per_task_spawn` (parallel worktrees)
 - Model upgrade: uses `deepseek-v4-pro` for fix mode or ≥8 tasks
 
-### Phase 3: Vet (`run_phase3_vet`, line 3664)
+### Phase 3: Vet (`run_phase3_vet`, line 1005)
 - Checks out feature branch, runs `BUILD_CMD` + `TEST_CMD` + `LINT_CMD`
 - Re-runs project detection (AGENTS.md may have changed on branch)
 - Reports pass/fail — pipeline halts on failure
 
-### Phase 4: nm / Adversarial Review (`run_phase4_nm`, line 3822)
+### Phase 4: nm / Adversarial Review (`run_phase4_nm`, line 1603)
 - Runs `~/bin/nm` script — cross-family adversarial review
 - nm profile MUST use different model family from coder (currently Qwen, fallback Gemini)
 - Risk extraction from nm output; fallback to strategist's Impact assessment
 
-### Phase 5: Tech Lead (`run_phase5_tech_lead`, line 4019)
+### Phase 5: Tech Lead (`run_phase5_tech_lead`, line 1747)
 - Spawns `hermes --profile tech-lead` for final review
 - Verdict extraction: `_extract_tl_verdict()` takes LAST `VERDICT:` line (TL may change mind mid-review)
 - Blocker extraction: `_extract_tl_blockers()` filters out monologue noise

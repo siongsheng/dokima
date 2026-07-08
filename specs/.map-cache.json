@@ -1,6 +1,6 @@
 {
   ".pipeline-status.json": {
-    "hash": "49858ae32b6c8e890dc067eb6297731d",
+    "hash": "8c3326133601a7713965404e9f9f24fd",
     "desc": ""
   },
   "ADVERSARIAL_REVIEW.md": {
@@ -23,17 +23,33 @@
     "hash": "63c6d1a078b5ecf07bcc11fcd0f362d7",
     "desc": "\u2500\u2500 Module-level globals (set by main()) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
   },
+  "codebase_map.py": {
+    "hash": "cb704c52f2125987271d9bd5d7fa62f5",
+    "desc": "continue"
+  },
+  "control_panel.py": {
+    "hash": "3079493d69441a325d1a1fd12f64e471",
+    "desc": ""
+  },
+  "git_ops.py": {
+    "hash": "0cc4091298ddc167e8e30eded1ecd6e4",
+    "desc": "Exports: git, gh"
+  },
   "install.sh": {
     "hash": "25a6c3e4e7e33ef2ddc1e9a9c13b70dc",
     "desc": "Dokima Installer \u2014 one-command setup"
   },
   "pipeline.py": {
-    "hash": "290e67e03803c61a2f2d5eeed8e938b9",
+    "hash": "7bc383868d108c25d257719c51d3b1d9",
     "desc": "Set by conftest._load_panel() \u2014 see utils.py _IMPORTING_PANEL docstring (F022b)."
   },
   "roadmap.py": {
-    "hash": "acb380565c758ca6feb0293d75f9c62c",
+    "hash": "335ad8bd9e57e333affcf26d989dbe4a",
     "desc": "Exports: parse_roadmap"
+  },
+  "spec_extract.py": {
+    "hash": "19c5f115d0b78a3b88e95cfe3679fb70",
+    "desc": "Exports: _trim_to_sentences"
   },
   "status.py": {
     "hash": "bed92ed77b605d764ae28f4a94a2c07b",
@@ -44,7 +60,7 @@
     "desc": "Exports: WorktreeManager"
   },
   "utils.py": {
-    "hash": "995eb6129c673a0c6771726e0d8d69a7",
+    "hash": "0fda4a811ae9d5a4be10d60b94751726",
     "desc": "shutil imported dynamically where needed (deploy_profile_skills)"
   },
   "vcs.py": {
@@ -96,7 +112,7 @@
     "desc": "Exports: _load_panel"
   },
   "tests/test_acquire_lock.py": {
-    "hash": "f633babd5dfb43c5895635afbc1718a6",
+    "hash": "f6c74e66a175d198b76611bc28092d9a",
     "desc": "Exports: test_first_acquisition_succeeds, test_second_acquisition_blocked, test_stale_lock_dead_pid"
   },
   "tests/test_add_to_roadmap.py": {
@@ -212,7 +228,7 @@
     "desc": "Ensure the project root is on the path so we can import utils"
   },
   "tests/test_f025_dashboard.py": {
-    "hash": "0a2035004d5dfca30a5d4ba0dd47f449",
+    "hash": "e8402fae58191309bf296dd5acc692b7",
     "desc": "Exports: TestPipelineStatus, TestSaveLoad"
   },
   "tests/test_f030_cli_metadata.py": {
@@ -271,6 +287,10 @@
     "hash": "e05abaac82fad5969f1247cea18a8a23",
     "desc": "Exports: panel"
   },
+  "tests/test_f041_modules.py": {
+    "hash": "6ab796152dcfa9c8fc8fef875df82078",
+    "desc": "Exports: TestCodebaseMapModule"
+  },
   "tests/test_final_coverage.py": {
     "hash": "63bd93c57437b723a16f02ca7faee1ed",
     "desc": "Exports: _setup"
@@ -280,20 +300,24 @@
     "desc": "Exports: _setup"
   },
   "tests/test_fix_mode.py": {
-    "hash": "d4f772555d60e960820914f8c25a0a29",
+    "hash": "868018598ed1b91cb715c8900ee181b7",
     "desc": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
   },
   "tests/test_functions_unit.py": {
     "hash": "30b28480519d8d1231041db04a67815a",
     "desc": "Exports: TestSafeRun, TestGit"
   },
+  "tests/test_git_ops.py": {
+    "hash": "a55c3089acf013cec8ca6f5e129979ba",
+    "desc": "Exports: TestGitOpsModule"
+  },
   "tests/test_help_text.py": {
     "hash": "5008b36dad6e635ee1a947a5e027f8e8",
     "desc": "Exports: test_help_text_documents_panel_max_parallel"
   },
   "tests/test_helpers.py": {
-    "hash": "1c8913a5ebbbe7b55c962d72595fb802",
-    "desc": "Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_auto_repair_status_empty"
+    "hash": "6dbbf886343aa971b634940edc99bf32",
+    "desc": "Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_commit_roadmap_update_aborts_on_checkout_failure"
   },
   "tests/test_installer.py": {
     "hash": "4258fe7dee1f0f15a80b03ad3c6684fc",
@@ -340,11 +364,11 @@
     "desc": "Exports: test_file_not_found, test_empty_file, test_single_feature_all_fields"
   },
   "tests/test_roadmap_update.py": {
-    "hash": "367a5d950dddedc4a64a7b51ee16db55",
+    "hash": "c2cb078eba52a6b5eaba5658ff27af97",
     "desc": "Exports: test_pending_to_in_progress, test_in_progress_to_done, test_done_to_pending_revert, test_feature_not_found_no_change, test_file_not_found_no_crash"
   },
   "tests/test_root_cause_regressions.py": {
-    "hash": "a932434ef4c2b061edf7856110401acc",
+    "hash": "04ccfc281da6e76ee76c5beb8ab47c17",
     "desc": "Exports: TestSpecPathDetection"
   },
   "tests/test_safe_run.py": {
@@ -359,13 +383,21 @@
     "hash": "4408cde97f3a1c91cb556dca039bc4ae",
     "desc": "Exports: test_clean_input_no_change, test_spaces_to_hyphens, test_special_chars_removed, test_exactly_40_chars_no_hash, test_41_chars_appends_hash"
   },
+  "tests/test_spec_extract.py": {
+    "hash": "89c1b9db749996c1867c43663009c61a",
+    "desc": "Exports: TestSpecExtractModule"
+  },
   "tests/test_spec_quality_gates.py": {
-    "hash": "dd8a9d5a4c10724380a4e9bfa6dca805",
+    "hash": "5a32ad0d40db8c4a60b62bbd69ad97ac",
     "desc": "Sample well-formed spec with all required sections"
   },
   "tests/test_status_md.py": {
     "hash": "5cab1041379af41b43f058eb2d314d47",
     "desc": "Exports: test_empty_status_file, test_single_active_entry, test_update_existing_entry, test_new_entry_appended, test_timestamp_auto_generated"
+  },
+  "tests/test_t1_phase1_helpers.py": {
+    "hash": "33eebfbc19ff634227fff92200e13d6b",
+    "desc": "Exports: test_configure_strategist_reasoning_no_env, test_check_existing_spec_no_spec, test_restore_strategist_config_noop, test_helpers_importable"
   },
   "tests/test_task6_profiles.py": {
     "hash": "aa819a5e53263e07d504ce9948aec137",

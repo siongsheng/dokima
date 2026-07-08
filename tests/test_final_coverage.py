@@ -115,7 +115,6 @@ CLARIFICATION 2: REST or GraphQL?
 """
 
 class TestInterviewGate:
-    @pytest.mark.skip(reason="select.select on mocked sys.stdin fails — needs main() refactor to inject stdin")
     def test_interview_mode_triggers_clarification(self, tmpdir):
         """Strategist in INTERVIEW MODE → non-interactive → skips gracefully."""
         panel = _load()
