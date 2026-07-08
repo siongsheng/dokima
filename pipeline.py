@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
-import sys, os, json, re, subprocess, time, datetime
+import sys, os, json, re, subprocess, time, datetime, select
 import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
@@ -882,7 +882,6 @@ Report: both commit hashes, files changed, test results, lint status, branch nam
 
             user_answers = []
             try:
-                import select
                 for i in range(len(coder_clarify)):
                     print(f"\n  A{i+1}: ", end="", flush=True)
                     ready, _, _ = select.select([sys.stdin], [], [], 60.0)
@@ -2285,7 +2284,6 @@ def _handle_interview_gate(strat_output, strat_prompt, feature, user_answers_pre
         print("-" * 60, flush=True)
         user_answers = []
         try:
-            import select
             for i in range(len(clarification_lines)):
                 print(f"\n  A{i+1}: ", end="", flush=True)
                 ready, _, _ = select.select([sys.stdin], [], [], 60.0)

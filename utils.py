@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Module-level globals are set by main() in the dokima entry script before any function calls.
 """
-import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
+import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime, select
 
 # shutil imported dynamically where needed (deploy_profile_skills)
 
@@ -1178,7 +1178,6 @@ def collect_init_interview_answers(questions, interview_state, path=None):
         answers: list of {"question_id": int, "answer": str} dicts.
         exit_code: 0 = success (or assumptions accepted), 2 = non-TTY saved.
     """
-    import select
 
     if path is None:
         path = INTERVIEW_SAVE_PATH
