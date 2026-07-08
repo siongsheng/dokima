@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
-import sys, os, json, re, subprocess, time
+import sys, os, json, re, subprocess, time, datetime
 import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
@@ -112,7 +112,6 @@ def _status_update(**kwargs):
             s = PipelineStatus()
         # Feature change guard: reset tracking when switching features (issues #131, #136)
         if 'feature' in kwargs and s.feature and kwargs['feature'] != s.feature:
-            import datetime
             s.started_at = datetime.datetime.now().isoformat()
             s.current_phase = "init"
             s.task_total = 0
