@@ -3,7 +3,7 @@
 All functions extracted from dokima monolith (F022: Modular Architecture).
 Imports from utils, agent, tasks, and roadmap.
 """
-import sys, os, json, re, subprocess, time, datetime, select
+import sys, os, json, re, subprocess, time, ast, importlib.util, datetime, select
 import vcs
 
 # Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
@@ -805,7 +805,6 @@ def run_phase2_coder(feature, spec, spec_path, tasks_extract_path, pr_sections, 
                 pass  # Best-effort — not critical
 
             coder_prompt = f"""YOU ARE THE CODER — your ONLY job is to IMPLEMENT the tasks below. Do NOT explore the codebase. Do NOT ask questions. Do NOT analyze. Start implementing Task 1 NOW.
-⚠️ Do NOT write spec files or planning documents. The spec already exists. Your output must be working Python code — .py source files and test files only.
 
 {file_hints}{code_context}
 Read the task breakdown at {tasks_extract_path} (full spec: {spec_ref}).\nIf these files do NOT exist, STOP immediately and report \"SPEC FILES MISSING\" — do NOT guess, do NOT write a spec. Read ONLY the files listed above. Do NOT read any other files.\nFIRST: Fetch and switch to branch '{branch}' (already created by the panel):
@@ -1170,19 +1169,22 @@ Report: what was broken, what you fixed, commit hash."""
         return {"nm_output": f"VET_FAILED: no source code changes\n{diff_stat[:500]}", "pr_url": None,
                 "coder_failed": True, "verdict": "VET_FAILED", "test_pass": test_pass, "build_pass": build_pass}
 
-    # F039: Real-code verification — ensure functions tested exist in source
-    if test_pass:
-        missing = _verify_test_imports_exist(PROJECT_DIR)
-        if missing:
-            print(f"  🔴 BLOCKED — {len(missing)} tested function(s) not found in source:", flush=True)
-            for m in missing[:5]:
-                print(f"    {m}", flush=True)
-            halt_and_revert("nm: tests pass but implementation is missing (F039)", "PHASE 3 (Verification)", branch)
-            return {"nm_output": f"VET_FAILED: missing implementation\n" + "\n".join(missing),
-                    "pr_url": None, "coder_failed": True, "verdict": "VET_FAILED",
-                    "test_pass": test_pass, "build_pass": build_pass}
+    # F039: Real-code verification — after tests pass, verify functions referenced
+    # in test imports actually exist in source modules.
+    print("  ⏳ Verifying real code (F039)...", flush=True)
+    missing = _verify_test_imports_exist(PROJECT_DIR)
+    if missing:
+        print(f"  🔴 BLOCKED — {len(missing)} tested function(s) not found in source:", flush=True)
+        for m in missing:
+            print(f"    {m}", flush=True)
+        print(f"  Coder wrote tests referencing functions that don't exist — fix the implementation.", flush=True)
+        halt_and_revert("nm: real-code verification failed (F039)", "PHASE 3 (Verification)", branch)
+        return {"nm_output": f"VET_FAILED: F039 real-code verification\\n" + "\\n".join(missing),
+                "pr_url": None, "coder_failed": True, "verdict": "VET_FAILED",
+                "test_pass": test_pass, "build_pass": build_pass}
+    print("  ✓ Real-code verification passed", flush=True)
 
-    # 4. Create PR (verification passed)
+    # 5. Create PR (verification passed)
     print("  ⏳ Creating PR...", flush=True)
 
     pr_sections_final = _supplement_pr_sections(pr_sections, PROJECT_DIR, branch, DEFAULT_BRANCH)
@@ -1417,58 +1419,141 @@ def _inject_nm_into_pr_body(pr_url, nm_stdout):
 
 
 def _verify_test_imports_exist(project_dir):
-    """F039: Scan test files for import claims and verify functions exist in source.
+    """Scan test files for function import claims and verify they exist in source modules.
 
-    Returns list of "module.function: test_file:line" strings for missing functions.
-    Returns empty list if all tested functions exist.
+    Parses test files via AST to find ``from <module> import <name>`` statements.
+    Cross-references each imported name against the actual source module's ``dir()``.
+    Returns a list of ``"module.name: test_file:line"`` strings for missing functions,
+    or an empty list if all claims are valid.
+
+    Args:
+        project_dir: Absolute path to the project root.
+
+    Returns:
+        list[str]: Violations in format "module.name: test_file:line".
     """
-    import ast as _ast
-    import importlib.util as _importlib_util
     tests_dir = os.path.join(project_dir, "tests")
     if not os.path.isdir(tests_dir):
         return []
-    missing = []
 
-    # Build a set of all importable names from source modules
-    source_names = {}
-    for mod_name in ["pipeline", "utils", "agent", "tasks", "roadmap", "vcs", "status"]:
+    # Auto-discover source modules: glob *.py in project_dir, exclude __init__.py and test_*
+    import glob
+    source_modules = []
+    for pyfile in sorted(glob.glob(os.path.join(project_dir, "*.py"))):
+        basename = os.path.basename(pyfile)
+        mod_name = os.path.splitext(basename)[0]
+        if basename == "__init__.py" or basename.startswith("test_"):
+            continue
+        source_modules.append(mod_name)
+
+    # Load each source module and build set of exportable names
+    source_names = {}  # module_name -> set of dir() names
+    for mod_name in source_modules:
+        mod_path = os.path.join(project_dir, mod_name + ".py")
+        if not os.path.isfile(mod_path):
+            continue
         try:
-            spec = _importlib_util.spec_from_file_location(
-                mod_name, os.path.join(project_dir, f"{mod_name}.py"))
-            if spec and spec.loader:
-                mod = _importlib_util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                source_names[mod_name] = set(dir(mod))
+            spec = importlib.util.spec_from_file_location(mod_name, mod_path)
+            if spec is None or spec.loader is None:
+                continue
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            source_names[mod_name] = set(dir(mod))
         except Exception:
+            # Module failed to load — skip it gracefully
             continue
 
-    # Scan test files for from X import Y patterns
-    for test_file in os.listdir(tests_dir):
-        if not test_file.endswith(".py") or test_file.startswith("__"):
+    if not source_names:
+        return []
+
+    # Scan each test file via AST for from X import Y patterns
+    missing = set()
+    for fname in sorted(os.listdir(tests_dir)):
+        if not fname.endswith(".py"):
             continue
-        fpath = os.path.join(tests_dir, test_file)
+        fpath = os.path.join(tests_dir, fname)
         try:
-            with open(fpath) as f:
-                tree = _ast.parse(f.read(), filename=fpath)
-            for node in _ast.walk(tree):
-                if isinstance(node, _ast.ImportFrom) and node.module in source_names:
-                    for alias in node.names:
-                        name = alias.name
-                        if name.startswith("_"):
-                            continue
-                        if name not in source_names[node.module]:
-                            # Check if it's a function definition in this test file (not an import claim)
-                            if not any(
-                                isinstance(n, _ast.FunctionDef) and n.name == name
-                                for n in _ast.walk(tree)
-                            ):
-                                missing.append(
-                                    f"{node.module}.{name}: {test_file}:{node.lineno}"
-                                )
+            with open(fpath, "r") as f:
+                source = f.read()
+            tree = ast.parse(source, filename=fpath)
         except Exception:
+            # Syntax error or unreadable file — skip gracefully
             continue
 
-    return missing
+        # F039: Detect from X import Y patterns
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module is None:
+                continue
+            if node.module not in source_names:
+                continue
+
+            mod_names = source_names[node.module]
+            for alias in node.names:
+                name = alias.name
+                if name.startswith("_"):
+                    continue  # skip private names
+                if name not in mod_names:
+                    missing.add(f"{node.module}.{name}: {fname}:{node.lineno}")
+
+        # F039 Task 6: Detect mock.patch / @patch string references
+        for node in ast.walk(tree):
+            # Check decorators on function definitions
+            if isinstance(node, ast.FunctionDef):
+                for decorator in node.decorator_list:
+                    missing.update(
+                        _check_patch_call(decorator, source_names, fname))
+
+            # Check direct Call nodes (patch(...) or mock.patch(...))
+            if isinstance(node, ast.Call):
+                missing.update(
+                    _check_patch_call(node, source_names, fname))
+
+    return sorted(missing)
+
+
+def _check_patch_call(node, source_names, fname):
+    """Check if an AST node is a patch() or mock.patch() call referencing a missing function.
+
+    Returns list of violation strings (empty if no violation).
+    """
+    if not isinstance(node, ast.Call):
+        return []
+
+    # Determine if the call function is 'patch' or '*.patch'
+    func_name = None
+    if isinstance(node.func, ast.Name):
+        func_name = node.func.id
+    elif isinstance(node.func, ast.Attribute):
+        func_name = node.func.attr
+
+    if func_name != "patch":
+        return []
+
+    # Extract the string argument: patch('module.function', ...)
+    if not node.args:
+        return []
+    first_arg = node.args[0]
+    if not isinstance(first_arg, ast.Constant) or not isinstance(first_arg.value, str):
+        return []
+
+    target = first_arg.value  # e.g. "utils.nonexistent_func"
+    if "." not in target:
+        return []
+
+    module_name, func_name = target.split(".", 1)
+    if module_name not in source_names:
+        return []
+
+    if func_name.startswith("_"):
+        return []  # skip private names
+
+    if func_name not in source_names[module_name]:
+        lineno = getattr(node, "lineno", 0)
+        return [f"{module_name}.{func_name}: {fname}:{lineno}"]
+
+    return []
 
 
 def _verify_branch(branch):

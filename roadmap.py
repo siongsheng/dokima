@@ -526,6 +526,7 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
         features = parse_roadmap(roadmap_path)
 
     # 3. Pick next — respect user-specified feature hint if provided
+    next_feat = None
     if feature_hint:
         hint_upper = feature_hint.upper()
         # Try exact ID match first, then substring match on title/ID
@@ -533,12 +534,12 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
             if f.id.upper() == hint_upper or feature_hint.lower() in f.title.lower():
                 if f.status == "done":
                     print(f"  {f.id} is already done. Use --force to re-run.")
-                    sys.exit(0)
+                    return None
                 next_feat = f
                 break
         if not next_feat:
             print(f"  Feature '{feature_hint}' not found in roadmap. Available: {[f.id for f in features]}")
-            sys.exit(1)
+            return None
     else:
         next_feat = pick_next_feature(features)
     if not next_feat:
@@ -546,7 +547,7 @@ def run_next_setup(interactive: bool = False, feature_hint: str | None = None) -
         total = len(features)
         if done_count == total:
             print(f"All {total} features complete. Nothing to do.")
-        sys.exit(0)
+        return None
 
     print(f"\n── Next Feature: {next_feat.id} — {next_feat.title} ──")
     print(f"  Priority: {next_feat.priority}")

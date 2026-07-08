@@ -1,6 +1,6 @@
 ## Project: dokima
 ## Tech: detected at runtime
-## Generated: 2026-07-08 08:15:34 (incremental | 111 files)
+## Generated: 2026-07-08 09:25:45 (incremental | 119 files)
 
 ## Start Here
 **dokima** is a software project in this directory.
@@ -12,6 +12,7 @@ Read the Domain Map below to understand the file organization before exploring i
 
 ## Domain Map
 ### Pipeline Orchestration
+- .pipeline-config.yaml  — Dokima Pipeline Configuration
 - .pipeline-status.json
 - pipeline.py  — Set by conftest._load_panel() — see utils.py _IMPORTING_PANEL docstring (F022b).
 - roadmap.py  — Exports: parse_roadmap
@@ -21,12 +22,17 @@ Read the Domain Map below to understand the file organization before exploring i
 ### Agent Management
 - agent.py  — ── Module-level globals (set by main()) ──────────
 
+### Source Code
+- src/calculator.py  — Exports: add, subtract
+- src/user_service.py  — Exports: get_user
+
 ### Utilities
 - utils.py  — shutil imported dynamically where needed (deploy_profile_skills)
 
 ### Scripts
 - install.sh  — Dokima Installer — one-command setup
 - scripts/setup-linux.sh  — ───────────────────────────────────────────────────────────────────
+- scripts/verify_imports.py  — Exports: discover_source_modules, load_source_module
 
 ### Skills
 - skills/adversarial-review-lite/SKILL.md  — Adversarial Review (Lite — Tech Lead Edition)
@@ -44,6 +50,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/htmlcov/style_cb_4667309f.css
 - tests/test_acquire_lock.py  — Exports: test_first_acquisition_succeeds, test_second_acquisition_blocked, test_stale_lock_dead_pid
 - tests/test_add_to_roadmap.py
+- tests/test_calculator.py  — Exports: test_add, test_subtract
 - tests/test_clean_spec.py  — Exports: TestCleanSpecContent
 - tests/test_codebase_map.py  — assert "Fetch user data" in desc
 - tests/test_conftest_fixtures.py  — Exports: TestTestRepoFixture, TestMockOrchestratorFixture
@@ -86,11 +93,12 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f036_should_fix_extraction.py  — Exports: panel
 - tests/test_f037_blocker_resolution.py  — ── Task 1: vcs_pr_update_body() ────────────────────────────────────
 - tests/test_f038_nm_injection.py  — Exports: panel
+- tests/test_f039_real_code_verification.py  — Exports: temp_project, TestVerifyTestImportsExist
 - tests/test_f041_modules.py  — Exports: TestCodebaseMapModule
 - tests/test_final_coverage.py  — Exports: _setup
 - tests/test_final_edge.py  — Exports: _setup
 - tests/test_fix_mode.py  — ═══════════════════════════════════════════════════════════════════
-- tests/test_functions_unit.py  — Exports: TestSafeRun, TestGit
+- tests/test_functions_unit.py  — Exports: TestSafeRun, TestGit, TestHaltAndRevert
 - tests/test_git_ops.py  — Exports: TestGitOpsModule
 - tests/test_help_text.py  — Exports: test_help_text_documents_panel_max_parallel
 - tests/test_helpers.py  — Exports: test_make_status_entry_pending, test_make_status_entry_done_with_pr, test_make_status_entry_in_progress, test_commit_roadmap_update_dry, test_commit_roadmap_update_aborts_on_checkout_failure
@@ -120,6 +128,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_tl_extraction.py  — Exports: panel
 - tests/test_triple_bug_fix.py  — ── Bug 1: Spec archive ──────────────────────────────────────
 - tests/test_unit_helpers.py  — ═══════════════════════════════════════════════════════════════════
+- tests/test_user_service.py  — Exports: test_get_user, test_delete_user
 - tests/test_vcs.py  — ── detect_vcs_backend() ────────────────────────────────────────────
 - tests/test_vcs_wiring.py  — Exports: TestVcsFlagWiring
 
@@ -137,20 +146,25 @@ Read the Domain Map below to understand the file organization before exploring i
 - git_ops.py  — Exports: git, gh
 - spec_extract.py  — Exports: _trim_to_sentences
 - vcs.py  — Exports: detect_vcs_backend
+- vet/real_code_check.py  — Exports: extract_targets
 
 ## Impact Map
 - agent.py → imports from utils; external: threading, urllib
 - codebase_map.py → imports from utils
 - control_panel.py → imports from status, utils; external: glob, importlib, shutil
 - git_ops.py → imports from utils, vcs
-- pipeline.py → imports from agent, roadmap, status, tasks, utils, vcs; external: importlib, select, string
+- pipeline.py → imports from agent, roadmap, status, tasks, utils, vcs; external: glob, importlib, select, string
 - roadmap.py → imports from agent, tasks, utils, vcs
+- scripts/verify_imports.py → external: glob, importlib
 - spec_extract.py → standalone (stdlib only)
+- src/calculator.py → standalone (stdlib only)
+- src/user_service.py → standalone (stdlib only)
 - status.py → external: dataclasses
 - tasks.py → imports from agent, status, utils; external: shutil
 - tests/conftest.py → external: pytest, types, unittest
 - tests/test_acquire_lock.py → imports from utils; external: pytest
 - tests/test_add_to_roadmap.py → external: pytest
+- tests/test_calculator.py → imports from calculator; external: unittest
 - tests/test_clean_spec.py → external: pytest
 - tests/test_codebase_map.py → imports from conftest; external: pytest
 - tests/test_conftest_fixtures.py → external: unittest
@@ -193,6 +207,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f036_should_fix_extraction.py → imports from conftest; external: pytest, types, unittest
 - tests/test_f037_blocker_resolution.py → imports from pipeline, utils, vcs; external: pytest, unittest
 - tests/test_f038_nm_injection.py → imports from conftest, pipeline, vcs; external: pytest, unittest
+- tests/test_f039_real_code_verification.py → imports from utils; external: pytest, shutil, vet
 - tests/test_f041_modules.py → imports from codebase_map, conftest, control_panel, utils; external: pytest
 - tests/test_final_coverage.py → imports from conftest; external: pytest, unittest
 - tests/test_final_edge.py → imports from conftest; external: pytest, unittest
@@ -227,14 +242,17 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_tl_extraction.py → imports from conftest; external: pytest
 - tests/test_triple_bug_fix.py → external: pytest
 - tests/test_unit_helpers.py → imports from conftest; external: pytest, unittest
+- tests/test_user_service.py → imports from user_service; external: unittest
 - tests/test_vcs.py → imports from pipeline, roadmap, vcs; external: inspect, pytest, unittest
 - tests/test_vcs_wiring.py → imports from conftest, vcs; external: contextlib, pytest, unittest
-- utils.py → imports from codebase_map, control_panel, git_ops, spec_extract; external: select, shutil
+- utils.py → imports from codebase_map, control_panel, git_ops, spec_extract; external: importlib, select, shutil
 - vcs.py → standalone (stdlib only)
+- vet/real_code_check.py → external: argparse, importlib
 
 ## Test Map
 - tests/test_acquire_lock.py -> (no matching source module)
 - tests/test_add_to_roadmap.py -> (no matching source module)
+- tests/test_calculator.py -> calculator
 - tests/test_clean_spec.py -> (no matching source module)
 - tests/test_codebase_map.py -> codebase_map
 - tests/test_conftest_fixtures.py -> (no matching source module)
@@ -277,6 +295,7 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_f036_should_fix_extraction.py -> (no matching source module)
 - tests/test_f037_blocker_resolution.py -> (no matching source module)
 - tests/test_f038_nm_injection.py -> (no matching source module)
+- tests/test_f039_real_code_verification.py -> (no matching source module)
 - tests/test_f041_modules.py -> (no matching source module)
 - tests/test_final_coverage.py -> (no matching source module)
 - tests/test_final_edge.py -> (no matching source module)
@@ -311,5 +330,6 @@ Read the Domain Map below to understand the file organization before exploring i
 - tests/test_tl_extraction.py -> (no matching source module)
 - tests/test_triple_bug_fix.py -> (no matching source module)
 - tests/test_unit_helpers.py -> (no matching source module)
+- tests/test_user_service.py -> user_service
 - tests/test_vcs.py -> vcs
 - tests/test_vcs_wiring.py -> (no matching source module)
