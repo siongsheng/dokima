@@ -12,8 +12,11 @@ PANEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "doki
 
 
 def _load_panel():
-    """Load dokima as a Python module via exec, setting required globals.
-    Registers in sys.modules so patch('dokima.X') works across all tests."""
+    """Load dokima as a Python module via exec, setting required globals
+    and constructing a PipelineContext (F040). Registers in sys.modules
+    so patch('dokima.X') works across all tests."""
+    from context import PipelineContext
+
     module_name = "dokima"
     # Remove stale module if present
     if module_name in sys.modules:
@@ -38,20 +41,6 @@ def _load_panel():
     module.BUILD_CMD = "echo build"
     module.LINT_CMD = "echo lint"
 
-    # F022: Intercept global assignments to sync to sub-modules.
-    def _sync_globals_on_setattr(self, name, value):
-        object.__setattr__(self, name, value)
-        if name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                     'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                     'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                     'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                     'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-            for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
-                target = getattr(self, mod_ref, None)
-                if target is not None and hasattr(target, name):
-                    object.__setattr__(target, name, value)
-    module.__class__ = type('DokimaModule', (types.ModuleType,), {'__setattr__': _sync_globals_on_setattr})
-
     # Execute the script in the module's namespace
     with open(PANEL_PATH) as f:
         code = compile(f.read(), PANEL_PATH, "exec")
@@ -64,18 +53,53 @@ def _load_panel():
         if target is not None:
             target._IMPORTING_PANEL = module
 
-    # F022: Sync initial globals (set before __setattr__ was active) to sub-modules
-    for g_name in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                   'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                   'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                   'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                   'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-        val = getattr(module, g_name, None)
-        if val is not None:
-            for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
-                target = getattr(module, mod_ref, None)
-                if target is not None and hasattr(target, g_name):
-                    object.__setattr__(target, g_name, val)
+    # F040: Construct PipelineContext and sync globals to sub-modules
+    ctx = PipelineContext(
+        project_dir="/tmp/test-project",
+        repo="test-owner/test-repo",
+        default_branch="main",
+        panel_feature="Test Feature",
+        api_key="test-key",
+        output_log="/tmp/dokima-output.txt",
+        panel_dir="/tmp/.dokima-test",
+        test_cmd="echo test",
+        build_cmd="echo build",
+        lint_cmd="echo lint",
+    )
+
+    # Sync ctx fields to sub-module globals
+    _sync_globals = {
+        'PROJECT_DIR': ctx.project_dir,
+        'REPO': ctx.repo,
+        'DEFAULT_BRANCH': ctx.default_branch,
+        'PANEL_FEATURE': ctx.panel_feature,
+        'PANEL_DIR': ctx.panel_dir,
+        'API_KEY': ctx.api_key,
+        'OUTPUT_LOG': ctx.output_log,
+        'HERMES_BIN': ctx.hermes_bin,
+        'FALLBACK_MODELS': dict(ctx.fallback_models),
+        'SKIP_AUTOFIX': ctx.skip_autofix,
+        'FORCE_FULL': ctx.force_full,
+        'SKIP_HUMAN_GATE': ctx.skip_human_gate,
+        'max_parallel_override': ctx.max_parallel_override,
+        'RESUME': ctx.resume,
+        'TEST_CMD': ctx.test_cmd,
+        'BUILD_CMD': ctx.build_cmd,
+        'LINT_CMD': ctx.lint_cmd,
+    }
+    for g_name, g_val in _sync_globals.items():
+        for mod_ref in ('_utils', '_agent', '_tasks', '_roadmap', '_pipeline'):
+            target = getattr(module, mod_ref, None)
+            if target is not None and hasattr(target, g_name):
+                object.__setattr__(target, g_name, g_val)
+
+    # Set PipelineContext on utils for ctx-based access
+    utils_mod = getattr(module, '_utils', None)
+    if utils_mod is not None and hasattr(utils_mod, 'set_pipeline_context'):
+        utils_mod.set_pipeline_context(ctx)
+
+    # Attach ctx to module for test access
+    module._ctx = ctx
 
     return module
 
@@ -93,11 +117,7 @@ def _reload_panel():
 def _isolate_panel_modules():
     """Save/restore sys.modules around every test to prevent stale
     references from _load()/_load_panel() calls leaking between tests
-    (F022b: Modular Architecture — sys.modules state isolation).
-
-    Tests that call _load() directly (not through the panel fixture)
-    leave sys.modules pointing to their panel, breaking override
-    detection in other tests that use module-level panel references."""
+    (F022b: Modular Architecture — sys.modules state isolation)."""
     _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima')
     _saved = {k: sys.modules.get(k) for k in _sub_module_names}
     _had = {k: k in sys.modules for k in _sub_module_names}
@@ -113,10 +133,9 @@ def _isolate_panel_modules():
 
 @pytest.fixture
 def panel():
-    """Loaded dokima module with globals set. Fresh per test.
-    Saves/restores sys.modules so stale references from module-level
-    imports in other test files don't leak into override detection
-    (F022b: Modular Architecture — fix stale sys.modules references)."""
+    """Loaded dokima module with globals set and PipelineContext (F040).
+    Fresh per test. Saves/restores sys.modules so stale references
+    from module-level imports don't leak into override detection."""
     _sub_module_names = ('tasks', 'utils', 'agent', 'pipeline', 'roadmap', 'dokima')
     _saved = {k: sys.modules.get(k) for k in _sub_module_names}
     _had = {k: k in sys.modules for k in _sub_module_names}
@@ -124,8 +143,7 @@ def panel():
     p = _load_panel()
     yield p
 
-    # Restore sys.modules to pre-test state so module-level imports
-    # in other test files resolve correctly.
+    # Restore sys.modules to pre-test state
     for key in _sub_module_names:
         if _had[key] and _saved[key] is not None:
             sys.modules[key] = _saved[key]
@@ -166,6 +184,7 @@ def fake_agents_md(tmpdir_path):
 def test_repo(panel, tmpdir_path):
     """Create a temporary git repository with AGENTS.md and specs/roadmap.md.
     Sets panel.PROJECT_DIR, panel.REPO, and panel.DEFAULT_BRANCH.
+    Also updates PipelineContext on utils (F040).
     Yields the project directory path as a string."""
     project_dir = os.path.join(tmpdir_path, "test-project")
     os.makedirs(os.path.join(project_dir, "specs"), exist_ok=True)
@@ -186,6 +205,12 @@ def test_repo(panel, tmpdir_path):
     panel.PROJECT_DIR = project_dir
     panel.REPO = "test-owner/test-repo"
     panel.DEFAULT_BRANCH = "master"
+
+    # F040: Also update PipelineContext
+    if hasattr(panel, '_ctx'):
+        panel._ctx.project_dir = project_dir
+        panel._ctx.repo = "test-owner/test-repo"
+        panel._ctx.default_branch = "master"
 
     return project_dir
 

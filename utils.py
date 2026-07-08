@@ -35,6 +35,20 @@ TEST_CMD = "npm test"
 BUILD_CMD = "npm run build"
 LINT_CMD = "npm run lint"
 
+# ── PipelineContext (F040) ──
+_pipeline_ctx = None
+
+
+def set_pipeline_context(ctx):
+    """Set the PipelineContext for the current pipeline run."""
+    global _pipeline_ctx
+    _pipeline_ctx = ctx
+
+
+def get_pipeline_context():
+    """Return the current PipelineContext, or None if not set."""
+    return _pipeline_ctx
+
 # Version
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _version_path = os.path.join(_script_dir, "VERSION")
