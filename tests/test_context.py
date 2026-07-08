@@ -183,6 +183,67 @@ class TestPipelineContextEdgeCases:
 # ── Failure modes (spec 10.11-10.13) ──
 
 
+# ── Entry script wiring (spec 10.3, 10.4) ──
+
+
+class TestPipelineContextEntryScriptWiring:
+    """Verify PipelineContext can be constructed as the entry script would."""
+
+    def test_context_from_entry_script_values(self):
+        """Construct ctx with the values dokima main() would set after parsing."""
+        from context import PipelineContext
+        ctx = PipelineContext(
+            project_dir="/tmp/test-project",
+            repo="owner/repo",
+            default_branch="main",
+            panel_feature="test feature",
+            api_key="sk-test",
+            output_log="/tmp/dokima-output-2026.log",
+            real_home="/home/testuser",
+            hermes_bin="/home/testuser/.hermes/hermes-agent/venv/bin/hermes",
+            profiles_dir="/home/testuser/.hermes/profiles",
+            panel_dir="/tmp/.dokima",
+            test_cmd="npm test",
+            build_cmd="npm run build",
+            lint_cmd="npm run lint",
+            skip_autofix=False,
+            force_full=False,
+            skip_human_gate=False,
+            max_parallel_override=None,
+            resume=True,
+            fallback_models={"coder": "deepseek"},
+            max_continuous=20,
+        )
+        assert ctx.project_dir == "/tmp/test-project"
+        assert ctx.repo == "owner/repo"
+        assert ctx.default_branch == "main"
+        assert ctx.panel_feature == "test feature"
+        assert ctx.api_key == "sk-test"
+        assert ctx.output_log == "/tmp/dokima-output-2026.log"
+        assert ctx.real_home == "/home/testuser"
+        assert ctx.hermes_bin == "/home/testuser/.hermes/hermes-agent/venv/bin/hermes"
+        assert ctx.profiles_dir == "/home/testuser/.hermes/profiles"
+        assert ctx.panel_dir == "/tmp/.dokima"
+        assert ctx.test_cmd == "npm test"
+        assert ctx.build_cmd == "npm run build"
+        assert ctx.lint_cmd == "npm run lint"
+        assert ctx.skip_autofix is False
+        assert ctx.force_full is False
+        assert ctx.skip_human_gate is False
+        assert ctx.max_parallel_override is None
+        assert ctx.resume is True
+        assert ctx.fallback_models == {"coder": "deepseek"}
+        assert ctx.max_continuous == 20
+
+    def test_context_panel_port_default(self):
+        """panel_port defaults are correct."""
+        from context import PipelineContext
+        ctx = PipelineContext(project_dir="/tmp/test")
+        assert ctx.panel_port == {
+            "strategist": 8647, "tech-lead": 8644, "coder": 8645, "nm": 8648
+        }
+
+
 class TestPipelineContextFailures:
     """Failure mode tests."""
 
