@@ -206,7 +206,7 @@ def run_post_pipeline(ctx, feature, is_next, is_continuous, continue_loop, pr_ur
     return continue_loop
 
 
-def discover_blocked_pr(ctx, ):
+def discover_blocked_pr(ctx):
     """Detect most recent BLOCKED PR via gh CLI.
     Returns {number, title, headRefName, body} or None."""
     # Allow test patching via dokima.discover_blocked_pr override (F022 modular refactor)
@@ -217,7 +217,7 @@ def discover_blocked_pr(ctx, ):
             return override()
 
     stdout, _, rc = gh("pr", "list", "--state", "open",
-                       "--repo", REPO,
+                       "--repo", ctx.repo,
                        "--json", "number,title,body,headRefName,updatedAt",
                        "--jq", "sort_by(.updatedAt) | reverse")
     if rc != 0 or not stdout.strip():
@@ -292,7 +292,7 @@ def extract_blockers_from_pr(ctx, pr_body, pr_number=None):
     # Fallback: PR comments if no blockers found and pr_number given
     if not blockers and pr_number:
         try:
-            stdout, _, rc = gh("pr", "view", str(pr_number), "--repo", REPO, "--comments",
+            stdout, _, rc = gh("pr", "view", str(pr_number), "--repo", ctx.repo, "--comments",
                                "--json", "body", "--jq", ".body")
             if rc == 0 and stdout.strip():
                 # Recurse with comment body as pr_body

@@ -330,6 +330,22 @@ class TestPipelineFunctionContracts:
         params = list(sig.parameters.keys())
         assert params[0] == "ctx"
 
+    def test_discover_blocked_pr_accepts_ctx(self):
+        """discover_blocked_pr accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.discover_blocked_pr)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
+    def test_extract_blockers_from_pr_accepts_ctx(self):
+        """extract_blockers_from_pr accepts ctx."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.extract_blockers_from_pr)
+        params = list(sig.parameters.keys())
+        assert params[0] == "ctx"
+
 
 class TestPipelineContextFailures:
     """Failure mode tests."""
