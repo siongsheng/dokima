@@ -48,7 +48,7 @@ class TestRedOnlyCommits:
                     with patch.object(panel, "halt_and_revert"):
                         # Simulate test failing (RED-only → no impl → tests fail), build also fails
                         with patch.object(panel, "_safe_run", return_value=_make_result(1, "0 passed 1 failed")):
-                            result = panel.run_phase3_vet(
+                            result = panel.run_phase3_vet(panel._ctx,
                                 feature="Test Feature",
                                 branch="feat/test-feat",
                                 pr_sections="## What Changed\nTest",
@@ -77,7 +77,7 @@ class TestEmptyCoderOutput:
             with patch.object(panel, "gh", return_value=("", "", 0)):
                 with patch.object(panel._agent, "spawn_agent", return_value=""):
                     with patch.object(panel, "halt_and_revert"):
-                        result = panel.run_phase3_vet(
+                        result = panel.run_phase3_vet(panel._ctx,
                             feature="Empty Feature",
                             branch="feat/empty-output",
                             pr_sections="",
@@ -98,7 +98,7 @@ class TestNmTimeout:
 
         with patch.object(panel, "gh", return_value=("", "", 0)):
             with patch.object(panel, "_safe_run", return_value=_make_result(124, "[TIMEOUT]")):
-                result = panel.run_phase4_nm(
+                result = panel.run_phase4_nm(panel._ctx,
                     feature="Test",
                     branch="feat/test",
                     impact="MEDIUM",
@@ -120,7 +120,7 @@ class TestNmNonZero:
 
         with patch.object(panel, "gh", return_value=("", "", 0)):
             with patch.object(panel, "_safe_run", return_value=_make_result(1, "")):
-                result = panel.run_phase4_nm(
+                result = panel.run_phase4_nm(panel._ctx,
                     feature="Test",
                     branch="feat/test",
                     impact="HIGH",
@@ -155,7 +155,7 @@ class TestVetRetryExhaustion:
                     with patch.object(panel, "halt_and_revert", side_effect=_mock_halt):
                         with patch.object(panel, "_safe_run",
                                           return_value=_make_result(1, "0 passed 1 failed")):
-                            result = panel.run_phase3_vet(
+                            result = panel.run_phase3_vet(panel._ctx,
                                 feature="Test",
                                 branch="feat/test",
                                 pr_sections="## What Changed\nTest",

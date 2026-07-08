@@ -388,7 +388,7 @@ class TestPipelineWiringShouldFix:
 
         with patch("time.sleep"), \
              patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-            result = panel.run_phase5_tech_lead(
+            result = panel.run_phase5_tech_lead(panel._ctx,
                 "Test Feature", "https://github.com/t/t/pull/1",
                 "feat/test", "/tmp/spec.md", "LOW"
             )
@@ -441,7 +441,7 @@ class TestPipelineWiringShouldFix:
 
         with patch("time.sleep"), \
              patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-            panel.run_phase5_tech_lead(
+            panel.run_phase5_tech_lead(panel._ctx,
                 "Test Feature", "https://github.com/t/t/pull/1",
                 "feat/test", "/tmp/spec.md", "LOW"
             )
@@ -477,7 +477,7 @@ class TestPipelineWiringShouldFix:
 
         with patch("time.sleep"), \
              patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-            panel.run_phase5_tech_lead(
+            panel.run_phase5_tech_lead(panel._ctx,
                 "Test Feature", "https://github.com/t/t/pull/1",
                 "feat/test", "/tmp/spec.md", "LOW"
             )
@@ -512,7 +512,7 @@ class TestPipelineWiringShouldFix:
 
         with patch("time.sleep"), \
              patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-            panel.run_phase5_tech_lead(
+            panel.run_phase5_tech_lead(panel._ctx,
                 "Test Feature", "https://github.com/t/t/pull/1",
                 "feat/test", "/tmp/spec.md", "LOW"
             )
@@ -565,7 +565,7 @@ class TestPipelineWiringShouldFix:
 
         with patch("time.sleep"), \
              patch.object(panel, "spawn_agent", return_value=tl_output_with_many):
-            panel.run_phase5_tech_lead(
+            panel.run_phase5_tech_lead(panel._ctx,
                 "Test Feature", "https://github.com/t/t/pull/1",
                 "feat/test", "/tmp/spec.md", "LOW"
             )
@@ -607,7 +607,7 @@ def test_should_fix_issue_body_has_what_section(panel):
 
     with patch("time.sleep"), \
          patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-        panel.run_phase5_tech_lead(
+        panel.run_phase5_tech_lead(panel._ctx,
             "Test Feature", "https://github.com/t/t/pull/1",
             "feat/test", "/tmp/spec.md", "LOW"
         )
@@ -645,7 +645,7 @@ def test_should_fix_issue_body_has_fix_section(panel):
 
     with patch("time.sleep"), \
          patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-        panel.run_phase5_tech_lead(
+        panel.run_phase5_tech_lead(panel._ctx,
             "Test Feature", "https://github.com/t/t/pull/1",
             "feat/test", "/tmp/spec.md", "LOW"
         )
@@ -682,7 +682,7 @@ def test_should_fix_issue_body_has_verify_section(panel):
 
     with patch("time.sleep"), \
          patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-        panel.run_phase5_tech_lead(
+        panel.run_phase5_tech_lead(panel._ctx,
             "Test Feature", "https://github.com/t/t/pull/1",
             "feat/test", "/tmp/spec.md", "LOW"
         )
@@ -719,7 +719,7 @@ def test_should_fix_issue_body_has_source_section(panel):
 
     with patch("time.sleep"), \
          patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-        panel.run_phase5_tech_lead(
+        panel.run_phase5_tech_lead(panel._ctx,
             "Test Feature", "https://github.com/t/t/pull/1",
             "feat/test", "/tmp/spec.md", "LOW"
         )
@@ -757,7 +757,7 @@ def test_should_fix_issue_body_what_includes_location(panel):
 
     with patch("time.sleep"), \
          patch.object(panel, "spawn_agent", return_value=PIPELINE_TL_OUTPUT):
-        panel.run_phase5_tech_lead(
+        panel.run_phase5_tech_lead(panel._ctx,
             "Test Feature", "https://github.com/t/t/pull/1",
             "feat/test", "/tmp/spec.md", "LOW"
         )

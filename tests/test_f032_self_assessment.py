@@ -59,7 +59,7 @@ def test_coder_prompt_contains_self_assessment(tmp_path):
         with patch.object(panel, "git", return_value=("", "", 0)):
             with patch.object(panel, "gh", return_value=("", "", 0)):
                 with patch("time.sleep"):
-                    result = panel.run_phase2_coder(
+                    result = panel.run_phase2_coder(panel._ctx,
                         feature="Test Feature",
                         spec="# Test spec",
                         spec_path=str(spec_path),
@@ -125,7 +125,7 @@ def test_coder_prompt_self_assessment_before_report(tmp_path):
         with patch.object(panel, "git", return_value=("", "", 0)):
             with patch.object(panel, "gh", return_value=("", "", 0)):
                 with patch("time.sleep"):
-                    panel.run_phase2_coder(
+                    panel.run_phase2_coder(panel._ctx,
                         feature="Test",
                         spec="# Test spec",
                         spec_path=str(spec_path),
@@ -183,7 +183,7 @@ def test_fix_mode_prompt_does_not_contain_self_assessment(tmp_path):
         with patch.object(panel, "git", return_value=("", "", 0)):
             with patch.object(panel, "gh", return_value=("", "", 0)):
                 with patch("time.sleep"):
-                    panel.run_phase2_coder(
+                    panel.run_phase2_coder(panel._ctx,
                         feature="Fix Feature",
                         spec="Fix: resolve the blockers listed above",
                         spec_path=str(spec_path),
@@ -243,7 +243,7 @@ def test_self_assessment_block_is_not_empty(tmp_path):
         with patch.object(panel, "git", return_value=("", "", 0)):
             with patch.object(panel, "gh", return_value=("", "", 0)):
                 with patch("time.sleep"):
-                    panel.run_phase2_coder(
+                    panel.run_phase2_coder(panel._ctx,
                         feature="Test",
                         spec="# Test",
                         spec_path=str(spec_path),
