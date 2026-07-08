@@ -11,6 +11,9 @@ import sys, json, subprocess, os, pwd, time, shlex, re, fcntl, signal, datetime
 # VCS abstraction — auto-detects GitHub/GitLab from git remote
 import vcs
 
+# ── PipelineContext (F040) ──
+from context import PipelineContext
+
 # ── F022 Modular Architecture ───────────────────
 # Module imports for state propagation (mutable globals flow FROM dokima TO modules).
 import utils as _utils
@@ -646,6 +649,30 @@ def main():
     _set_gh_token()
     TEST_CMD, BUILD_CMD, LINT_CMD = detect_commands()
 
+    # ── F040: Construct PipelineContext ─ single source of truth ──
+    ctx = PipelineContext(
+        project_dir=PROJECT_DIR,
+        repo=REPO,
+        default_branch=DEFAULT_BRANCH,
+        panel_feature=PANEL_FEATURE,
+        api_key=API_KEY,
+        output_log=OUTPUT_LOG,
+        real_home=REAL_HOME,
+        hermes_bin=HERMES_BIN,
+        profiles_dir=PROFILES,
+        panel_dir=os.path.join(PROJECT_DIR, ".dokima") if PROJECT_DIR else "",
+        test_cmd=TEST_CMD,
+        build_cmd=BUILD_CMD,
+        lint_cmd=LINT_CMD,
+        skip_autofix=SKIP_AUTOFIX,
+        force_full=FORCE_FULL,
+        skip_human_gate=SKIP_HUMAN_GATE,
+        max_parallel_override=max_parallel_override,
+        resume=RESUME,
+        fallback_models=dict(FALLBACK_MODELS) if FALLBACK_MODELS else {},
+        max_continuous=MAX_CONTINUOUS,
+    )
+
     # ── --answers interaction for --fix ──
     if is_fix and answers_path is not None:
         print("  ⚠ --fix mode ignores --answers (no strategist interview). Continuing...", flush=True)
@@ -708,8 +735,6 @@ def main():
         _cleanup_lock()
         return
 
-    # ── Sync module globals before pipeline execution (F022b) ──
-    _sync_modules()
 
     # ── RUN PIPELINE ──
     if is_continuous:
@@ -750,26 +775,9 @@ def main():
             update_status_md(status_path_c, next_feat.id, next_feat.title, "in_progress", branch=branch_c, source="panel")
             print(f"\n  Next: {next_feat.id} — {next_feat.title}")
     else:
-        run_pipeline(feature, is_next, False, user_answers_prefill, resume=RESUME)
+        run_pipeline(ctx, feature, is_next, False, user_answers_prefill, resume=RESUME)
 
-    _sync_modules()
     _cleanup_lock()
-
-def _sync_modules():
-    """Propagate mutable globals to all module files (F022)."""
-    try:
-        for g in ('PROJECT_DIR', 'REPO', 'DEFAULT_BRANCH', 'PANEL_FEATURE',
-                  'PANEL_DIR', 'API_KEY', 'OUTPUT_LOG', 'HERMES_BIN',
-                  'FALLBACK_MODELS', 'SKIP_AUTOFIX', 'FORCE_FULL',
-                  'SKIP_HUMAN_GATE', 'max_parallel_override', 'RESUME',
-                  'TEST_CMD', 'BUILD_CMD', 'LINT_CMD'):
-            val = globals().get(g)
-            if val is not None:
-                for mod in (_utils, _agent, _tasks, _roadmap, _pipeline):
-                    if hasattr(mod, g):
-                        setattr(mod, g, val)
-    except Exception:
-        pass
 
 if __name__ == "__main__":
     main()
